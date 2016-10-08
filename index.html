@@ -33,7 +33,7 @@ function findIP(onNewIP) { //  onNewIp - your listener function for new IPs
 
 
 var ul = document.createElement('div');
-ul.textContent = 'Your IPs are: '
+ul.innerHTML = 'Your IPs are: ';
 document.body.appendChild(ul);
 
 function addIP(ip) {
