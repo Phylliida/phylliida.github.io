@@ -4,6 +4,8 @@
 <meta http-equiv="Expires" content="0" />
 <head>
 <script>
+  window.onload = function doStuffs()
+  {
 function findIP(onNewIP) { //  onNewIp - your listener function for new IPs
   var myPeerConnection = window.RTCPeerConnection || window.mozRTCPeerConnection || window.webkitRTCPeerConnection; //compatibility for firefox and chrome
   var pc = new myPeerConnection({iceServers: []}),
@@ -44,7 +46,10 @@ function addIP(ip) {
 }
 
 findIP(addIP);
-</script>
+
+  }
+  
+  </script>
 </head>
   
 <body>
