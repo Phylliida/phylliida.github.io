@@ -10,11 +10,7 @@
   {
 var localPeerConnection, remotePeerConnection, sendChannel, receiveChannel;
 
-localPeerConnection = new RTCPeerConnection(null, {
-  optional: [{
-    RtpDataChannels: true
-  }]
-});
+localPeerConnection = new RTCPeerConnection(null, {});
 
 localPeerConnection.onicecandidate = function(event) {
   if (event.candidate) {
@@ -22,8 +18,8 @@ localPeerConnection.onicecandidate = function(event) {
   }
 };
 
-sendChannel = localPeerConnection.createDataChannel("CHANNEL_NAME", {
-  reliable: false
+sendChannel = localPeerConnection.createDataChannel("ayy", {
+  reliable: true
 });
 
 sendChannel.onopen = function(event) {
@@ -33,11 +29,7 @@ sendChannel.onopen = function(event) {
   }
 };
 
-remotePeerConnection = new RTCPeerConnection(null, {
-  optional: [{
-    RtpDataChannels: true
-  }]
-});
+remotePeerConnection = new RTCPeerConnection(null, {});
 
 remotePeerConnection.onicecandidate = function(event) {
   if (event.candidate) {
@@ -48,7 +40,7 @@ remotePeerConnection.onicecandidate = function(event) {
 remotePeerConnection.ondatachannel = function(event) {
   receiveChannel = event.channel;
   receiveChannel.onmessage = function(event) {
-    alert(event.data);
+    console.log(event.data);
   };
 };
 
@@ -63,6 +55,7 @@ localPeerConnection.createOffer(function(desc) {
   }
   
   </script>
+  
 </head>
   
 <body>
