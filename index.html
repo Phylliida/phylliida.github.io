@@ -8,50 +8,27 @@
 <script>
   window.onload = function doStuffs()
   {
-var localPeerConnection, remotePeerConnection, sendChannel, receiveChannel;
+var peerConnection = new RTCPeerConnection();
 
-localPeerConnection = new RTCPeerConnection(null, {});
+// Establish your peer connection using your signaling channel here
+var dataChannel =
+  peerConnection.createDataChannel("myLabel", dataChannelOptions);
 
-localPeerConnection.onicecandidate = function(event) {
-  if (event.candidate) {
-    remotePeerConnection.addIceCandidate(event.candidate);
-  }
+dataChannel.onerror = function (error) {
+  console.log("Data Channel Error:", error);
 };
 
-sendChannel = localPeerConnection.createDataChannel("ayy", {
-  reliable: true
-});
-
-sendChannel.onopen = function(event) {
-  var readyState = sendChannel.readyState;
-  if (readyState == "open") {
-    sendChannel.send("Hello");
-  }
+dataChannel.onmessage = function (event) {
+  console.log("Got Data Channel Message:", event.data);
 };
 
-remotePeerConnection = new RTCPeerConnection(null, {});
-
-remotePeerConnection.onicecandidate = function(event) {
-  if (event.candidate) {
-    localPeerConnection.addIceCandidate(event.candidate);
-  }
+dataChannel.onopen = function () {
+  dataChannel.send("Hello World!");
 };
 
-remotePeerConnection.ondatachannel = function(event) {
-  receiveChannel = event.channel;
-  receiveChannel.onmessage = function(event) {
-    console.log(event.data);
-  };
+dataChannel.onclose = function () {
+  console.log("The Data Channel is Closed");
 };
-
-localPeerConnection.createOffer(function(desc) {
-  localPeerConnection.setLocalDescription(desc);
-  remotePeerConnection.setRemoteDescription(desc);
-  remotePeerConnection.createAnswer(function(desc) {
-    remotePeerConnection.setLocalDescription(desc);
-    localPeerConnection.setRemoteDescription(desc);
-  });
-});
   }
   
   </script>
