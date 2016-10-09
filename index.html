@@ -9,7 +9,11 @@
   window.onload = function doStuffs()
   {
 var peerConnection = new RTCPeerConnection(null);
-
+var dataChannelOptions = {
+  ordered: false, // do not guarantee order
+  maxRetransmitTime: 3000, // in milliseconds
+};
+    
 // Establish your peer connection using your signaling channel here
 var dataChannel =
   peerConnection.createDataChannel("myLabel", dataChannelOptions);
