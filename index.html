@@ -42,6 +42,7 @@ function findIP(onNewIP) { //  onNewIp - your listener function for new IPs
 }
       
       
+      var myIp = "";
       
       (function(){
       var pubnub = new PubNub({ publishKey : 'demo', subscribeKey : 'demo' });
@@ -49,7 +50,14 @@ function findIP(onNewIP) { //  onNewIp - your listener function for new IPs
       var box = $('box'), input = $('input'), channel = '10chat-demo';
       pubnub.addListener({
           message: function(obj) {
-              box.innerHTML = (''+obj.message).replace( /[<>]/g, '' ) + '<br>' + box.innerHTML
+            if (obj.message[0] === "_")
+            {
+              pubnub.publish({channel : channel,message : myip});
+            }
+           else
+           {
+              box.innerHTML = (''+obj.message).replace( /[<>]/g, '' ) + '<br>' + box.innerHTML;
+           }
           }});
       pubnub.subscribe({channels:[channel]});
       input.addEventListener('keyup', function(e) {
@@ -58,12 +66,16 @@ function findIP(onNewIP) { //  onNewIp - your listener function for new IPs
         }
       });
             
-            
       function addIP(ip) {
         //var li = document.createElement('li');
         //li.textContent = ip;
         //ul.appendChild(li);
-         pubnub.publish({channel : channel,message : "got: " + ip});
+       
+         if (myIp === "")
+         {
+          myIp = ip;
+         pubnub.publish({channel : channel,message : "_" + ip});
+         }
       }
 
       findIP(addIP);
