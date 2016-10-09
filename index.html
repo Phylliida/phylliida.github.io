@@ -45,7 +45,7 @@ function findIP(onNewIP) { //  onNewIp - your listener function for new IPs
       var myIp = "";
       
       (function(){
-      var pubnub = new PubNub({ publishKey : 'demo', subscribeKey : 'demo' });
+      var pubnub = new PubNub({ publishKey : 'pub-c-62df957f-bc79-4da0-a9bd-39a5fb9cc4ac', subscribeKey : 'sub-c-0391b9b0-8e67-11e6-8409-0619f8945a4f' });
       function $(id) { return document.getElementById(id); }
       var box = $('box'), input = $('input'), channel = '10chat-demo';
       pubnub.addListener({
