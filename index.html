@@ -60,11 +60,6 @@ function findIP(onNewIP) { //  onNewIp - your listener function for new IPs
            }
           }});
       pubnub.subscribe({channels:[channel]});
-      input.addEventListener('keyup', function(e) {
-          if ((e.keyCode || e.charCode) === 13) {
-            pubnub.publish({channel : channel,message : input.value,x : (input.value='')});
-        }
-      });
             
       function addIP(ip) {
         //var li = document.createElement('li');
