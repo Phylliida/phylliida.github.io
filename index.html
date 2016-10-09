@@ -3,44 +3,32 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
-  <script src="adapter.js"></script>
 <head>
-<script>
-  window.onload = function doStuffs()
-  {
-var peerConnection = new RTCPeerConnection(null);
-var dataChannelOptions = {
-  ordered: false, // do not guarantee order
-  maxRetransmitTime: 3000, // in milliseconds
-};
-    
-// Establish your peer connection using your signaling channel here
-var dataChannel =
-  peerConnection.createDataChannel("myLabel", dataChannelOptions);
-
-dataChannel.onerror = function (error) {
-  console.log("Data Channel Error:", error);
-};
-
-dataChannel.onmessage = function (event) {
-  console.log("Got Data Channel Message:", event.data);
-};
-
-dataChannel.onopen = function () {
-  dataChannel.send("Hello World!");
-};
-
-dataChannel.onclose = function () {
-  console.log("The Data Channel is Closed");
-};
-  }
-  
-  </script>
-  
 </head>
-  
 <body>
-    
+
+Enter Chat and press enter
+<div><input id=input placeholder=you-chat-here /></div>
+
+Chat Output
+<div id=box></div>
+
+<script src=https://cdn.pubnub.com/sdk/javascript/pubnub.4.0.11.min.js></script>
+<script>(function(){
+      var pubnub = new PubNub({ publishKey : 'demo', subscribeKey : 'demo' });
+      function $(id) { return document.getElementById(id); }
+      var box = $('box'), input = $('input'), channel = '10chat-demo';
+      pubnub.addListener({
+          message: function(obj) {
+              box.innerHTML = (''+obj.message).replace( /[<>]/g, '' ) + '<br>' + box.innerHTML
+          }});
+      pubnub.subscribe({channels:[channel]});
+      input.addEventListener('keyup', function(e) {
+          if ((e.keyCode || e.charCode) === 13) {
+            pubnub.publish({channel : channel,message : input.value,x : (input.value='')});
+        }
+      });
+})();</script>    
 </body>
 </html>
 
