@@ -222,6 +222,8 @@ function createConnection() {
   localPeerConnection.createOffer(gotLocalDescription);
   startButton.disabled = true;
   closeButton.disabled = false;
+  dataChannelSend.disabled = false;
+  
 }
 
 function sendData() {
