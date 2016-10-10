@@ -18,6 +18,7 @@
   },
   "provides": ["chat"],
   "default": "chat",
+  "permissions": [ "core.oauth" ],
   "api": {
     "chat": {
       "send": {"type": "method", "value": ["string", "string"]},
