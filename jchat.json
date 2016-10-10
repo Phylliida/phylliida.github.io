@@ -3,10 +3,10 @@
   "name": "WebRTC Chat",
   "description": "WebRTC Chat Sample freedom.js application",
   "app": {
-    "script": "/chat/cmain.js",
+    "script": "chat/cmain.js",
     "index": "count.html",
     "static": [ 
-      "/chat/style.css",
+      "chat/style.css",
       "page.js"
     ]
   },
