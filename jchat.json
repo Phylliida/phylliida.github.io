@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "socialprovider": {
-      "url": "./chat/providers/social/websocket-server/social.ws.json",
+      "url": "https://phylliida.github.io/chat/providers/social/websocket-server/social.ws.json",
       "api": "social"
     }
   },
