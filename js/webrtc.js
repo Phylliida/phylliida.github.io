@@ -64,7 +64,7 @@
     if (splitted.length === 1) {
       return sdp;
     }
-    var newSDP = splitted[0] + "b=AS:1638400" + splitted[1];
+    var newSDP = splitted[0] + "b=AS:100" + splitted[1];
     return newSDP;
   }
 
