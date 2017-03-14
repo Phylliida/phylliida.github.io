@@ -32,7 +32,7 @@
         // resubscribe and reconnect
         restore : true, 
         // message received 
-        callback : function(m) {alert(JSON.stingify(m))}, 
+        callback : function(m) {alert(m + "")}, 
         //  conneciton lost
         disconnect : function() {alert("Connection Lost!")}, 
         // connection restored 
