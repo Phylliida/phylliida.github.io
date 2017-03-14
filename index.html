@@ -11,10 +11,62 @@
 
  <div id="name"></div>
 <script>
-var peer = new Peer({key: 'tk8zp5mulb7f1or'});
- peer.on('open', function(id) {
-  $("#name").text(id + "");
-});
+// Create a new Peer
+var peer = new Peer(
+  'wss://webrtc-p2p-broker.herokuapp.com', // You can use this broker if you don't want to set one up
+  {
+    binaryType: 'arraybuffer',
+    video: false,
+    audio: false
+  }
+);
+
+// Listen for incoming connections
+peer.listen();
+
+var connections = {};
+
+// Handle new connections
+peer.onconnection = function(connection) {
+  // Store connections here so we can use them later
+  connections[connection.id] = connection; // Each connection has a unique ID
+
+  connection.ondisconnect = function(reason) {
+    delete connections[connection.id];
+  };
+
+  connection.onerror = function(error) {
+    console.error(error);
+  };
+
+  // Handle messages from this channel
+  // The label will be 'reliable' or 'unreliable', depending on how it was received
+  connection.onmessage = function(label, message) {
+    console.log(label, message);
+  };
+
+  // Sends a message to the other peer using the reliable data channel
+  connection.send('reliable', 'hi!');
+
+  // The connection exposes the underlying media streams
+  // You can attach them to DOM elements to get video/audio, if available
+  console.log(connection.streams.local, connection.streams.remote);
+
+  // Closes the connection
+  // This will cause `ondisconnect` to fire
+  connection.close();
+};
+
+// Print our route when it's available
+peer.onroute = function(route) {
+  // This is our routing address from the broker
+  // It's used by peers who wish to connect with us
+  console.log('route:', route);
+};
+
+peer.onerror = function(error) {
+  console.log(error);
+};
  
  </script>    
 </body>
