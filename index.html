@@ -4,70 +4,76 @@
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
 <head>
- <script src="/js/pepclient.js"></script>
+ <script src="/js/adapter.js"></script>
  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
 </head>
 <body>
-
- <div id="name"></div>
-<script>
-// Create a new Peer
-var peer = new Peer(
-  'wss://webrtc-p2p-broker.herokuapp.com', // You can use this broker if you don't want to set one up
-  {
-    binaryType: 'arraybuffer',
-    video: false,
-    audio: false
-  }
-);
-
-// Listen for incoming connections
-peer.listen();
-
-var connections = {};
-
-// Handle new connections
-peer.onconnection = function(connection) {
-  // Store connections here so we can use them later
-  connections[connection.id] = connection; // Each connection has a unique ID
-
-  connection.ondisconnect = function(reason) {
-    delete connections[connection.id];
-  };
-
-  connection.onerror = function(error) {
-    console.error(error);
-  };
-
-  // Handle messages from this channel
-  // The label will be 'reliable' or 'unreliable', depending on how it was received
-  connection.onmessage = function(label, message) {
-    console.log(label, message);
-  };
-
-  // Sends a message to the other peer using the reliable data channel
-  connection.send('reliable', 'hi!');
-
-  // The connection exposes the underlying media streams
-  // You can attach them to DOM elements to get video/audio, if available
-  console.log(connection.streams.local, connection.streams.remote);
-
-  // Closes the connection
-  // This will cause `ondisconnect` to fire
-  connection.close();
-};
-
-// Print our route when it's available
-peer.onroute = function(route) {
-  // This is our routing address from the broker
-  // It's used by peers who wish to connect with us
-  console.log('route:', route);
-};
-
-peer.onerror = function(error) {
-  console.log(error);
-};
+<button id="button" onclick="createOffer()">Offer:</button>
+<textarea id="offer" placeholder="Paste offer here"></textarea><br>
+Answer: <textarea id="answer"></textarea><br><div id="div"></div>
+Chat: <input id="chat"></input><br>
+<script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
  
+<script>var config = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }]};
+
+var dc, pc = new RTCPeerConnection(config);
+pc.onaddstream = e => v2.srcObject = e.stream;
+pc.ondatachannel = e => dcInit(dc = e.channel);
+v2.onloadedmetadata = e => log("Connected!");
+
+var haveGum = navigator.mediaDevices.getUserMedia({video:true, audio:true})
+  .then(stream => pc.addStream(v1.srcObject = stream))
+  .catch(failed);
+
+function dcInit() {
+  dc.onopen = () => log("Chat!");
+  dc.onmessage = e => log(e.data);
+}
+
+function createOffer() {
+  button.disabled = true;
+  dcInit(dc = pc.createDataChannel("chat"));
+  haveGum.then(() => pc.createOffer()).then(d => pc.setLocalDescription(d)).catch(failed);
+  pc.onicecandidate = e => {
+    if (e.candidate) return;
+    offer.value = pc.localDescription.sdp;
+    offer.select();
+    answer.placeholder = "Paste answer here";
+  };
+};
+
+offer.onkeypress = e => {
+  if (!enterPressed(e) || pc.signalingState != "stable") return;
+  button.disabled = offer.disabled = true;
+  var desc = new RTCSessionDescription({ type:"offer", sdp:offer.value });
+  pc.setRemoteDescription(desc)
+    .then(() => pc.createAnswer()).then(d => pc.setLocalDescription(d))
+    .catch(failed);
+  pc.onicecandidate = e => {
+    if (e.candidate) return;
+    answer.focus();
+    answer.value = pc.localDescription.sdp;
+    answer.select();
+  };
+};
+
+answer.onkeypress = e => {
+  if (!enterPressed(e) || pc.signalingState != "have-local-offer") return;
+  answer.disabled = true;
+  var desc = new RTCSessionDescription({ type:"answer", sdp:answer.value });
+  pc.setRemoteDescription(desc).catch(failed);
+};
+
+chat.onkeypress = e => {
+  if (!enterPressed(e)) return;
+  dc.send(chat.value);
+  log(chat.value);
+  chat.value = "";
+};
+
+var enterPressed = e => e.keyCode == 13;
+var log = msg => div.innerHTML += "<p>" + msg + "</p>";
+var failed = e => log(e);
  </script>    
 </body>
 </html>
