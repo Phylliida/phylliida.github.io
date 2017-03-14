@@ -602,7 +602,10 @@
 
       // Create PubNub object
       debug("PubNub init: ", options);
-      var PubNub = _super.call(this, options);
+      if (_super)
+      {
+        var PubNub = _super.call(this, options);
+      }
 
       // Extend the WebRTC API
       PubNub = extendAPI(PubNub, uuid);
