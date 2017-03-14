@@ -4,76 +4,60 @@
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
 <head>
- <script src="/js/adapter.js"></script>
+ <script src="/js/comet.js"></script>
  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
 </head>
 <body>
-<button id="button" onclick="createOffer()">Offer:</button>
-<textarea id="offer" placeholder="Paste offer here"></textarea><br>
-Answer: <textarea id="answer"></textarea><br><div id="div"></div>
-Chat: <input id="chat"></input><br>
-<script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
  
-<script>var config = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }]};
+ <input id="message"></input>
+ <button id="submitMessage">Submit</button>
+ 
+<script>
+$(document).ready(function () {
 
-var dc, pc = new RTCPeerConnection(config);
-pc.onaddstream = e => v2.srcObject = e.stream;
-pc.ondatachannel = e => dcInit(dc = e.channel);
-v2.onloadedmetadata = e => log("Connected!");
-
-var haveGum = navigator.mediaDevices.getUserMedia({video:true, audio:true})
-  .then(stream => pc.addStream(v1.srcObject = stream))
-  .catch(failed);
-
-function dcInit() {
-  dc.onopen = () => log("Chat!");
-  dc.onmessage = e => log(e.data);
+// Output a message
+var log$ = $("#log");
+function log(msg) {
+log$.text(""+msg + "\n" + log$.text())
 }
 
-function createOffer() {
-  button.disabled = true;
-  dcInit(dc = pc.createDataChannel("chat"));
-  haveGum.then(() => pc.createOffer()).then(d => pc.setLocalDescription(d)).catch(failed);
-  pc.onicecandidate = e => {
-    if (e.candidate) return;
-    offer.value = pc.localDescription.sdp;
-    offer.select();
-    answer.placeholder = "Paste answer here";
-  };
-};
+// Make me a server with Google Gears support enabled
+var server = new Addressable.Server({ useGears: true });
 
-offer.onkeypress = e => {
-  if (!enterPressed(e) || pc.signalingState != "stable") return;
-  button.disabled = offer.disabled = true;
-  var desc = new RTCSessionDescription({ type:"offer", sdp:offer.value });
-  pc.setRemoteDescription(desc)
-    .then(() => pc.createAnswer()).then(d => pc.setLocalDescription(d))
-    .catch(failed);
-  pc.onicecandidate = e => {
-    if (e.candidate) return;
-    answer.focus();
-    answer.value = pc.localDescription.sdp;
-    answer.select();
-  };
-};
+// When a message arrives, just "log" it
+server.onmessage = function (message) {
+console.log(message)
+}
 
-answer.onkeypress = e => {
-  if (!enterPressed(e) || pc.signalingState != "have-local-offer") return;
-  answer.disabled = true;
-  var desc = new RTCSessionDescription({ type:"answer", sdp:answer.value });
-  pc.setRemoteDescription(desc).catch(failed);
-};
+// Out subscription scope is the current URL
+var scope = location.href;
 
-chat.onkeypress = e => {
-  if (!enterPressed(e)) return;
-  dc.send(chat.value);
-  log(chat.value);
-  chat.value = "";
-};
+// Connect to the UniversalComet server
+server.connect(function (id, url) {
+  console.log("Connected.")
+  // When connected subcribe to the scope
+  server.subscribe(scope, function () {
+   console.log("Joined channnel")
+   // When subscribed, post "Hi All"
+   server.post(scope, "Hi All")
+})
 
-var enterPressed = e => e.keyCode == 13;
-var log = msg => div.innerHTML += "<p>" + msg + "</p>";
-var failed = e => log(e);
+// Subscription expire after 5 Minutes. Renew ours every 4 Minutes.
+setInterval(function () { // renew subscription
+server.subscribe(scope, function () {})
+}, 1000 * 4 * 60)
+})
+
+// When the "chatForm" is submitted post the message to the scope on UniversalComet
+var message = $("#message").focus();
+$("#submitMessage").click(function (e) {
+server.post(scope, message.val())
+message.val("")
+e.preventDefault() // Dont really submit the form
+})
+
+})
+</script>
  </script>    
 </body>
 </html>
