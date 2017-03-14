@@ -15,12 +15,6 @@
 <script>
 $(document).ready(function () {
 
-// Output a message
-var log$ = $("#log");
-function log(msg) {
-log$.text(""+msg + "\n" + log$.text())
-}
-
 // Make me a server with Google Gears support enabled
 var server = new Addressable.Server({ useGears: true });
 
