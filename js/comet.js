@@ -4450,7 +4450,7 @@ Module("Addressable", function () {
                 var id  = encodeURIComponent(this.getId()+"-"+this.getChannel());
                 scope   = encodeURIComponent(scope);
                 
-                var url = "http://"+Addressable.Constants.appHost()+"/subscribe/"+id+"/"+scope
+                var url = "https://"+Addressable.Constants.appHost()+"/subscribe/"+id+"/"+scope
                 
                 Addressable.XDomainRequest.getConnection().get(url, null, onSuccess)
             },
@@ -4459,17 +4459,17 @@ Module("Addressable", function () {
             post: function (scope, message, onSuccess) {
                 scope   = encodeURIComponent(scope);
                 
-                var url = "http://"+Addressable.Constants.appHost()+"/post/"+scope
+                var url = "https://"+Addressable.Constants.appHost()+"/post/"+scope
                 
                 Addressable.XDomainRequest.getConnection().get(url, { message: message }, onSuccess)
             },
             
             connectUrl: function () {
-                return "http://"+Addressable.Constants.appHost()+"/connect"
+                return "https://"+Addressable.Constants.appHost()+"/connect"
             },
             
             listenUrl: function () {
-                return "http://"+Addressable.Constants.appHost()+"/listen"
+                return "https://"+Addressable.Constants.appHost()+"/listen"
             },
             
             log: function (msg) {
