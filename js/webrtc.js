@@ -1,615 +1,628 @@
-(function(){
+(function (window, PUBNUB) {
+  //"use strict";
 
+  // Remove vendor prefixes
+  var IS_CHROME = !!window.webkitRTCPeerConnection,
+      RTCPeerConnection,
+      RTCIceCandidate,
+      RTCSessionDescription;
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-// WebRTC Simple Calling API + Mobile
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-var PHONE = window.PHONE = function(config) {
-    config.ssl        = true; // Force HTTPS
-    var PHONE         = function(){};
-    var pubnub        = PUBNUB(config);
-    var pubkey        = config.publish_key   || 'demo';
-    var snapper       = function(){ return ' ' }
-    var subkey        = config.subscribe_key || 'demo';
-    var sessionid     = PUBNUB.uuid();
-    var mystream      = null;
-    var myvideo       = document.createElement('video');
-    var myconnection  = false;
-    var mediaconf     = config.media || { audio : true, video : true };
-    var conversations = {};
-    var oneway        = config.oneway || false
-    var broadcast     = config.broadcast || false;
+  if (IS_CHROME) {
+    RTCPeerConnection = webkitRTCPeerConnection;
+    RTCIceCandidate = window.RTCIceCandidate;
+    RTCSessionDescription = window.RTCSessionDescription;
+  } else {
+    RTCPeerConnection = mozRTCPeerConnection;
+    RTCIceCandidate = mozRTCIceCandidate;
+    RTCSessionDescription = mozRTCSessionDescription;
+  }
 
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // RTC Peer Connection Session (one per call)
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    var PeerConnection =
-        window.RTCPeerConnection    ||
-        window.mozRTCPeerConnection ||
-        window.webkitRTCPeerConnection;
+  // Global error handling function
+  function error() {
+    console['error'].apply(console, arguments);
+  }
 
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // ICE (many route options per call)
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    var IceCandidate =
-        window.mozRTCIceCandidate ||
-        window.RTCIceCandidate;
+  // Global info logging
+  var isDebug = true;
+  function debug() {
+    if (isDebug === true) {
+      console['log'].apply(console, arguments);
+    }
+  }
 
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Media Session Description (offer and answer per call)
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    var SessionDescription =
-        window.RTCSessionDescription    ||
-        window.mozRTCSessionDescription ||
-        window.webkitRTCSessionDescription;
+  // Grabs an attribute from a node.
+  function attr(node, attribute, value) {
+    if (value) {
+      node.setAttribute(attribute, value);
+    }
+    else {
+      return node && node.getAttribute && node.getAttribute(attribute);
+    }
+  }
 
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Local Microphone and Camera Media (one per device)
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    navigator.getUserMedia = 
-        navigator.getUserMedia       ||
-        navigator.webkitGetUserMedia ||
-        navigator.mozGetUserMedia    ||
-        navigator.msGetUserMedia;
+  // Extend function for adding to existing objects
+  function extend(obj, other) {
+    for (var key in other) {
+      obj[key] = other[key];
+    }
+    return obj;
+  }
 
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // STUN Server List Configuration (public STUN list)
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    var rtcconfig = { 
-	    /*constraints: {
-			mandatory: {
-				OfferToReceiveAudio: true,
-				OfferToReceiveVideo: true
-			},
-			optional: []
-		},*/
-	    iceServers : [{ "url" :
-	        navigator.mozGetUserMedia    ? "stun:stun.services.mozilla.com" :
-	        navigator.webkitGetUserMedia ? "stun:stun.l.google.com:19302"   :
-	                                       "stun:23.21.150.121"
-	    	},
-	        {url: "stun:stun.l.google.com:19302"},
-	        {url: "stun:stun1.l.google.com:19302"},
-	        {url: "stun:stun2.l.google.com:19302"},
-	        {url: "stun:stun3.l.google.com:19302"},
-	        {url: "stun:stun4.l.google.com:19302"},
-	        {url: "stun:23.21.150.121"},
-	        {url: "stun:stun01.sipphone.com"},
-	        {url: "stun:stun.ekiga.net"},
-	        {url: "stun:stun.fwdnet.net"},
-	        {url: "stun:stun.ideasip.com"},
-	        {url: "stun:stun.iptel.org"},
-	        {url: "stun:stun.rixtelecom.se"},
-	        {url: "stun:stun.schlund.de"},
-	        {url: "stun:stunserver.org"},
-	        {url: "stun:stun.softjoys.com"},
-	        {url: "stun:stun.voiparound.com"},
-	        {url: "stun:stun.voipbuster.com"},
-	        {url: "stun:stun.voipstunt.com"},
-	        {url: "stun:stun.voxgratia.org"},
-	        {url: "stun:stun.xten.com"}] 
-	    };
+  // Putting UUID function here to work around non-exposed ID issues.
+  function generateUUID() {
+    var u = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,
+    function (c) {
+      var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+    return u;
+  }
 
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Custom STUN Options
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    function add_servers(servers) {
-        if (servers.constructor === Array)
-            [].unshift.apply(rtcconfig.iceServers, servers);
-        else rtcconfig.iceServers.unshift(servers);
+  // Hack for Chrome to allow adequate throughput over DataChannel
+  function transformOutgoingSdp(sdp) {
+    var splitted = sdp.split("b=AS:30");
+    if (splitted.length === 1) {
+      return sdp;
+    }
+    var newSDP = splitted[0] + "b=AS:1638400" + splitted[1];
+    return newSDP;
+  }
+
+  function extendAPI(PUBNUB, uuid) {
+    // Store out API so we can extend it on all instances.
+    var API = {},
+        PREFIX = "pn_",               // Prefix for subscribe channels
+        PEER_CONNECTIONS = {},        // Connection storage by uuid
+        RTC_CONFIGURATION = {
+          iceServers: [
+            { 'url': (IS_CHROME ? 'stun:stun.l.google.com:19302' : 'stun:23.21.150.121') }
+          ]
+        },     // Global config for RTC's
+        PC_OPTIONS = (IS_CHROME ? {
+          optional: [
+          { RtpDataChannels: true }
+          ]
+        } : {}),
+        UUID = uuid,                  // The current user's UUID
+        PUBLISH_QUEUE = {},           // The queue of messages to send by UUID
+        CONNECTED = false,            // If we have connected to the personal channel yet
+        CONNECTION_QUEUE = [],        // Any createP2PConnection calls we get before we connect
+        PUBLISH_TYPE = {              // Publish type enum
+          STREAM: 1,
+          MESSAGE: 2
+        },
+        ON_NEW_CONNECTION = [];
+
+    // Expose PUBNUB UUID (Need to fix this in core)
+    PUBNUB['UUID'] = uuid;
+
+    // SignalingChannel
+    // The signaling channel handles sending data to and from a specific user channel.
+    function SignalingChannel(pubnub, selfUuid, otherUuid) {
+      var queue = [];
+      this.peerReady = false;
+      this.selfUuid = selfUuid;
+      this.otherUuid = otherUuid;
+
+      // The send function is here so we do not count a reference to PubNub preventing its destruction.
+      this.send = function (message, force) {
+        var strMsg = message;
+        message.uuid = selfUuid;
+        //message = JSON.stringify(message);
+
+        if (this.peerReady === true || force === true) {
+          if (message.sdp) {
+          }
+          pubnub.publish({
+            channel: PREFIX + otherUuid,
+            message: message
+          });
+        } else {
+          queue.push(strMsg);
+        }
+      };
+      this.initiate = function () {
+        this.send({ initiation: true }, true);
+      };
+      this.peerIsReady = function () {
+        this.peerReady = true;
+        queue.unshift({ negotiationReady: true });
+        queue.forEach(function (msg) {
+          this.send(msg);
+        }.bind(this));
+        queue = [];
+      };
     }
 
-    if ('servers' in config) add_servers(config.servers);
+    function personalChannelCallback(message) {
+      //message = JSON.parse(message);
 
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // PHONE Events
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    var messagecb    = function(){};
-    var readycb      = function(){};
-    var unablecb     = function(){};
-    var debugcb      = function(){};
-    var connectcb    = function(){};
-    var disconnectcb = function(){};
-    var reconnectcb  = function(){};
-    var callstatuscb = function(){};
-    var receivercb   = function(){};
-    var datachannelcb= function(){};
+      if (message.uuid != null) {
+        if (message.uuid === UUID) {
+          return;
+        }
 
-    PHONE.message    = function(cb) { messagecb    = cb };
-    PHONE.ready      = function(cb) { readycb      = cb };
-    PHONE.unable     = function(cb) { unablecb     = cb };
-    PHONE.callstatus = function(cb) { callstatuscb = cb };
-    PHONE.debug      = function(cb) { debugcb      = cb };
-    PHONE.connect    = function(cb) { connectcb    = cb };
-    PHONE.disconnect = function(cb) { disconnectcb = cb };
-    PHONE.reconnect  = function(cb) { reconnectcb  = cb };
-    PHONE.receive    = function(cb) { receivercb   = cb };
-    PHONE.datachannel= function(cb) { datachannelcb= cb };
+        var connected = PEER_CONNECTIONS[message.uuid] != null;
 
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Add/Get Conversation - Creates a new PC or Returns Existing PC
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    function get_conversation(number, isAnswer) {
-        var talk = conversations[number] || (function(number){
-            var talk = {
-                number  : number,
-                status  : '',
-                image   : document.createElement('img'),
-                started : +new Date,
-                imgset  : false,
-                imgsent : 0,
-                pc      : new PeerConnection(rtcconfig),
-                closed  : false,
-                usermsg : function(){},
-                thumb   : null,
-                connect : function(){},
-                end     : function(){}
-            };
+        // Setup the connection if we do not have one already.
+        if (connected === false) {
+          PUBNUB.createP2PConnection(message.uuid, false, function (uuid) {
+            for(var i = 0; i < ON_NEW_CONNECTION.length; i++) {
+              var callback = ON_NEW_CONNECTION[i];
+              callback(uuid);
+            }
+          });
+        }
 
-            // Setup Event Methods
-            talk.pc.onaddstream    = config.onaddstream || onaddstream;
-            talk.pc.onicecandidate = onicecandidate;
-            talk.pc.number         = number;
-            
-            // Setup Data Channel
-            if (config.datachannels) {
-	            if (isAnswer){
-		            talk.pc.ondatachannel = function (event) {
-			            talk.datachannel = event.channel;
-			            setChannelEvents(talk.datachannel);
-			        };
-	            } else {
-		            var dataChannelOptions = { ordered: true, maxRetransmits: 2};
-					talk.datachannel = talk.pc.createDataChannel(number+"-dc", dataChannelOptions);
-					setChannelEvents(talk.datachannel);
-	            }
-	        }
+        var connection = PEER_CONNECTIONS[message.uuid];
 
-            // Disconnect and Hangup
-            talk.hangup = function(signal) {
-                if (talk.closed) return;
+        if (!connection.signalingChannel.peerReady) {
+          connection.signalingChannel.peerIsReady();
+        }
 
-                talk.closed = true;
-                talk.imgset = false;
-                clearInterval(talk.snapi);
-
-                if (signal !== false) transmit( number, { hangup : true } );
-
-                talk.end(talk);
-                talk.pc.close();
-                close_conversation(number);
-            };
-
-            // Sending Messages
-            talk.send = function(message) {
-                transmit( number, { usermsg : message } );
-            };
-            
-            talk.sendData = function(message){
-	            if (!talk.datachannel) return console.log("Need to configure datachannel in settings.");
-				if (typeof(message)==='object') return talk.datachannel.send(JSON.stringify(message));
-	            talk.datachannel.send(message);
+        if (message.sdp != null) {
+          debug("Remote Session Description:", message.sdp);
+          connection.connection.setRemoteDescription(new RTCSessionDescription(message.sdp), function () {
+            // Add ice candidates we might have gotten early.
+            var candidates = connection.candidates;
+            debug("Adding ice candidates", candidates, connection);
+            for (var i = 0; i < candidates.length; i++) {
+              debug("Remote ICE Candidate (backfill):", candidates[i]);
+              connection.connection.addIceCandidate(new RTCIceCandidate(candidates[i]));
+              connection.connection.candidates = [];
             }
 
-            // Sending Stanpshots
-            talk.snap = function() {
-                var pic = snapper();
-                if (talk.closed) clearInterval(talk.snapi);
-                transmit( number, { thumbnail : pic } );
-                var img = document.createElement('img');
-                img.src = pic;
-                return { data : pic, image : img };
-            };
-            talk.snapi = setInterval( function() {
-                if (talk.imgsent++ > 5) return clearInterval(talk.snapi);
-                talk.snap();
-            }, 1500 );
-            talk.snap();
-
-            // Nice Accessor to Update Disconnect & Establis CBs
-            talk.thumbnail = function(cb) {talk.thumb   = cb; return talk};
-            talk.ended     = function(cb) {talk.end     = cb; return talk};
-            talk.connected = function(cb) {talk.connect = cb; return talk};
-            talk.message   = function(cb) {talk.usermsg = cb; return talk};
-
-            // Add Local Media Streams Audio Video Mic Camera
-            //  If answering and oneway streaming, do not attach stream
-            if (!isAnswer || !oneway) talk.pc.addStream(mystream);   // Add null here on the receiving end of streaming to go one-way.
-
-            // Notify of Call Status
-            update_conversation( talk, 'connecting' );
-
-            // Return Brand New Talk Reference
-            conversations[number] = talk;
-            return talk;
-        })(number);
-
-        // Return Existing or New Reference to Caller
-        return talk;
-    }
-
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Remove Conversation
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    function close_conversation(number) {
-        conversations[number] = null;
-        delete conversations[number];
-    }
-
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Notify of Call Status Events
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    function update_conversation( talk, status ) {
-        talk.status = status;
-        callstatuscb(talk);
-        return talk;
-    }
-
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Get Number
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    PHONE.number = function() {
-        return config.number;
-    };
-
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Get Call History
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    PHONE.history = function(settings) {
-        pubnub.history({
-            channel  : settings[number],
-            callback : function(call_history) {
-                settings['history'](call_history[0]);
+            // If we did not create the offer then create the answer.
+            if (connection.connection.signalingState === 'have-remote-offer') {
+              debug("Creating answer...", message.uuid);
+              connection.connection.createAnswer(function (description) {
+                PUBNUB.gotDescription(description, connection);
+              }, function (err) {
+                // Connection failed, so delete it from the table
+                delete PEER_CONNECTIONS[message.uuid];
+                error("Error creating answer: ", err);
+              });
             }
-        })
+          }, function (err) {
+            // Maybe notify the peer that we can't communicate
+            error("Error setting remote description: ", err);
+          });
+        } else if (message.initiation === true) {
+          //PUBNUB.createP2PConnection(message.uuid, true);
+        } else if (message.candidate) {
+          if (connection.connection.remoteDescription != null) {// && connection.connection.iceConnectionState !== "connected") {
+            debug("Remote ICE Candidate:", message.candidate);
+            connection.connection.addIceCandidate(new RTCIceCandidate(message.candidate));
+          }
+          else {
+            // This is to prevent adding ice candidates before the remote description
+            connection.candidates.push(message.candidate);
+          }
+        }
+      }
+    }
+
+    // Subscribe to our own personal channel to listen for data.
+    PUBNUB.subscribe({
+      channel: PREFIX + uuid,
+      restore: false,
+      //timetoken: backfillTime * Math.pow(10, 7),
+      connect: function () {
+        CONNECTED = true;
+
+        for (var i = 0; i < CONNECTION_QUEUE.length; i++) {
+          var args = CONNECTION_QUEUE[i];
+
+          if (args.length > 1) {
+            // We need to send a description because we are the "host"
+            args[1].signalingChannel.initiate();
+            debug("Connection Queue Description", args);
+            PUBNUB.gotDescription.apply(PUBNUB, args);
+          } else if (args.length === 1) {
+            // We are not the "host" so we send initiation
+            args[0].signalingChannel.initiate();
+          }
+        }
+
+        CONNECTION_QUEUE = [];
+      },
+      callback: personalChannelCallback
+    });
+
+    // PUBNUB._gotDescription
+    // This is the handler for when we get a SDP description from the WebRTC API.
+    API['gotDescription'] = function (description, connection) {
+      /***
+       * CHROME HACK TO GET AROUND BANDWIDTH LIMITATION ISSUES
+       ***/
+      if (IS_CHROME) {
+        description.sdp = transformOutgoingSdp(description.sdp);
+      }
+
+      if (connection.connection.signalingState !== 'have-local-offer') {
+        debug("Local Session Description", description.sdp);
+        connection.connection.setLocalDescription(description, function () {
+
+        }, function (error) {
+          debug("Error setting local description: ", error);
+        });
+      }
+
+      if (CONNECTED === false) {
+        CONNECTION_QUEUE.push([description, connection]);
+      } else {
+        connection.signalingChannel.send({
+          "sdp": description
+        });
+      }
     };
 
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Make Call - Create new PeerConnection
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    PHONE.dial = function(number, servers) {
-        if (!!servers) add_servers(servers);
-        var talk = get_conversation(number);
-        var pc   = talk.pc;
-
-        // Prevent Repeat Calls
-        if (talk.dialed) return false;
-        talk.dialed = true;
-
-        // Send SDP Offer (Call)
-        pc.createOffer( function(offer) {
-            transmit( number, { hangup : true } );
-            transmit( number, offer, 2 );
-            pc.setLocalDescription( offer, debugcb, debugcb );
-        }, debugcb );
-
-        // Return Session Reference
-        return talk;
+    API['onNewConnection'] = function (callback) {
+      ON_NEW_CONNECTION.push(callback);
     };
 
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Send Image Snap - Send Image Snap to All Calls or a Specific Call
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    PHONE.snap = function( message, number ) {
-        if (number) return get_conversation(number).snap(message);
-        var pic = {};
-        PUBNUB.each( conversations, function( number, talk ) {
-            pic = talk.snap();
-        } );
-        return pic;
-    };
+    // PUBNUB.createP2PConnection
+    // Signals and creates a P2P connection between two users.
+    API['createP2PConnection'] = function (uuid, offer, callback) {
+      if (PEER_CONNECTIONS[uuid] == null) {
+        var pc = new RTCPeerConnection(RTC_CONFIGURATION, PC_OPTIONS),
+            signalingChannel = new SignalingChannel(this, UUID, uuid),
+            self = this;
 
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Send Message - Send Message to All Calls or a Specific Call
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    PHONE.send = function( message, number ) {
-        if (number) return get_conversation(number).send(message);
-        PUBNUB.each( conversations, function( number, talk ) {
-            talk.send(message);
-        } );
-    };
-    
-     PHONE.sendData = function( message, number ) {
-        if (number) return get_conversation(number).sendData(message);
-        PUBNUB.each( conversations, function( number, talk ) {
-            talk.sendData(message);
-        } );
-    };
+        var onDataChannelCreated = function (event) {
+          PEER_CONNECTIONS[uuid].dataChannel = event.channel;
 
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // End Call - Close All Calls or a Specific Call
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    PHONE.hangup = function(number) {
-        if (number) return get_conversation(number).hangup();
-        PUBNUB.each( conversations, function( number, talk ) {
-            talk.hangup();
-        } );
-    };
-    
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Expose local stream and pubnub object
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    PHONE.mystream = mystream;
-    PHONE.pubnub   = pubnub;
-    PHONE.oneway   = oneway;
+          PEER_CONNECTIONS[uuid].dataChannel.onmessage = function (event) {
+            var data = event.data;
 
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Auto-hangup on Leave
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    PUBNUB.bind( 'unload,beforeunload', window, function() {
-        if (PHONE.goodbye) return true;
-        PHONE.goodbye = true;
-
-        PUBNUB.each( conversations, function( number, talk ) {
-            var mynumber = config.number;
-            var packet   = { hangup:true };
-            var message  = { packet:packet, id:sessionid, number:mynumber };
-            var client   = new XMLHttpRequest();
-            var url      = 'http://pubsub.pubnub.com/publish/'
-                           + pubkey + '/'
-                           + subkey + '/0/'
-                           + number + '/0/'
-                           + JSON.stringify(message);
-
-            client.open( 'GET', url, false );
-            client.send();
-            talk.hangup();
-        } );
-
-        return true;
-    } );
-
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Grab Local Video Snapshot
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    function snapshots_setup(stream) {
-        var video   = myvideo;
-        var canvas  = document.createElement('canvas');
-        var context = canvas.getContext("2d");
-        var snap    = { width: 240, height: 180 };
-
-        // Video Settings
-        video.width  = snap.width;
-        video.height = snap.height;
-        video.src    = URL.createObjectURL(stream);
-        video.volume = 0.0;
-        video.play();
-
-        // Canvas Settings
-        canvas.width  = snap.width;
-        canvas.height = snap.height;
-
-        // Capture Local Pic
-        snapper = function() {
+            // Try to automagically parse JSON data
             try {
-                context.drawImage( video, 0, 0, snap.width, snap.height );
-            } catch(e) {}
-            return canvas.toDataURL( 'image/jpeg', 0.30 );
+              data = JSON.parse(event.data);
+            } catch (exception) {
+              // Do nothing
+            }
+
+            if (PEER_CONNECTIONS[uuid].callback) {
+              PEER_CONNECTIONS[uuid].callback(data, event);
+            } else {
+              // Store it in the history so the user can still get to it
+              PEER_CONNECTIONS[uuid].history.push(data);
+            }
+          };
+
+          debug("Add handler for streams.");
+          PEER_CONNECTIONS[uuid].connection.onaddstream = function (event) {
+            debug("On Stream Add", event, PEER_CONNECTIONS[uuid].stream);
+            if (PEER_CONNECTIONS[uuid].stream) {
+              PEER_CONNECTIONS[uuid].stream(event.data, event);
+            } else {
+              // Store it in the history so the user can still get to it
+              PEER_CONNECTIONS[uuid].history.push(event.data);
+            }
+          };
+
+          PEER_CONNECTIONS[uuid].dataChannel.onopen = function () {
+            PEER_CONNECTIONS[uuid].connected = true;
+            self._peerPublish(uuid);
+          };
+        };
+        pc.ondatachannel = onDataChannelCreated;
+
+        pc.onicecandidate = function (event) {
+          // TODO: Figure out why we get a null candidate
+          if (event.candidate != null) {
+            signalingChannel.send({ "candidate": event.candidate });
+          }
         };
 
-        PHONE.video = video;
-    }
+        pc.onsignalingstatechange = function () {
+          debug("Signaling state change: ", pc.signalingState);
 
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Visually Display New Stream
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    function onaddstream(obj) {
-        var vid    = document.createElement('video');
-        var stream = obj.stream;
-        var number = (obj.srcElement || obj.target).number;
-        var talk   = get_conversation(number);
+          if (pc.signalingState === "closed") {
+            // Not sure why this does not always get called
+          }
+        };
 
-        vid.setAttribute( 'autoplay', 'autoplay' );
-        vid.setAttribute( 'data-number', number );
-        vid.src = URL.createObjectURL(stream);
+        pc.oniceconnectionstatechange = function () {
+          debug("Connection state change: ", pc.iceConnectionState);
+          if (pc.iceConnectionState === "connected") {
+            // Handle event for connect state
+            if (PEER_CONNECTIONS[uuid].events.connect) {
+              PEER_CONNECTIONS[uuid].events.connect(uuid, pc);
+            }
+          } else if (pc.iceConnectionState === "disconnected") {
+            // Handle closed event for connection
+            if (PEER_CONNECTIONS[uuid].events.disconnect) {
+              PEER_CONNECTIONS[uuid].events.disconnect(uuid, pc);
+            }
+          }
+        };
 
-        talk.video = vid;
-        talk.connect(talk);
-    }
-    
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Data Channel Configurations
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-	function setChannelEvents(datachannel){
-		datachannel.onmessage = function(m){
-			try { 
-				var msg = JSON.parse(m.data); 
-				datachannelcb(msg);
-			} catch (e) { 
-				datachannelcb(m.data);
-			}
-		};
-		datachannel.onopen    = function() {debugcb("------ DATACHANNEL OPENED ------")};
-		datachannel.onclose   = function() {debugcb("------ DATACHANNEL CLOSED ------")};
-		datachannel.onerror   = function() {debugcb("------ DATACHANNEL ERROR! ------")};
-	}
-    function ondatachannel(e){ console.log("Pass ondataconfig function in phone configurations object."); }
+        PUBLISH_QUEUE[uuid] = [];
 
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // On ICE Route Candidate Discovery
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    function onicecandidate(event) {
-        if (!event.candidate) return;
-        transmit( this.number, event.candidate );
+        PEER_CONNECTIONS[uuid] = {
+          connection: pc,
+          candidates: [],
+          connected: false,
+          createdOffer: offer !== false,
+          history: [],
+          signalingChannel: signalingChannel,
+          events: {}
+        };
+
+        if (callback) {
+          callback(uuid);
+        }
+
+        // Compare UUIDs to guarantee we determine the 'leader' for negotiating the connection
+        if (UUID > uuid) {
+          var dc = pc.createDataChannel("pubnub", (IS_CHROME ? { reliable: false } : {}));
+          onDataChannelCreated({
+            channel: dc
+          });
+
+          debug("Creating offer...", uuid);
+          pc.createOffer(function (description) {
+            self.gotDescription(description, PEER_CONNECTIONS[uuid]);
+          }, function (err) {
+            // Connection failed, so delete it from the table
+            delete PEER_CONNECTIONS[uuid];
+            error(err);
+          }, {mandatory:{OfferToReceiveAudio:true,OfferToReceiveVideo:true}});
+        } else {
+          if (CONNECTED === false) {
+            CONNECTION_QUEUE.push([PEER_CONNECTIONS[uuid]]);
+          } else {
+            signalingChannel.initiate();
+          }
+        }
+      } else {
+        debug("Trying to connect to already connected user: " + uuid);
+      }
     };
 
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Listen For New Incoming Calls
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    function subscribe() {
-	    console.log("Subscribed to " + config.number);
-        pubnub.subscribe({
-            restore    : true,
-            channel    : config.number,
-            message    : receive,
-            disconnect : disconnectcb,
-            reconnect  : reconnectcb,
-            connect    : function() { onready(true) }
-        });
-    }
-
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // When Ready to Receive Calls
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    function onready(subscribed) {
-        if (subscribed) myconnection = true;
-        if (!((mystream || oneway) && myconnection)) return;
-        
-        connectcb();
-        readycb();
-    }
-
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Prepare Local Media Camera and Mic
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    function getusermedia() { //Do something if not requesting any media?
-        if (oneway && !broadcast){
-	        if (!PeerConnection){ return unablecb(); }
-	        onready();
-	        subscribe();
-            return;
-        }
-        navigator.getUserMedia( mediaconf, function(stream) {
-            if (!stream) return unablecb(stream);
-            mystream = stream;
-            phone.mystream = stream;
-            snapshots_setup(stream);
-            onready();
-            subscribe();
-        }, function(info) {
-            debugcb(info);
-            return unablecb(info);
-        } );
-    }
-
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Send SDP Call Offers/Answers and ICE Candidates to Peer
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    function transmit( phone, packet, times, time ) {
-        if (!packet) return;
-        var number  = config.number;
-        var message = { packet : packet, id : sessionid, number : number };
-        debugcb(message);
-        pubnub.publish({ channel : phone, message : message });
-
-        // Recurse if Requested for
-        if (!times) return;
-        time = time || 1;
-        if (time++ >= times) return;
-        setTimeout( function(){
-            transmit( phone, packet, times, time );
-        }, 150 );
-    }
-
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // SDP Offers & ICE Candidates Receivable Processing
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    function receive(message) {
-        // Debug Callback of Data to Watch
-        debugcb(message);
-
-        // Get Call Reference
-        var talk = get_conversation(message.number, true);
-        
-        // Ignore if Closed
-        if (talk.closed) return;
-
-        // User Message
-        if (message.packet.usermsg) {
-            messagecb( talk, message.packet.usermsg );
-            return talk.usermsg( talk, message.packet.usermsg );
+    // Helper function for sending messages with different types.
+    function handleMessage(connection, message) {
+      debug("Handling message", connection, message);
+      if (message.type === PUBLISH_TYPE.STREAM) {
+        debug("Adding stream", message.stream);
+        connection.connection.addStream(message.stream);
+      } else if (message.type === PUBLISH_TYPE.MESSAGE) {
+        // Convert to JSON automagically
+        if (typeof message.message === "object") {
+          //message.message = JSON.stringify(message.message);
         }
 
-        // Thumbnail Preview Image
-        if (message.packet.thumbnail) return create_thumbnail(message);
+        connection.dataChannel.send(message.message);
+      } else {
+        error("Unrecognized RTC message type: " + message.type);
+      }
+    }
 
-        // If Hangup Request
-        if (message.packet.hangup) return talk.hangup(false);
+    // PUBNUB._peerPublish
+    // Handles requesting a peer connection and emptying the queue when connected.
+    API['_peerPublish'] = function (uuid) {
+      if (PUBLISH_QUEUE[uuid] && PUBLISH_QUEUE[uuid].length > 0) {
+        debug("Connected", PEER_CONNECTIONS[uuid].connected, uuid);
+        if (PEER_CONNECTIONS[uuid].connected === true) {
+          handleMessage(PEER_CONNECTIONS[uuid], PUBLISH_QUEUE[uuid].shift());
+          this._peerPublish(uuid);
+        } else {
+          // Not connected yet so just sit tight!
+        }
+      } else {
+        // Nothing to publish
+        return;
+      }
+    };
 
-        // If Peer Calling Inbound (Incoming) - Can determine stream + receive here.
-        if ( message.packet.sdp && !talk.received ) {
-            talk.received = true;
-            receivercb(talk);
+    // PUBNUB.publish overload
+    API['publish'] = (function (_super) {
+      return function (options) {
+        var exists = PEER_CONNECTIONS[options.user] != null;
+
+        if (options == null) {
+          error("You must send an object when using PUBNUB.publish!");
         }
 
-        // Update Peer Connection with SDP Offer or ICE Routes
-        if (message.packet.sdp) add_sdp_offer(message);
-        else                    add_ice_route(message);
-    }
+        if (options.user != null) {
+          // Setup the connection if it does not exist
+          if (PEER_CONNECTIONS[options.user] == null) {
+            PUBNUB.createP2PConnection(options.user, null, function () {
+              if (options.stream != null) {
+                debug("Publishing stream to user", options.stream, options.user);
+                PEER_CONNECTIONS[options.user].connection.addStream(options.stream);
+              }
+            });
+          }
 
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Create Remote Friend Thumbnail
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    function create_thumbnail(message) {
-        var talk       = get_conversation(message.number);
-        talk.image.src = message.packet.thumbnail;
+          if (options.stream != null) {
+            if (exists === true) {
+              debug("Publishing stream to user", options.stream, options.user);
+              PEER_CONNECTIONS[options.user].connection.addStream(options.stream);
+            }
+            // PUBLISH_QUEUE[options.user].push({
+            //   type: PUBLISH_TYPE.STREAM,
+            //   stream: options.stream
+            // });
+            // handleMessage(PEER_CONNECTIONS[options.user], PUBLISH_QUEUE[options.user].shift());
+          } else if (options.message != null) {
+            PUBLISH_QUEUE[options.user].push({
+              type: PUBLISH_TYPE.MESSAGE,
+              message: options.message
+            });
+          } else {
+            error("Stream or message key not found in argument object. One or the other must be provided for RTC publish calls!");
+          }
 
-        // Call only once
-        if (!talk.thumb) return;
-        if (!talk.imgset) talk.thumb(talk);
-        talk.imgset = true;
-    }
+          this._peerPublish(options.user);
+        } else {
+          _super.apply(this, arguments);
+        }
+      };
+    })(PUBNUB['publish']);
 
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Add SDP Offer/Answers
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    function add_sdp_offer(message) {
-        // Get Call Reference
-        var talk = get_conversation(message.number, message.packet.type=='answer');
-        var pc   = talk.pc;
-        var type = message.packet.type == 'offer' ? 'offer' : 'answer';
+    // PUBNUB.subscribe overload
+    API['subscribe'] = (function (_super) {
+      return function (options) {
+        if (options == null) {
+          error("You must send an object when using PUBNUB.subscribe!");
+        }
 
-        // Deduplicate SDP Offerings/Answers
-        if (type in talk) return;
-        talk[type]  = true;
-        talk.dialed = true;
+        if (options.user != null) {
+          // Setup the connection if it does not exist
+          if (PEER_CONNECTIONS[options.user] == null) {
+            PUBNUB.createP2PConnection(options.user);
+          }
 
-        // Notify of Call Status
-        update_conversation( talk, 'routing' );
+          var connection = PEER_CONNECTIONS[options.user];
 
-        // Add SDP Offer/Answer
-        pc.setRemoteDescription(
-            new SessionDescription(message.packet), function() {
-                // Set Connected Status
-                update_conversation( talk, 'connected' );
+          if (options.stream) {
+            // Setup the stream added listener
+            connection.stream = options.stream;
+          }
 
-                // Call Online and Ready
-                if (pc.remoteDescription.type != 'offer') return;
+          if (options.callback) {
+            // Setup the data channel callback listener
+            connection.callback = options.callback;
+          }
 
-                // Create Answer to Call
-                pc.createAnswer( function(answer) {
-                    pc.setLocalDescription( answer, debugcb, debugcb );
-                    transmit( message.number, answer, 2 );
-                }, debugcb );
-            }, debugcb
-        );
-    }
+          connection.events = options;
 
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Add ICE Candidate Routes
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    function add_ice_route(message) {
-        // Leave if Non-good ICE Packet
-        if (!message.packet)           return;
-        if (!message.packet.candidate) return;
+          // Replay the backfilled messages if they exist
+          debug("Subscribing to user: ", options.user, connection.history);
+          if (connection.history.length > 0) {
+            for (var i = 0; i < connection.history.length; i++) {
+              var message = connection.history[i];
 
-        // Get Call Reference
-        var talk = get_conversation(message.number);
-        var pc   = talk.pc;
+              if (options.callback) {
+                options.callback(message);
+              }
+            }
+          }
+        } else {
+          return _super.apply(this, arguments);
+        }
+      };
+    })(PUBNUB['subscribe']);
 
-        // Add ICE Candidate Routes
-        pc.addIceCandidate(
-            new IceCandidate(message.packet),
-            debugcb,
-            debugcb
-        );
-    }
+    // PUBNUB.unsubscribe overload
+    API['unsubscribe'] = (function (_super) {
+      return function (options) {
+        if (options == null) {
+          error("You must send an object when using PUBNUB.unsubscribe!");
+        }
 
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    // Main - Request Camera and Mic
-    // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-    getusermedia()
+        if (options.user != null) {
+          var connection = PEER_CONNECTIONS[options.user];
 
-    return PHONE;
-};
-})();
+          if (connection != null) {
+            if (connection.dataChannel != null) {
+              connection.dataChannel.close();
+            }
+            connection.connection.close();
+            PEER_CONNECTIONS[options.user] = null;
+          }
+        } else {
+          return _super.apply(this, arguments);
+        }
+      };
+    })(PUBNUB['unsubscribe']);
+
+    // PUBNUB.history overload
+    API['history'] = (function (_super) {
+      return function (options) {
+        if (options == null) {
+          error("You must send an object when using PUBNUB.history!");
+        }
+
+        if (options.user != null) {
+          if (options.callback) {
+            var history = PEER_CONNECTIONS[options.user].history || [[]];
+
+            options.callback([history]);
+          } else {
+            error("No callback provided for PUBNUB.history");
+          }
+        } else {
+          return _super.apply(this, arguments);
+        }
+      };
+    })(PUBNUB['history']);
+
+    // PUBNUB.peerConnection
+    // Returns the current peer connection if one exists
+    API['peerConnection'] = function (uuid, callback) {
+      if (callback) {
+        if (PEER_CONNECTIONS[uuid] != null) {
+          callback(PEER_CONNECTIONS[uuid].connection);
+        } else {
+          callback(null);
+        }
+      } else {
+        debug("PUBNUB.peerConnection should be called with a callback");
+      }
+    };
+
+    // PUBNUB.dataChannel
+    // Returns the current data channel if one exists
+    API['dataChannel'] = function (uuid, callback) {
+      if (callback) {
+        if (PEER_CONNECTIONS[uuid] != null) {
+          callback(PEER_CONNECTIONS[uuid].dataChannel);
+        } else {
+          callback(null);
+        }
+      } else {
+        debug("PUBNUB.dataChannel should be called with a callback");
+      }
+    };
+
+    // PUBNUB.configurePeerConnection
+    // Configures the options when creating a new peer connection internally
+    API['configurePeerConnection'] = function (rtcConfig, pcConfig) {
+      if (rtcConfig != null) {
+        RTC_CONFIGURATION = rtcConfig;
+      }
+
+      if (pcConfig != null) {
+        PC_OPTIONS = pcConfig;
+      }
+    };
+
+    return extend(PUBNUB, API);
+  }
+
+  // PUBNUB init overload
+  PUBNUB['init'] = (function (_super) {
+    return function (options) {
+      // Grab the UUID
+      var uuid = options.uuid || generateUUID();
+      options.uuid = uuid;
+
+      // Create pubnub object
+      debug("PubNub init: ", options);
+      var pubnub = _super.call(this, options);
+
+      // Extend the WebRTC API
+      pubnub = extendAPI(pubnub, uuid);
+      return pubnub;
+    };
+  })(PUBNUB['init']);
+
+  var pdiv = document.querySelector("#pubnub");
+
+  if (pdiv) {
+    // CREATE A PUBNUB GLOBAL OBJECT
+    window.PUBNUB = PUBNUB.init({
+      'notest': 1,
+      'publish_key': attr(pdiv, 'pub-key'),
+      'subscribe_key': attr(pdiv, 'sub-key'),
+      'ssl': !document.location.href.indexOf('https') ||
+                        attr(pdiv, 'ssl') === 'on',
+      'origin': attr(pdiv, 'origin'),
+      'uuid': attr(pdiv, 'uuid')
+    });
+  }
+
+})(window, PUBNUB);
