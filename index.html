@@ -37,9 +37,10 @@
        
      $("#beans").click(function()
      {
+       console.log($("#ayy").value + "");
        pubnub.publish({
           user: user,
-          message: $("#ayy").value
+          message: ($("#ayy").value + "")
         });
      });
       
