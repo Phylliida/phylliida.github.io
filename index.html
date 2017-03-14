@@ -19,14 +19,14 @@
     
     <script>
       
-    var user = PUBNUB.uuid();
-    var pubnub = PUBNUB.init({
+    var user = PubNub.uuid();
+    var pubnub = PubNub.init({
       publish_key: 'pub-c-a2281ecc-42fb-47c8-91b6-f80ad06357ca',
       subscribe_key: 'sub-c-bfbc4b56-0904-11e7-b95c-0619f8945a4f',
       uuid: user
     });
       
-     PUBNUB.subscribe({
+     PubNub.subscribe({
       user: user,
       callback: function (message) {
         alert(message + "");
@@ -34,7 +34,7 @@
        
      $("#beans").click(function()
      {
-       pubnubA.publish({
+       PubNub.publish({
           user: user,
           message: $("#ayy").value()
         });
