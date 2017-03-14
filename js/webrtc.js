@@ -1,4 +1,4 @@
-(function (window, PUBNUB) {
+(function (window, PubNub) {
   //"use strict";
 
   // Remove vendor prefixes
@@ -68,7 +68,7 @@
     return newSDP;
   }
 
-  function extendAPI(PUBNUB, uuid) {
+  function extendAPI(PubNub, uuid) {
     // Store out API so we can extend it on all instances.
     var API = {},
         PREFIX = "pn_",               // Prefix for subscribe channels
@@ -93,12 +93,12 @@
         },
         ON_NEW_CONNECTION = [];
 
-    // Expose PUBNUB UUID (Need to fix this in core)
-    PUBNUB['UUID'] = uuid;
+    // Expose PubNub UUID (Need to fix this in core)
+    PubNub['UUID'] = uuid;
 
     // SignalingChannel
     // The signaling channel handles sending data to and from a specific user channel.
-    function SignalingChannel(pubnub, selfUuid, otherUuid) {
+    function SignalingChannel(PubNub, selfUuid, otherUuid) {
       var queue = [];
       this.peerReady = false;
       this.selfUuid = selfUuid;
@@ -113,7 +113,7 @@
         if (this.peerReady === true || force === true) {
           if (message.sdp) {
           }
-          pubnub.publish({
+          PubNub.publish({
             channel: PREFIX + otherUuid,
             message: message
           });
@@ -146,7 +146,7 @@
 
         // Setup the connection if we do not have one already.
         if (connected === false) {
-          PUBNUB.createP2PConnection(message.uuid, false, function (uuid) {
+          PubNub.createP2PConnection(message.uuid, false, function (uuid) {
             for(var i = 0; i < ON_NEW_CONNECTION.length; i++) {
               var callback = ON_NEW_CONNECTION[i];
               callback(uuid);
@@ -176,7 +176,7 @@
             if (connection.connection.signalingState === 'have-remote-offer') {
               debug("Creating answer...", message.uuid);
               connection.connection.createAnswer(function (description) {
-                PUBNUB.gotDescription(description, connection);
+                PubNub.gotDescription(description, connection);
               }, function (err) {
                 // Connection failed, so delete it from the table
                 delete PEER_CONNECTIONS[message.uuid];
@@ -188,7 +188,7 @@
             error("Error setting remote description: ", err);
           });
         } else if (message.initiation === true) {
-          //PUBNUB.createP2PConnection(message.uuid, true);
+          //PubNub.createP2PConnection(message.uuid, true);
         } else if (message.candidate) {
           if (connection.connection.remoteDescription != null) {// && connection.connection.iceConnectionState !== "connected") {
             debug("Remote ICE Candidate:", message.candidate);
@@ -203,7 +203,7 @@
     }
 
     // Subscribe to our own personal channel to listen for data.
-    PUBNUB.subscribe({
+    PubNub.subscribe({
       channel: PREFIX + uuid,
       restore: false,
       //timetoken: backfillTime * Math.pow(10, 7),
@@ -217,7 +217,7 @@
             // We need to send a description because we are the "host"
             args[1].signalingChannel.initiate();
             debug("Connection Queue Description", args);
-            PUBNUB.gotDescription.apply(PUBNUB, args);
+            PubNub.gotDescription.apply(PubNub, args);
           } else if (args.length === 1) {
             // We are not the "host" so we send initiation
             args[0].signalingChannel.initiate();
@@ -229,7 +229,7 @@
       callback: personalChannelCallback
     });
 
-    // PUBNUB._gotDescription
+    // PubNub._gotDescription
     // This is the handler for when we get a SDP description from the WebRTC API.
     API['gotDescription'] = function (description, connection) {
       /***
@@ -261,7 +261,7 @@
       ON_NEW_CONNECTION.push(callback);
     };
 
-    // PUBNUB.createP2PConnection
+    // PubNub.createP2PConnection
     // Signals and creates a P2P connection between two users.
     API['createP2PConnection'] = function (uuid, offer, callback) {
       if (PEER_CONNECTIONS[uuid] == null) {
@@ -356,7 +356,7 @@
 
         // Compare UUIDs to guarantee we determine the 'leader' for negotiating the connection
         if (UUID > uuid) {
-          var dc = pc.createDataChannel("pubnub", (IS_CHROME ? { reliable: false } : {}));
+          var dc = pc.createDataChannel("PubNub", (IS_CHROME ? { reliable: false } : {}));
           onDataChannelCreated({
             channel: dc
           });
@@ -399,7 +399,7 @@
       }
     }
 
-    // PUBNUB._peerPublish
+    // PubNub._peerPublish
     // Handles requesting a peer connection and emptying the queue when connected.
     API['_peerPublish'] = function (uuid) {
       if (PUBLISH_QUEUE[uuid] && PUBLISH_QUEUE[uuid].length > 0) {
@@ -416,19 +416,19 @@
       }
     };
 
-    // PUBNUB.publish overload
+    // PubNub.publish overload
     API['publish'] = (function (_super) {
       return function (options) {
         var exists = PEER_CONNECTIONS[options.user] != null;
 
         if (options == null) {
-          error("You must send an object when using PUBNUB.publish!");
+          error("You must send an object when using PubNub.publish!");
         }
 
         if (options.user != null) {
           // Setup the connection if it does not exist
           if (PEER_CONNECTIONS[options.user] == null) {
-            PUBNUB.createP2PConnection(options.user, null, function () {
+            PubNub.createP2PConnection(options.user, null, function () {
               if (options.stream != null) {
                 debug("Publishing stream to user", options.stream, options.user);
                 PEER_CONNECTIONS[options.user].connection.addStream(options.stream);
@@ -460,19 +460,19 @@
           _super.apply(this, arguments);
         }
       };
-    })(PUBNUB['publish']);
+    })(PubNub['publish']);
 
-    // PUBNUB.subscribe overload
+    // PubNub.subscribe overload
     API['subscribe'] = (function (_super) {
       return function (options) {
         if (options == null) {
-          error("You must send an object when using PUBNUB.subscribe!");
+          error("You must send an object when using PubNub.subscribe!");
         }
 
         if (options.user != null) {
           // Setup the connection if it does not exist
           if (PEER_CONNECTIONS[options.user] == null) {
-            PUBNUB.createP2PConnection(options.user);
+            PubNub.createP2PConnection(options.user);
           }
 
           var connection = PEER_CONNECTIONS[options.user];
@@ -504,13 +504,13 @@
           return _super.apply(this, arguments);
         }
       };
-    })(PUBNUB['subscribe']);
+    })(PubNub['subscribe']);
 
-    // PUBNUB.unsubscribe overload
+    // PubNub.unsubscribe overload
     API['unsubscribe'] = (function (_super) {
       return function (options) {
         if (options == null) {
-          error("You must send an object when using PUBNUB.unsubscribe!");
+          error("You must send an object when using PubNub.unsubscribe!");
         }
 
         if (options.user != null) {
@@ -527,13 +527,13 @@
           return _super.apply(this, arguments);
         }
       };
-    })(PUBNUB['unsubscribe']);
+    })(PubNub['unsubscribe']);
 
-    // PUBNUB.history overload
+    // PubNub.history overload
     API['history'] = (function (_super) {
       return function (options) {
         if (options == null) {
-          error("You must send an object when using PUBNUB.history!");
+          error("You must send an object when using PubNub.history!");
         }
 
         if (options.user != null) {
@@ -542,15 +542,15 @@
 
             options.callback([history]);
           } else {
-            error("No callback provided for PUBNUB.history");
+            error("No callback provided for PubNub.history");
           }
         } else {
           return _super.apply(this, arguments);
         }
       };
-    })(PUBNUB['history']);
+    })(PubNub['history']);
 
-    // PUBNUB.peerConnection
+    // PubNub.peerConnection
     // Returns the current peer connection if one exists
     API['peerConnection'] = function (uuid, callback) {
       if (callback) {
@@ -560,11 +560,11 @@
           callback(null);
         }
       } else {
-        debug("PUBNUB.peerConnection should be called with a callback");
+        debug("PubNub.peerConnection should be called with a callback");
       }
     };
 
-    // PUBNUB.dataChannel
+    // PubNub.dataChannel
     // Returns the current data channel if one exists
     API['dataChannel'] = function (uuid, callback) {
       if (callback) {
@@ -574,11 +574,11 @@
           callback(null);
         }
       } else {
-        debug("PUBNUB.dataChannel should be called with a callback");
+        debug("PubNub.dataChannel should be called with a callback");
       }
     };
 
-    // PUBNUB.configurePeerConnection
+    // PubNub.configurePeerConnection
     // Configures the options when creating a new peer connection internally
     API['configurePeerConnection'] = function (rtcConfig, pcConfig) {
       if (rtcConfig != null) {
@@ -590,31 +590,31 @@
       }
     };
 
-    return extend(PUBNUB, API);
+    return extend(PubNub, API);
   }
 
-  // PUBNUB init overload
-  PUBNUB['init'] = (function (_super) {
+  // PubNub init overload
+  PubNub['init'] = (function (_super) {
     return function (options) {
       // Grab the UUID
       var uuid = options.uuid || generateUUID();
       options.uuid = uuid;
 
-      // Create pubnub object
+      // Create PubNub object
       debug("PubNub init: ", options);
-      var pubnub = _super.call(this, options);
+      var PubNub = _super.call(this, options);
 
       // Extend the WebRTC API
-      pubnub = extendAPI(pubnub, uuid);
-      return pubnub;
+      PubNub = extendAPI(PubNub, uuid);
+      return PubNub;
     };
-  })(PUBNUB['init']);
+  })(PubNub['init']);
 
-  var pdiv = document.querySelector("#pubnub");
+  var pdiv = document.querySelector("#PubNub");
 
   if (pdiv) {
-    // CREATE A PUBNUB GLOBAL OBJECT
-    window.PUBNUB = PUBNUB.init({
+    // CREATE A PubNub GLOBAL OBJECT
+    window.PubNub = PubNub.init({
       'notest': 1,
       'publish_key': attr(pdiv, 'pub-key'),
       'subscribe_key': attr(pdiv, 'sub-key'),
@@ -625,4 +625,4 @@
     });
   }
 
-})(window, PUBNUB);
+})(window, PubNub);
