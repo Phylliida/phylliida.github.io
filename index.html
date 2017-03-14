@@ -20,6 +20,34 @@
     <script>
 
       
+    var pubnubMain = PUBNUB.init({
+      publish_key: 'pub-c-a2281ecc-42fb-47c8-91b6-f80ad06357ca',
+      subscribe_key: 'sub-c-bfbc4b56-0904-11e7-b95c-0619f8945a4f',
+      ssl: true
+    });
+      
+     pubnubMain.subscribe({ 
+        // connect to a channel 
+        channel : "channel_abc", 
+        // resubscribe and reconnect
+        restore : true, 
+        // message received 
+        callback : function(m) {alert(JSON.stingify(m))}, 
+        //  conneciton lost
+        disconnect : function() {alert("Connection Lost!")}, 
+        // connection restored 
+        reconnect : function() {alert("And we're Back!")}, 
+        // connection established 
+        connect : function() { 
+            // send a message 
+            PUBNUB.publish({ 
+                channel : "channel_abc", 
+                message : "Hi from PubNub." 
+            }) 
+        }
+     });
+      
+      
     var user = PUBNUB.uuid();
     var pubnub = PUBNUB.init({
       publish_key: 'pub-c-a2281ecc-42fb-47c8-91b6-f80ad06357ca',
@@ -27,6 +55,7 @@
       uuid: user,
       ssl: true
     });
+      
       
      pubnub.subscribe({
       user: user,
