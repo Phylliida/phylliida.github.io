@@ -40,7 +40,7 @@
         // connection established 
         connect : function() { 
             // send a message 
-            PUBNUB.publish({ 
+            pubnubMain.publish({ 
                 channel : "channel_abc", 
                 message : "Hi from PubNub." 
             }) 
