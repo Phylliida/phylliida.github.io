@@ -1,62 +1,77 @@
-
 <html>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
 <head>
- <script src="/js/comet.js"></script>
- <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
 </head>
 <body>
- 
- <input id="message"></input>
- <button id="submitMessage">Submit</button>
- 
+
+<!--div><input id=input placeholder=you-chat-here /></div-->
+
+<div id=box></div>
+
+<script src=https://cdn.pubnub.com/sdk/javascript/pubnub.4.0.11.min.js></script>
 <script>
-$(document).ready(function () {
-
-// Make me a server with Google Gears support enabled
-var server = new Addressable.Server({ useGears: true });
-
-// When a message arrives, just "log" it
-server.onmessage = function (message) {
-console.log(message)
+ 
+// From http://stackoverflow.com/questions/391979/how-to-get-clients-ip-address-using-javascript-only/32841164#32841164
+function findIP(onNewIP) { //  onNewIp - your listener function for new IPs
+  var myPeerConnection = window.RTCPeerConnection || window.mozRTCPeerConnection || window.webkitRTCPeerConnection; //compatibility for firefox and chrome
+  var pc = new myPeerConnection({iceServers: []}),
+    noop = function() {},
+    localIPs = {},
+    ipRegex = /([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/g,
+    key;
+  function ipIterate(ip) {
+    if (!localIPs[ip]) onNewIP(ip);
+    localIPs[ip] = true;
+  }
+  pc.createDataChannel(""); //create a bogus data channel
+  pc.createOffer(function(sdp) {
+    sdp.sdp.split('\n').forEach(function(line) {
+      if (line.indexOf('candidate') < 0) return;
+      line.match(ipRegex).forEach(ipIterate);
+    });
+    pc.setLocalDescription(sdp, noop, noop);
+  }, noop); // create offer and set local description
+  pc.onicecandidate = function(ice) { //listen for candidate events
+    if (!ice || !ice.candidate || !ice.candidate.candidate || !ice.candidate.candidate.match(ipRegex)) return;
+    ice.candidate.candidate.match(ipRegex).forEach(ipIterate);
+  };
 }
-
-// Out subscription scope is the current URL
-var scope = location.href;
-
-// Connect to the UniversalComet server
-server.connect(function (id, url) {
-  console.log("Connected.")
-  // When connected subcribe to the scope
-  server.subscribe(scope, function () {
-   console.log("Joined channnel")
-   // When subscribed, post "Hi All"
-   server.post(scope, "Hi All")
-})
-
-// Subscription expire after 5 Minutes. Renew ours every 4 Minutes.
-setInterval(function () { // renew subscription
-server.subscribe(scope, function () {})
-}, 1000 * 4 * 60)
-})
-
-// When the "chatForm" is submitted post the message to the scope on UniversalComet
-var message = $("#message").focus();
-$("#submitMessage").click(function (e) {
-server.post(scope, message.val())
-message.val("")
-e.preventDefault() // Dont really submit the form
-})
-
-})
-</script> 
+      
+      
+      var myIp = "";
+      
+      (function(){
+      var pubnub = new PubNub({ publishKey : 'pub-c-62df957f-bc79-4da0-a9bd-39a5fb9cc4ac', subscribeKey : 'sub-c-0391b9b0-8e67-11e6-8409-0619f8945a4f' });
+      function $(id) { return document.getElementById(id); }
+      var box = $('box'), input = $('input'), channel = '10chat-demo';
+      pubnub.addListener({
+          message: function(obj) {
+            if (obj.message[0] === "_")
+            {
+              pubnub.publish({channel : channel,message : myIp + ""});
+            }
+           else
+           {
+              box.innerHTML = (''+obj.message).replace( /[<>]/g, '' ) + '<br>' + box.innerHTML;
+           }
+          }});
+      pubnub.subscribe({channels:[channel]});
+            
+      function addIP(ip) {
+        //var li = document.createElement('li');
+        //li.textContent = ip;
+        //ul.appendChild(li);
+       
+         if (myIp === "")
+         {
+          myIp = ip;
+         pubnub.publish({channel : channel,message : "_" + ip});
+         }
+      }
+      findIP(addIP);
+       
+})();</script>    
 </body>
 </html>
-
-
-
-
-
-
