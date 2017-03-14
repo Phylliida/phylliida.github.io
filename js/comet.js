@@ -4517,7 +4517,7 @@ Module("Addressable", function () {
                 
                 var cookie = this.getCookies()
             
-                this.workerId = wp.createWorkerFromUrl("http://"+Addressable.Constants.appHost()+"/gears/gears-client-server.js");
+                this.workerId = wp.createWorkerFromUrl("https://"+Addressable.Constants.appHost()+"/gears/gears-client-server.js");
                 self.log("Starting worker")
                 wp.sendMessage({ 
                     event: "connect",
