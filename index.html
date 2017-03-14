@@ -2,76 +2,68 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
-<head>
-</head>
-<body>
 
-<!--div><input id=input placeholder=you-chat-here /></div-->
+  <form id='loginForm'>
+      <input id='username' placeholder='Pick a username!' />
+      <input type='submit' value='Log In'>
+  </form>
 
-<div id=box></div>
+  <form id='callForm'>
+    <input id='number' placeholder='Enter user to dial!' />
+    <input type='submit' value='Call'/>
+  </form>
 
-<script src=https://cdn.pubnub.com/sdk/javascript/pubnub.4.0.11.min.js></script>
-<script>
+  <form id='hangupForm'>
+      <input type='submit' value='Hangup'>
+  </form>
+
+  <div id='vid-box'></div>
+
+  <script src='https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js'></script>
+  <script src='https://cdn.pubnub.com/pubnub.js'></script>
+  <script src='https://stephenlb.github.io/webrtc-sdk/js/webrtc.js'></script>
+  <script>(function(){
+    let phone    = null;
+    const vidbox = $('#vid-box');
+    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    // Form Login
+    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    $('#loginForm').submit( event => {
+        if (phone) phone.hangup();
+        else phone = PHONE({
+            number        : $('#username').val() || 'Anonymous'
+        ,   ssl           : true
+        ,   publish_key   : 'pub-c-655853ec-bdb3-434f-9b37-8a2557301b1c'
+        ,   subscribe_key : 'sub-c-197667e6-e806-11e6-a5f4-02ee2ddab7fe'
+        });
+        phone.debug( info => { console.log(info) } );
+        phone.unable( error => { alert('unable to connect') } );
+        phone.ready( session => {
+            $('#username').css( 'background', '#55ff5b' );
+        } );
+        phone.receive(function(session){
+            session.ended( session => { vidbox.html('') } );
+            session.connected( session => {
+                vidbox.append(session.video);
+            });
+        });
+        return false;
+    } );
+    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    // Form Call
+    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    $('#callForm').submit( event => {
+        if (!window.phone) alert('Login First!');
+        else phone.dial($('#number').val());
+        return false;
+    } );
+    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    // Form Hangup
+    // =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    $('#hangupForm').submit( event => {
+        if (phone) phone.hangup();
+        return false;
+    } );
+  })();</script>
+ </html>
  
-// From http://stackoverflow.com/questions/391979/how-to-get-clients-ip-address-using-javascript-only/32841164#32841164
-function findIP(onNewIP) { //  onNewIp - your listener function for new IPs
-  var myPeerConnection = window.RTCPeerConnection || window.mozRTCPeerConnection || window.webkitRTCPeerConnection; //compatibility for firefox and chrome
-  var pc = new myPeerConnection({iceServers: []}),
-    noop = function() {},
-    localIPs = {},
-    ipRegex = /([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/g,
-    key;
-  function ipIterate(ip) {
-    if (!localIPs[ip]) onNewIP(ip);
-    localIPs[ip] = true;
-  }
-  pc.createDataChannel(""); //create a bogus data channel
-  pc.createOffer(function(sdp) {
-    sdp.sdp.split('\n').forEach(function(line) {
-      if (line.indexOf('candidate') < 0) return;
-      line.match(ipRegex).forEach(ipIterate);
-    });
-    pc.setLocalDescription(sdp, noop, noop);
-  }, noop); // create offer and set local description
-  pc.onicecandidate = function(ice) { //listen for candidate events
-    if (!ice || !ice.candidate || !ice.candidate.candidate || !ice.candidate.candidate.match(ipRegex)) return;
-    ice.candidate.candidate.match(ipRegex).forEach(ipIterate);
-  };
-}
-      
-      
-      var myIp = "";
-      
-      (function(){
-      var pubnub = new PubNub({ publishKey : 'pub-c-62df957f-bc79-4da0-a9bd-39a5fb9cc4ac', subscribeKey : 'sub-c-0391b9b0-8e67-11e6-8409-0619f8945a4f' });
-      function $(id) { return document.getElementById(id); }
-      var box = $('box'), input = $('input'), channel = '10chat-demo';
-      pubnub.addListener({
-          message: function(obj) {
-            if (obj.message[0] === "_")
-            {
-              pubnub.publish({channel : channel,message : myIp + ""});
-            }
-           else
-           {
-              box.innerHTML = (''+obj.message).replace( /[<>]/g, '' ) + '<br>' + box.innerHTML;
-           }
-          }});
-      pubnub.subscribe({channels:[channel]});
-            
-      function addIP(ip) {
-        //var li = document.createElement('li');
-        //li.textContent = ip;
-        //ul.appendChild(li);
-       
-         if (myIp === "")
-         {
-          myIp = ip;
-         pubnub.publish({channel : channel,message : "_" + ip});
-         }
-      }
-      findIP(addIP);
-       
-})();</script>    
-</body>
-</html>
