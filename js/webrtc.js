@@ -265,6 +265,7 @@
     // Signals and creates a P2P connection between two users.
     API['createP2PConnection'] = function (uuid, offer, callback) {
       if (PEER_CONNECTIONS[uuid] == null) {
+        PC_OPTIONS.optional = [];
         var pc = new RTCPeerConnection(RTC_CONFIGURATION, PC_OPTIONS),
             signalingChannel = new SignalingChannel(this, UUID, uuid),
             self = this;
