@@ -36,6 +36,7 @@
     
      $("#beans").click(function()
      {
+       $("#result").innerHTML($("#result").innerHTML() + "<br />" + $("#ayy").val());
        namesDeleting = [];
        for (var userName in users) {
             if (users.hasOwnProperty(userName)) {
@@ -80,7 +81,7 @@
               user: newUser,
               callback: function (message) {
                 console.log(message + " from " + newUser);
-                $("#result").text($("#result").text() + " " + message);
+                $("#result").innerHTML($("#result").innerHTML() + "<br />" + message);
                },
                connect : function() { 
                  console.log("connected to: " + newUser);
