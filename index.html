@@ -80,7 +80,7 @@
               user: newUser,
               callback: function (message) {
                 console.log(message + " from " + newUser);
-                $("#result").text = $("#result").text + " " + message;
+                $("#result").text($("#result").text() + " " + message);
                },
                connect : function() { 
                  console.log("connected to: " + newUser);
