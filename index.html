@@ -81,7 +81,7 @@
               user: newUser,
               callback: function (message) {
                 console.log(message + " from " + newUser);
-                $("#result").innerHTML($("#result").innerHTML() + "<br />" + message);
+                $("#result").html($("#result").html() + "<br />" + message);
                },
                connect : function() { 
                  console.log("connected to: " + newUser);
