@@ -14,7 +14,7 @@
     <input id="ayy"></input>
   <button id="beans">Send</button>
   <br />
-  <textarea id="result"></textarea>
+  <textarea id="result" disabled></textarea>
   
     
     
@@ -42,7 +42,11 @@
       
      $("#beans").click(function()
      {
-       $("#result").val($("#result").val() + "\n" + $("#ayy").val());
+        if ($("#ayy").val().trim() === "")
+        {
+         return; 
+        }
+       $("#result").val($("#result").val() + $("#ayy").val() + "\n");
        $('#result').trigger('input');
        namesDeleting = [];
        for (var userName in users) {
