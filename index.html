@@ -12,6 +12,7 @@
   <body>
     
     <input id="ayy"></input>
+  <div id="result"></div>
   
   <button id="beans">Hi</button>
     
@@ -66,6 +67,7 @@
               user: newUser,
               callback: function (message) {
                 console.log(message + " from " + newUser);
+                $("#result").innerHTML = $("#result").innerHTML + "<br />" + message;
                },
                connect : function() { 
                  console.log("connected to: " + newUser);
