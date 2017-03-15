@@ -427,10 +427,10 @@ found in the LICENSE file.
 
           // Show the gamepad's cube as red if any buttons are pressed, blue
           // otherwise.
-          vec4.set(gamepadColor, 0, 0, 0, 1);
+          vec4.set(gamepadColor, 1, 1, 1, 1);
           for (var j = 0; j < gamepad.buttons.length; ++j) {
             if (gamepad.buttons[j].pressed) {
-              vec4.set(gamepadColor, gamepad.buttons[j].value, 0, 0, 1);
+              //vec4.set(gamepadColor, gamepad.buttons[j].value, 0, 0, 1);
               break;
             }
           }
