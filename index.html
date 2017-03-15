@@ -54,18 +54,21 @@
             return;
           }
           
-          if (users.newUser)
+          if (users[newUser])
           {
             
           }
           else
           {
-             users.newUser = newUser;
+             users[newUser] = newUser;
             
              pubnub.subscribe({
               user: newUser,
               callback: function (message) {
                 console.log(message + " from " + newUser);
+               },
+               connect : function() { 
+                 console.log("connected to: " + newUser);
                }
              });
             
