@@ -38,7 +38,7 @@
        for (var userName in users) {
             if (users.hasOwnProperty(userName)) {
                  pubnub.publish({
-                    user: users[i],
+                    user: userName,
                     message: ($("#ayy").val() + "")
                   });
             }
