@@ -13,6 +13,7 @@
     
     <input id="ayy"></input>
   <button id="beans">Send</button>
+  <br />
   <textarea id="result"></textarea>
   
     
@@ -36,7 +37,6 @@
     $("#ayy").keyup(function(event){
         if(event.keyCode == 13){
             $("#beans").click();
-          $("#ayy").val("");
         }
     });
       
@@ -131,13 +131,15 @@
             }) 
         }
      });
-      
+      $( document ).ready(function() {
+
       $('textarea').each(function () {
         this.setAttribute('style', 'height:' + (this.scrollHeight) + 'px;overflow-y:hidden;');
       }).on('input', function () {
         this.style.height = 'auto';
         this.style.height = (this.scrollHeight) + 'px';
       });
+});
       
     </script>
     
