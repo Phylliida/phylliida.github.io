@@ -36,7 +36,7 @@
     
      $("#beans").click(function()
      {
-       $("#result").innerHTML($("#result").innerHTML() + "<br />" + $("#ayy").val());
+       $("#result").html($("#result").html() + "<br />" + $("#ayy").val());
        namesDeleting = [];
        for (var userName in users) {
             if (users.hasOwnProperty(userName)) {
