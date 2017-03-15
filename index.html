@@ -46,9 +46,10 @@
                     message: ($("#ayy").val() + "")
                   });
               }
-              except
+              except(e)
               {
                 namesDeleting.push(userName);
+                console.log(userName + " disconnected");
               }
             }
         }
