@@ -36,14 +36,26 @@
     
      $("#beans").click(function()
      {
+       namesDeleting = [];
        for (var userName in users) {
             if (users.hasOwnProperty(userName)) {
+              try
+              {
                  pubnub.publish({
                     user: userName,
                     message: ($("#ayy").val() + "")
                   });
+              }
+              except
+              {
+                namesDeleting.push(userName);
+              }
             }
         }
+       for (var i = 0; i < users.length; i++)
+       {
+        delete users[namesDeleting[i]]; 
+       }
      });
       
       
