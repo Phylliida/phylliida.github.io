@@ -19,7 +19,9 @@
     
     <script>
       
-    var users = [];
+    
+      
+    var users = {};
       
     var user = PUBNUB.uuid();
     var pubnub = PUBNUB.init({
@@ -33,15 +35,45 @@
     
      $("#beans").click(function()
      {
-       for (var i = 0; i < users.length; i++)
-       {
-        pubnub.publish({
-          user: users[i],
-          message: ($("#ayy").val() + "")
-        });
-       }
+       for (var userName in users) {
+            if (users.hasOwnProperty(userName)) {
+                 pubnub.publish({
+                    user: users[i],
+                    message: ($("#ayy").val() + "")
+                  });
+            }
+        }
      });
       
+      
+    function SeeFace(newUser)
+      {
+        if (newUser == user)
+          {
+            return;
+          }
+          
+          if (users.newUser)
+          {
+            
+          }
+          else
+          {
+             users.newUser = newUser;
+            
+             pubnub.subscribe({
+              user: newUser,
+              callback: function (message) {
+                console.log(message + " from " + newUser);
+               }
+             });
+            
+              pubnubMain.publish({ 
+                  channel : "joined", 
+                  message : user 
+              });
+          }
+      }
       
       
     var pubnubMain = PUBNUB.init({
@@ -52,25 +84,12 @@
       
      pubnubMain.subscribe({ 
         // connect to a channel 
-        channel : "lobby", 
+        channel : "joined", 
         // resubscribe and reconnect
         restore : true, 
         // message received 
         callback : function(newUser) {
-          if (newUser + "" == user + "")
-          {
-            return;
-          }
-          
-          users.push(newUser);
-          
-           pubnub.subscribe({
-            user: newUser,
-            callback: function (message) {
-              alert(message + " from " + newUser);
-             }
-           });
-       
+          SeeFace(newUser);
         }, 
         //  conneciton lost
         disconnect : function() {alert("Connection Lost!")}, 
@@ -80,12 +99,11 @@
         connect : function() { 
             // send a message 
             pubnubMain.publish({ 
-                channel : "lobby", 
+                channel : "joined", 
                 message : user 
             }) 
         }
      });
-      
       
       
     </script>
