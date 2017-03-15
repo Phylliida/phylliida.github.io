@@ -368,7 +368,7 @@
             // Connection failed, so delete it from the table
             delete PEER_CONNECTIONS[uuid];
             error(err);
-          }, {mandatory:{OfferToReceiveAudio:true,OfferToReceiveVideo:true}});
+          }, {mandatory:{"offerToReceiveAudio":true,"offerToReceiveVideo":true}});
         } else {
           if (CONNECTED === false) {
             CONNECTION_QUEUE.push([PEER_CONNECTIONS[uuid]]);
