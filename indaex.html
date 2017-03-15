@@ -1,0 +1,157 @@
+<html>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+  
+  <head>
+    <script src="/js/pubnub.js"></script>
+    <script src="/js/webrtc.js"></script>
+     <script src='https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js'></script> 
+    
+  </head>
+  <body>
+    
+    <input id="ayy"></input>
+  <button id="beans">Send</button>
+  <br />
+  <textarea id="result" disabled></textarea>
+  
+    
+    
+    
+    <script>
+      
+    
+      
+    var users = {};
+      
+    var user = PUBNUB.uuid();
+    var pubnub = PUBNUB.init({
+      publish_key: 'pub-c-a2281ecc-42fb-47c8-91b6-f80ad06357ca',
+      subscribe_key: 'sub-c-bfbc4b56-0904-11e7-b95c-0619f8945a4f',
+      uuid: user,
+      ssl: true
+    });
+      
+      
+    $("#ayy").keyup(function(event){
+        if(event.keyCode == 13){
+            $("#beans").click();
+        }
+    });
+      
+     $("#beans").click(function()
+     {
+        if ($("#ayy").val().trim() === "")
+        {
+         return; 
+        }
+       $("#result").val($("#result").val() + $("#ayy").val() + "\r\n");
+       $('#result').trigger('input');
+       namesDeleting = [];
+       for (var userName in users) {
+            if (users.hasOwnProperty(userName)) {
+              try
+              {
+                 pubnub.publish({
+                    user: userName,
+                    message: ($("#ayy").val() + "")
+                  });
+              }
+              catch(e)
+              {
+                namesDeleting.push(userName);
+                console.log(userName + " disconnected");
+              }
+            }
+        }
+       for (var i = 0; i < users.length; i++)
+       {
+        delete users[namesDeleting[i]]; 
+       }
+         $("#ayy").val("");
+     });
+      
+      
+    function SeeFace(newUser)
+      {
+        console.log("saw face: " + newUser);
+        if (newUser == user)
+          {
+            return;
+          }
+          
+          if (users[newUser])
+          {
+            
+          }
+          else
+          {
+             users[newUser] = newUser;
+            
+             pubnub.subscribe({
+              user: newUser,
+              callback: function (message) {
+                console.log(message + " from " + newUser);
+                $("#result").val($("#result").val() + message + "\r\n");
+                $('#result').trigger('input');
+               },
+               connect : function() { 
+                 console.log("connected to: " + newUser);
+               }
+             });
+            
+              pubnubMain.publish({ 
+                  channel : "joined", 
+                  message : user 
+              });
+          }
+      }
+      
+      
+    var pubnubMain = PUBNUB.init({
+      publish_key: 'pub-c-a2281ecc-42fb-47c8-91b6-f80ad06357ca',
+      subscribe_key: 'sub-c-bfbc4b56-0904-11e7-b95c-0619f8945a4f',
+      ssl: true
+    });
+      
+     pubnubMain.subscribe({ 
+        // connect to a channel 
+        channel : "joined", 
+        // resubscribe and reconnect
+        restore : true, 
+        // message received 
+        callback : function(newUser) {
+          SeeFace(newUser);
+        }, 
+        //  conneciton lost
+        disconnect : function() {alert("Connection Lost!")}, 
+        // connection restored 
+        reconnect : function() {alert("And we're Back!")}, 
+        // connection established 
+        connect : function() { 
+            // send a message 
+            pubnubMain.publish({ 
+                channel : "joined", 
+                message : user 
+            }) 
+        }
+     });
+      $( document ).ready(function() {
+
+      $('textarea').each(function () {
+        this.setAttribute('style', 'height:' + (this.scrollHeight) + 'px;overflow-y:hidden;');
+      }).on('input', function () {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
+      });
+});
+      
+    </script>
+    
+  </body>
+</html>
+ 
+
+
+
