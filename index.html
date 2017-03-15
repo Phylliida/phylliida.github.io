@@ -127,7 +127,7 @@ found in the LICENSE file.
             return;
           }
         }
-        gl.clearColor(1.0, 1.0, 1.0, 1.0);
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
         gl.enable(gl.DEPTH_TEST);
         gl.enable(gl.CULL_FACE);
 
@@ -245,10 +245,8 @@ found in the LICENSE file.
 
       function onClick () {
         // Reset the background color to a random value
-        gl.clearColor(
-            Math.random() * 0.5,
-            Math.random() * 0.5,
-            Math.random() * 0.5, 1.0);
+       gl.clearColor(0.0, 0.0, 0.0, 1.0);
+
       }
       webglCanvas.addEventListener("click", onClick, false);
 
@@ -383,9 +381,9 @@ found in the LICENSE file.
               //linesDrawnLeft.push(linesDrawnLeft.length/6);
               //linesDrawnLeft.push(0);
               //linesDrawnLeft.push(0);
-              linesDrawnLeft.push(0);
               linesDrawnLeft.push(1);
-              linesDrawnLeft.push(0);
+              linesDrawnLeft.push(1);
+              linesDrawnLeft.push(1);
               isConnectedToPreviousLeft.push(isConnectedToPreviousLeft.length);
             }
             else if(i == 1)
@@ -393,9 +391,9 @@ found in the LICENSE file.
               linesDrawnRight.push(x);
               linesDrawnRight.push(y);
               linesDrawnRight.push(z);
-              linesDrawnLeft.push(0);
-              linesDrawnLeft.push(1);
-              linesDrawnLeft.push(0);
+              linesDrawnRight.push(0);
+              linesDrawnRight.push(1);
+              linesDrawnRight.push(0);
               isConnectedToPreviousRight.push(true);
             }
           }
