@@ -43,6 +43,7 @@
      $("#beans").click(function()
      {
        $("#result").val($("#result").val() + "\n" + $("#ayy").val());
+       $('#result').trigger('input');
        namesDeleting = [];
        for (var userName in users) {
             if (users.hasOwnProperty(userName)) {
@@ -89,6 +90,7 @@
               callback: function (message) {
                 console.log(message + " from " + newUser);
                 $("#result").val($("#result").val() + "\n" + message);
+                $('#result').trigger('input');
                },
                connect : function() { 
                  console.log("connected to: " + newUser);
