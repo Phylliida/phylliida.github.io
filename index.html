@@ -19,14 +19,14 @@ function onStart(id)
 function onConnected(id)
 {
   
-  console.log("connected to: " + id);
+  alert("connected to: " + id);
   
 }
 
 function onReceivedMessage(id, message)
 {
   
-  console.log("got message " + message + " from " + id);
+  alert(id + " sent message " + message);
 }
 
 function sendMessage(id, message)
@@ -38,7 +38,7 @@ function sendMessage(id, message)
   }
   catch(e)
   {
-    return false;
+    alert("failed to send message to " + id);
   }
 }
 
