@@ -56,7 +56,7 @@ function pageReady() {
     //localVideo = document.getElementById('localVideo');
     //remoteVideo = document.getElementById('remoteVideo');
 
-    serverConnection = new WebSocket('ws://sample-bean.herokuapp.com');
+    serverConnection = new WebSocket('wss://sample-bean.herokuapp.com');
     serverConnection.onmessage = gotMessageFromServer;
     serverConnection.onopen = function (event) {
       serverConnection.send(JSON.stringify({'hi': 'hi', 'uuid': uuid}));
