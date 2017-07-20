@@ -64,7 +64,7 @@ function pageReady() {
     serverConnection = new WebSocket('wss://sample-bean.herokuapp.com');
     serverConnection.onmessage = gotMessageFromServer;
     serverConnection.onopen = function (event) {
-      serverConnection.send(JSON.stringify({'hi': 'hi', 'uuid': uuid}));
+      //serverConnection.send(JSON.stringify({'hi': 'hi', 'uuid': uuid}));
       sayHi();
     };
     
