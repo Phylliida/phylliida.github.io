@@ -4400,7 +4400,8 @@ module.exports = {
     </head>
 
     <body>
-        test hi
+        Room name: <input id="roomname"></input>
+    <button onclick="setRoom(document.getElementById("roomname").value);">Connect</button>
         <br />
         <script type="text/javascript">
             pageReady();
