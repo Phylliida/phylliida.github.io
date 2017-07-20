@@ -31,6 +31,7 @@ function onReceivedMessage(id, message)
 
 function sendMessage(id, message)
 {
+    alert("sending: " + message + " to id " + id);
   try
   {
     peerConnections[id].send(message);
