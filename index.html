@@ -33,7 +33,7 @@ function sendMessage(id, message)
 {
   try
   {
-    peerConnections[id].send(message);
+    channels[id].send(message);
     return true;
   }
   catch(e)
