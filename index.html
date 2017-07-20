@@ -31,7 +31,6 @@ function onReceivedMessage(id, message)
 
 function sendMessage(id, message)
 {
-    alert("sending: " + message + " to id " + id);
   try
   {
     peerConnections[id].send(message);
@@ -40,6 +39,7 @@ function sendMessage(id, message)
   catch(e)
   {
     alert("failed to send message to " + id);
+    alert("with error: " + e);
   }
 }
 
