@@ -10,7 +10,11 @@ var uuid;
 var channels = {};
 var gotThePings = {};
 var saidConnected = {};
-
+var roomName = null;
+function setRoom(roomNameSetting)
+{
+    roomName = roomNameSetting;
+}
 function onStart(id)
 {
   alert("I am: " + id);
@@ -92,7 +96,10 @@ function sayHi(){
     }
     //if (count == 0)
     //{
-      serverConnection.send(JSON.stringify({'hi': 'hi', 'uuid': uuid}));
+      if (roomName)
+      {
+        serverConnection.send(JSON.stringify({'hi': 'hi', 'uuid': uuid, 'room': roomName}));
+      }
       sayHi();
     //}
     //else
@@ -279,6 +286,10 @@ function gotMessageFromServer(message) {
     }
     else if(signal.hi)
     {
+        if (signal.room != roomName)
+        {
+            return;
+        }
       //console.log("got hi");
       if (channels[signal.uuid])
       {
