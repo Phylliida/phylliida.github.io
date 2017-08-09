@@ -1,0 +1,63 @@
+<html>
+<head>
+<script src="/js/alea.min.js"></script>
+<script src="/js/perlin.js"></script>
+<script src="/js/geo.js"></script>
+<script>
+</script>
+</head>
+
+<body>
+<canvas id="myCanvas" width="20" height="500"></canvas>
+<script>
+var screenWidth = window.innerWidth
+|| document.documentElement.clientWidth
+|| document.body.clientWidth;
+
+var screenHeight = window.innerHeight
+|| document.documentElement.clientHeight
+|| document.body.clientHeight;
+function showPosition(position) {
+  var c = document.getElementById("myCanvas");
+  var dim = Math.min(screenWidth, screenHeight);
+  c.width = dim;
+  c.height = dim;
+  var ctx = c.getContext("2d");
+  var pts = generatePoints(position.coords.latitude, position.coords.longitude, 10);
+  var topLeftX = position.coords.latitude-0.0003;
+  var topLeftY = position.coords.longitude-0.0003;
+  var width = 0.0006;
+  var height = 0.0006;
+  for (var i = 0; i < pts.length; i++)
+  {
+    var ptX = (pts[i][0]-topLeftX)/width*dim;
+    var ptY = (pts[i][1]-topLeftY)/height*dim;
+    ctx.beginPath();
+    ctx.fillStyle = 'black';
+    ctx.arc(ptX,ptY,5,0,2*Math.PI);
+    ctx.fill();
+  }    
+    ctx.beginPath();
+    ctx.fillStyle = 'blue';
+    ctx.arc(dim/2,dim/2,10,0,2*Math.PI);
+    ctx.fill();
+}
+
+function getStuff()
+{
+  if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(showPosition);
+    setTimeout(getStuff,3000);
+  } else {
+      console.log("Geolocation is not supported by this browser.");
+  }
+  
+}
+getStuff();
+
+
+  
+</script>
+</body>
+
+</html>
