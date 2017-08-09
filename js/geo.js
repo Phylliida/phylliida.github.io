@@ -95,7 +95,7 @@ function generatePoints(lat, lon, seed)
   var lonCell = goodMod(lonCellOriginal,lonMod);
   var points = [];
   var lookRange = 7; // this needs to be odd
-  var viewRange = 4.0
+  var viewRange = 7.0
   for (var x = 0; x < lookRange; x++)
   {
     var xOffset = x-Math.floor(lookRange/2);
@@ -121,7 +121,7 @@ function generatePoints(lat, lon, seed)
       {
         var ptX = arng();
         var ptY = arng();
-        if (Math.sqrt((ptX+xOffset)*(ptX+xOffset)+(ptY+yOffset)*(ptY+yOffset)) < viewRange && arng() < 0.3)
+        if (Math.sqrt((ptX+xOffset)*(ptX+xOffset)+(ptY+yOffset)*(ptY+yOffset)) < viewRange)
         {
           var actualPtX = (latCellOriginal+xOffset+ptX)/scaleFactor-90.0;
           var actualPtY = (lonCellOriginal+yOffset+ptY)/scaleFactor-180.0;
