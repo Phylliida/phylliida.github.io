@@ -39,6 +39,7 @@ function showPosition(position) {
     ctx.fillStyle = 'blue';
     ctx.arc(dim/2,dim/2,10,0,2*Math.PI);
     ctx.fill();
+  console.log("got stuff");
 }
 
 function getStuff()
@@ -49,7 +50,7 @@ function getStuff()
      {
          timeout: 0,
          enableHighAccuracy: true,
-         maximumAge: 10
+         maximumAge: 2
      });
   } else {
       console.log("Geolocation is not supported by this browser.");
