@@ -44,14 +44,13 @@ function showPosition(position) {
 function getStuff()
 {
   if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(showPosition,
+      navigator.geolocation.getCurrentPosition(watchPosition,
      function() { },
      {
          timeout: 0,
          enableHighAccuracy: true,
-         maximumAge: 1000000
+         maximumAge: 10
      });
-    setTimeout(getStuff,3000);
   } else {
       console.log("Geolocation is not supported by this browser.");
   }
