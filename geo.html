@@ -45,9 +45,10 @@ function showPosition(position) {
 function getStuff()
 {
   if (navigator.geolocation) {
-      navigator.geolocation.watchPosition(showPosition,
+      navigator.geolocation.getCurrentPosition(showPosition,
      function(e) { },
-      {enableHighAccuracy: false});
+      {enableHighAccuracy: true});
+    setTimeout(getStuff, 500);
   } else {
       console.log("Geolocation is not supported by this browser.");
   }
