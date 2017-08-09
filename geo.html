@@ -40,6 +40,7 @@ function showPosition(position) {
     ctx.arc(dim/2,dim/2,10,0,2*Math.PI);
     ctx.fill();
   console.log("got stuff");
+    setTimeout(getStuff, 400);
 }
 
 function getStuff()
@@ -48,7 +49,6 @@ function getStuff()
       navigator.geolocation.getCurrentPosition(showPosition,
      function(e) { },
       {enableHighAccuracy: true});
-    setTimeout(getStuff, 500);
   } else {
       console.log("Geolocation is not supported by this browser.");
   }
