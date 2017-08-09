@@ -122,7 +122,7 @@ function generatePoints(lat, lon, seed)
           var actualPtX = (latCellOriginal+xOffset+ptX)/scaleFactor-90.0;
           var actualPtY = (lonCellOriginal+yOffset+ptY)/scaleFactor-180.0;
           
-          points.push(clampLatLon(actualPtX, actualPtY));
+          points.push([clampLatLon(actualPtX, actualPtY), Math.floor(arng()*100.0) + ""]);
         }
       }
     }
