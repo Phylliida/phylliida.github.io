@@ -45,7 +45,7 @@ function getStuff()
 {
   if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(showPosition,
-     
+     function() { },
      {
          timeout: 0,
          enableHighAccuracy: true,
