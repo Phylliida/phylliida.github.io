@@ -121,7 +121,7 @@ function generatePoints(lat, lon, seed)
       {
         var ptX = arng();
         var ptY = arng();
-        if (Math.sqrt((ptX+xOffset)*(ptX+xOffset)+(ptY+yOffset)*(ptY+yOffset)) < viewRange)
+        if (Math.sqrt((ptX+xOffset)*(ptX+xOffset)+(ptY+yOffset)*(ptY+yOffset)) < viewRange && arng() < 0.1)
         {
           var actualPtX = (latCellOriginal+xOffset+ptX)/scaleFactor-90.0;
           var actualPtY = (lonCellOriginal+yOffset+ptY)/scaleFactor-180.0;
@@ -130,7 +130,7 @@ function generatePoints(lat, lon, seed)
           var adjective = adjectives[Math.floor(arng()*adjectives.length-0.0000001)];
           
           
-          points.push([clampLatLon(actualPtX, actualPtY), animal+ " " + adjective);
+          points.push([clampLatLon(actualPtX, actualPtY), adjective + " " + animal]);
         }
       }
     }
