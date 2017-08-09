@@ -33,7 +33,7 @@ function showPosition(position) {
     var ptX = (pts[i][0][0]-topLeftX)/width*dim;
     var ptY = (pts[i][0][1]-topLeftY)/height*dim;
     ctx.font = "12px Arial";
-    ctx.fillText(pts[i][1], dim/2, dim/2);
+    ctx.fillText(pts[i][1], ptX, ptY);
   }    
     ctx.beginPath();
     ctx.fillStyle = 'blue';
