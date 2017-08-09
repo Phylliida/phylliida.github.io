@@ -47,7 +47,7 @@ function getStuff()
   if (navigator.geolocation) {
       navigator.geolocation.watchPosition(showPosition,
      function(e) { },
-      {maximumAge:600000, timeout:5000, enableHighAccuracy: true});
+      {enableHighAccuracy: false});
   } else {
       console.log("Geolocation is not supported by this browser.");
   }
