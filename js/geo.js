@@ -126,11 +126,11 @@ function generatePoints(lat, lon, seed)
           var actualPtX = (latCellOriginal+xOffset+ptX)/scaleFactor-90.0;
           var actualPtY = (lonCellOriginal+yOffset+ptY)/scaleFactor-180.0;
           
-          var animal = animals[Math.floor(arng()*animals.length-0.0000001)];
-          var adjective = adjectives[Math.floor(arng()*adjectives.length-0.0000001)];
+          var animal = animals[Math.floor(arng()*(animals.length-1))];
+          var adjective = adjectives[Math.floor(arng()*(adjectives.length-1))];
           
           
-          points.push([clampLatLon(actualPtX, actualPtY), animal+ " " + adjective);
+          points.push([clampLatLon(actualPtX, actualPtY), animal+ " " + adjective]);
         }
       }
     }
