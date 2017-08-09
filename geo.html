@@ -44,7 +44,7 @@ function showPosition(position) {
 function getStuff()
 {
   if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(watchPosition,
+      navigator.geolocation.watchPosition(showPosition,
      function() { },
      {
          timeout: 0,
