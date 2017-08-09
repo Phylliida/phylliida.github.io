@@ -30,12 +30,10 @@ function showPosition(position) {
   var height = 0.0006;
   for (var i = 0; i < pts.length; i++)
   {
-    var ptX = (pts[i][0]-topLeftX)/width*dim;
-    var ptY = (pts[i][1]-topLeftY)/height*dim;
-    ctx.beginPath();
-    ctx.fillStyle = 'black';
-    ctx.arc(ptX,ptY,5,0,2*Math.PI);
-    ctx.fill();
+    var ptX = (pts[i][0][0]-topLeftX)/width*dim;
+    var ptY = (pts[i][0][1]-topLeftY)/height*dim;
+    ctx.font = "12px Arial";
+    ctx.fillText(pts[i][1], dim/2, dim/2);
   }    
     ctx.beginPath();
     ctx.fillStyle = 'blue';
