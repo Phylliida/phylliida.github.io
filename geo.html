@@ -17,15 +17,15 @@ var screenWidth = window.innerWidth
 var screenHeight = window.innerHeight
 || document.documentElement.clientHeight
 || document.body.clientHeight;
-function showPosition(position) {
+function showPosition(lat, lon) {
   var c = document.getElementById("myCanvas");
   var dim = Math.min(screenWidth, screenHeight);
   c.width = dim;
   c.height = dim;
   var ctx = c.getContext("2d");
-  var pts = generatePoints(position.coords.latitude, position.coords.longitude, 10);
-  var topLeftX = position.coords.latitude-0.0003;
-  var topLeftY = position.coords.longitude-0.0003;
+  var pts = generatePoints(lat, lon, 10);
+  var topLeftX = lat-0.0003;
+  var topLeftY = lon-0.0003;
   var width = 0.0006;
   var height = 0.0006;
   for (var i = 0; i < pts.length; i++)
@@ -39,16 +39,41 @@ function showPosition(position) {
     ctx.fillStyle = 'blue';
     ctx.arc(dim/2,dim/2,10,0,2*Math.PI);
     ctx.fill();
-  console.log("got stuff");
     setTimeout(getStuff, 400);
 }
+
+
+var curLat = 0;
+var curLon = 0;
+var numStored = 10;
+var prevLat = [];
+var prevLon = [];
+
+function processPosition(position) {
+  var lat = position.coords.latitude;
+  var lon = position.coords.longitude;
+  prevLat.push(lat);
+  prevLon.push(lon);
+  var avgLat = 0;
+  var avgLon = 0;
+  for (var i = 0; i < prevLat.length; i++)
+  {
+    avgLat += prevLat[i];
+    avgLon += prevLon[i];
+  }
+  avgLat /= prevLat.length;
+  avgLon /= prevLon.length;
+  curLat = avgLat;
+  curLon = avgLon;
+  showPosition(curLat, curLon);
+}
+
 
 function getStuff()
 {
   if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(showPosition,
-     function(e) { },
-      {enableHighAccuracy: true});
+      navigator.geolocation.getCurrentPosition(processPosition);
+    setTimeout(getStuff,400);
   } else {
       console.log("Geolocation is not supported by this browser.");
   }
