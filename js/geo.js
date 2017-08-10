@@ -69,7 +69,7 @@ function goodMod(a, b)
 var latMod = 501;
 var lonMod = 553;
 
-var scaleFactor = 2000.0;
+var scaleFactor = 10000.0;
   
 function generatePoints(lat, lon, seed)
 {
@@ -121,7 +121,7 @@ function generatePoints(lat, lon, seed)
       {
         var ptX = arng();
         var ptY = arng();
-        if (Math.sqrt((ptX+xOffset)*(ptX+xOffset)+(ptY+yOffset)*(ptY+yOffset)) < viewRange)
+        if (arng() < 0.2 && Math.sqrt((ptX+xOffset)*(ptX+xOffset)+(ptY+yOffset)*(ptY+yOffset)) < viewRange)
         {
           var actualPtX = (latCellOriginal+xOffset+ptX)/scaleFactor-90.0;
           var actualPtY = (lonCellOriginal+yOffset+ptY)/scaleFactor-180.0;
