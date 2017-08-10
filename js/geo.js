@@ -121,13 +121,15 @@ function generatePoints(lat, lon, seed)
       {
         var ptX = arng();
         var ptY = arng();
+        var anm = arng();
+        var adj = arng();
         if (arng() < 0.1 && Math.sqrt((ptX+xOffset)*(ptX+xOffset)+(ptY+yOffset)*(ptY+yOffset)) < viewRange)
         {
           var actualPtX = (latCellOriginal+xOffset+ptX)/scaleFactor-90.0;
           var actualPtY = (lonCellOriginal+yOffset+ptY)/scaleFactor-180.0;
           
-          var animal = animals[Math.floor(arng()*animals.length-0.0000001)];
-          var adjective = adjectives[Math.floor(arng()*adjectives.length-0.0000001)];
+          var animal = animals[Math.floor(anm*animals.length-0.0000001)];
+          var adjective = adjectives[Math.floor(adj*adjectives.length-0.0000001)];
           
           
           points.push([clampLatLon(actualPtX, actualPtY), adjective + " " + animal]);
