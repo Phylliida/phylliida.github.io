@@ -39,7 +39,6 @@ function showPosition(lat, lon) {
     ctx.fillStyle = 'blue';
     ctx.arc(dim/2,dim/2,10,0,2*Math.PI);
     ctx.fill();
-    setTimeout(getStuff, 400);
 }
 
 
@@ -66,14 +65,13 @@ function processPosition(position) {
   curLat = avgLat;
   curLon = avgLon;
   showPosition(curLat, curLon);
-  setTimeout(getStuff,300);
 }
 
 
 function getStuff()
 {
   if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(processPosition);
+      navigator.geolocation.watchPosition(processPosition);
     
   } else {
       console.log("Geolocation is not supported by this browser.");
