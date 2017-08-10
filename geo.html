@@ -83,7 +83,8 @@ function processPosition(position, isHigh)
   count += 1;
   document.getElementById("resres").innerHTML =  count + "<br/>" + curLat + "<br/>" + curLon;
   showPosition(curLat, curLon);
-    
+  setTimeout(function() 
+             {
   if (isHigh)
   {
     navigator.geolocation.getCurrentPosition(processPositionHigh, onErrorHigh,
@@ -94,25 +95,26 @@ function processPosition(position, isHigh)
       navigator.geolocation.getCurrentPosition(processPositionLow, onErrorHigh,
      { maximumAge: 2000, timeout: 1000, enableHighAccuracy: false } );
     }
+  }, 300);
       
 }
 
 
 function onErrorLow(error) {
- if (error.code === PositionError.TIMEOUT){
+ //if (error.code === PositionError.TIMEOUT){
      navigator.geolocation.getCurrentPosition(processPositionHigh, onErrorHigh,
      { maximumAge: 2000, timeout: 1000, enableHighAccuracy: true } );
- }
+ //}
   // Handle other errors here
 
 }
 
 
 function onErrorHigh(error) {
- if (error.code === PositionError.TIMEOUT){
+ //if (error.code === PositionError.TIMEOUT){
      navigator.geolocation.getCurrentPosition(processPositionLow, onErrorLow,
      { maximumAge: 2000, timeout: 1000, enableHighAccuracy: false } );
- }
+// }
   // Handle other errors here
 
 }
