@@ -111,6 +111,8 @@ function generatePoints(lat, lon, seed)
       
       var ptCountNoise = arng();
       
+      console.log(ptCountNoise);
+      
       var ptCount = sampleThings(3, 18, ptCountNoise);
       
       
