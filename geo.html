@@ -66,6 +66,7 @@ function processPosition(position) {
   curLat = avgLat;
   curLon = avgLon;
   showPosition(curLat, curLon);
+  setTimeout(getStuff,300);
 }
 
 
@@ -73,7 +74,7 @@ function getStuff()
 {
   if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(processPosition);
-    setTimeout(getStuff,400);
+    
   } else {
       console.log("Geolocation is not supported by this browser.");
   }
