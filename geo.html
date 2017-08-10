@@ -9,6 +9,7 @@
 
 <body>
 <canvas id="myCanvas" width="20" height="500"></canvas>
+  <div id="resres"></div>
 <script>
 var screenWidth = window.innerWidth
 || document.documentElement.clientWidth
@@ -47,7 +48,7 @@ var curLon = 0;
 var numStored = 10;
 var prevLat = [];
 var prevLon = [];
-
+var count = 0;
 function processPosition(position) {
   var lat = position.coords.latitude;
   var lon = position.coords.longitude;
@@ -69,6 +70,8 @@ function processPosition(position) {
   avgLon /= prevLon.length;
   curLat = avgLat;
   curLon = avgLon;
+  count += 1;
+  document.getElementById("resres").innerHTML =  count + "<br/>" + curLat + "<br/>" + curLon;
   showPosition(curLat, curLon);
 }
 
