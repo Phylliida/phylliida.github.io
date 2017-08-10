@@ -61,10 +61,6 @@ function processPositionHigh(position) {
 function processPosition(position, isHigh)
   {
   
-  showPosition(curLat, curLon);
-  curLat += 0.00001;
-  curLon += 0.00001;
-  /*
   var lat = position.coords.latitude;
   var lon = position.coords.longitude;
   prevLat.push(lat);
@@ -88,7 +84,6 @@ function processPosition(position, isHigh)
   count += 1;
   document.getElementById("resres").innerHTML =  count + "<br/>" + curLat + "<br/>" + curLon;
   showPosition(curLat, curLon);
-  */
   setTimeout(function() 
              {
   if (isHigh)
