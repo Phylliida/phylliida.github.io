@@ -68,17 +68,30 @@ function processPosition(position) {
 }
 
 
-function getStuff()
-{
-  if (navigator.geolocation) {
-      navigator.geolocation.watchPosition(processPosition);
-    
-  } else {
-      console.log("Geolocation is not supported by this browser.");
-  }
-  
+function onErrorLow(error) {
+ if (error.code === PositionError.TIMEOUT){
+     navigator.geolocation.getCurrentPosition(processPosition, onErrorHigh,
+     { maximumAge: 1000, timeout: 1000, enableHighAccuracy: true } );
+ }
+  // Handle other errors here
+
 }
-getStuff();
+
+
+function onErrorHigh(error) {
+ if (error.code === PositionError.TIMEOUT){
+     navigator.geolocation.getCurrentPosition(processPosition, onErrorLow,
+     { maximumAge: 1000, timeout: 1000, enableHighAccuracy: false } );
+ }
+  // Handle other errors here
+
+}
+
+
+ navigator.geolocation.getCurrentPosition(processPosition ,onErrorHigh,
+{ maximumAge: 3000, timeout: 1000, enableHighAccuracy: true } );
+ navigator.geolocation.getCurrentPosition(processPosition ,onErrorLow,
+{ maximumAge: 3000, timeout: 1000, enableHighAccuracy: false } );
 
 
   // blah
