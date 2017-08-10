@@ -116,3 +116,4 @@ function getxor4069(seed) {
   prng.int32 = xg.next;
   return prng;
 }
+// test
