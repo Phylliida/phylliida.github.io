@@ -123,7 +123,7 @@ function generatePoints(lat, lon, seed)
         var ptY = arng();
         var anm = arng();
         var adj = arng();
-        if (arng() < 0.1 && Math.sqrt((ptX+xOffset)*(ptX+xOffset)+(ptY+yOffset)*(ptY+yOffset)) < viewRange)
+        if (arng() < 0.03 && Math.sqrt((ptX+xOffset)*(ptX+xOffset)+(ptY+yOffset)*(ptY+yOffset)) < viewRange)
         {
           var actualPtX = (latCellOriginal+xOffset+ptX)/scaleFactor-90.0;
           var actualPtY = (lonCellOriginal+yOffset+ptY)/scaleFactor-180.0;
