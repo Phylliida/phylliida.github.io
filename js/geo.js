@@ -1,4 +1,5 @@
-noise.seed(27);
+
+
 
 function sampleThings(avgAmount, maxAmount, v)
 {
@@ -6,9 +7,12 @@ function sampleThings(avgAmount, maxAmount, v)
 }
 
 
-var adjectives =["afraid","ancient","angry","average","bad","big","bitter","black","blue","brave","breezy","bright","brown","calm","chatty","chilly","clever","cold","cowardly","cuddly","curly","curvy","dangerous","dry","dull","empty","evil","fast","fat","fluffy","foolish","fresh","friendly","funny","fuzzy","gentle","giant","good","great","green","grumpy","happy","hard","heavy","helpless","honest","horrible","hot","hungry","itchy","jolly","kind","lazy","light","little","loud","lovely","lucky","massive","mean","mighty","modern","moody","nasty","neat","nervous","new","nice","odd","old","orange","ordinary","perfect","pink","plastic","polite","popular","pretty","proud","purple","quick","quiet","rare","red","rotten","rude","selfish","serious","shaggy","sharp","short","shy","silent","silly","slimy","slippery","smart","smooth","soft","sour","spicy","splendid","spotty","stale","strange","strong","stupid","sweet","swift","tall","tame","tasty","tender","terrible","thin","tidy","tiny","tough","tricky","ugly","unlucky","warm","weak","wet","white","wicked","wise","witty","wonderful","yellow","young"];
+var adjectives =["afraid","ancient","angry","average","bad","big","bitter","black","blue","brave","breezy","bright","brown","calm","chatty","chilly","clever","cold","cowardly","cuddly","curly","curvy","dangerous","dry","dull","empty","evil","fast","fat","fluffy","foolish","fresh","friendly","funny","fuzzy","gentle","giant","good","great","green","grumpy","happy","hard","heavy","helpless","honest","horrible","hot","hungry","itchy","jolly","kind","lazy","light","little","loud","lovely","lucky","massive","mean","mighty","modern","moody","nasty","neat","nervous","new","nice","odd","old","orange","ordinary","perfect","pink","plastic","polite","popular","pretty","proud","purple","quick","quiet","rare","red","rotten","rude","selfish","serious","shaggy","sharp","short","shy","silent","silly","slimy","slippery","smart","smooth","soft","sour","spicy","splendid","spotty","sprucy","stale","strange","strong","stupid","sweet","swift","tall","tame","tasty","tender","terrible","thin","tidy","tiny","tough","tricky","ugly","unlucky","warm","weak","wet","white","wicked","wise","witty","wonderful","yellow","young"];
 
 var animals=["ape","baboon","badger","bat","bear","bird","bobcat","bulldog","bullfrog","cat","catfish","cheetah","chicken","chipmunk","cobra","cougar","cow","crab","deer","dingo","dodo","dog","dolphin","donkey","dragon","dragonfly","duck","eagle","earwig","eel","elephant","emu","falcon","fireant","firefox","fish","fly","fox","frog","gecko","goat","goose","grasshopper","horse","hound","husky","impala","insect","jellyfish","kangaroo","ladybug","liger","lion","lionfish","lizard","mayfly","mole","monkey","moose","moth","mouse","mule","newt","octopus","otter","owl","panda","panther","parrot","penguin","pig","puma","pug","quail","rabbit","rat","rattlesnake","robin","seahorse","sheep","shrimp","skunk","sloth","snail","snake","squid","starfish","stingray","swan","termite","tiger","treefrog","turkey","turtle","vampirebat","walrus","warthog","wasp","wolverine","wombat","yak","zebra"];
+  
+  
+var neatPals = ['LONGBOY', 'rolling rick', ';)']
   
 function clampLatLon(lat, lon)
 {
@@ -66,8 +70,8 @@ function goodMod(a, b)
   return (b + (a%b)) % b;
 }
   
-var latMod = 501;
-var lonMod = 553;
+var latMod = 5001;
+var lonMod = 5503;
 
 var scaleFactor = 10000.0;
   
@@ -105,9 +109,9 @@ function generatePoints(lat, lon, seed)
       var yOffset = y-Math.floor(lookRange/2);
       var curY = goodMod(lonCell+yOffset, lonMod);
       
-      var noiseSeed = (noise.simplex2(curX, curY)+1.0)/2.0;
-      var arng = new alea("" + Math.round(noiseSeed*1093000));
-     
+  
+      var arng = getxor4069(Math.round((curX+1+(curY+1)*latMod)*9848)+seed);
+      //var noiseSeed = (noise.simplex2(curX, curY)+1.0)/2.0;
       
       var ptCountNoise = arng();
       
@@ -125,16 +129,24 @@ function generatePoints(lat, lon, seed)
         var ptY = arng();
         var anm = arng();
         var adj = arng();
-        if (arng() < 0.03 && Math.sqrt((ptX+xOffset)*(ptX+xOffset)+(ptY+yOffset)*(ptY+yOffset)) < viewRange)
+        var choiceSeed = arng();
+        name = "";
+        if (choiceSeed < 0.07)
+        {
+          var animal = animals[Math.floor(anm*animals.length-0.0000001)];
+          var adjective = adjectives[Math.floor(adj*adjectives.length-0.0000001)];
+          name = adjective + " " + animal;
+        }
+        else if(choiceSeed < 0.0701)
+        {
+          name = 'LONGBOY';
+        }
+        
+        if(name != "" && Math.sqrt((ptX+xOffset)*(ptX+xOffset)+(ptY+yOffset)*(ptY+yOffset)) < viewRange)
         {
           var actualPtX = (latCellOriginal+xOffset+ptX)/scaleFactor-90.0;
           var actualPtY = (lonCellOriginal+yOffset+ptY)/scaleFactor-180.0;
-          
-          var animal = animals[Math.floor(anm*animals.length-0.0000001)];
-          var adjective = adjectives[Math.floor(adj*adjectives.length-0.0000001)];
-          
-          
-          points.push([clampLatLon(actualPtX, actualPtY), adjective + " " + animal]);
+          points.push([clampLatLon(actualPtX, actualPtY), name]);
         }
       }
     }
