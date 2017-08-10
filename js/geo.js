@@ -106,7 +106,7 @@ function generatePoints(lat, lon, seed)
       var curY = goodMod(lonCell+yOffset, lonMod);
       
       var noiseSeed = (noise.simplex2(curX, curY)+1.0)/2.0;
-      var arng = new alea("" + Math.round(noiseSeed*100));
+      var arng = new alea("" + Math.round(noiseSeed*10000));
      
       
       var ptCountNoise = arng();
