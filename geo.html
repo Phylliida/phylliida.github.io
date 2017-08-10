@@ -45,7 +45,7 @@ function showPosition(lat, lon) {
 
 var curLat = 0;
 var curLon = 0;
-var numStored = 10;
+var numStored = 5;
 var prevLat = [];
 var prevLon = [];
 var count = 0;
@@ -113,7 +113,7 @@ function onErrorLow(error) {
 function onErrorHigh(error) {
  //if (error.code === PositionError.TIMEOUT){
      navigator.geolocation.getCurrentPosition(processPositionLow, onErrorLow,
-     { maximumAge: 2000, timeout: 1000, enableHighAccuracy: false } );
+     { maximumAge: 500, timeout: 500, enableHighAccuracy: false } );
 // }
   // Handle other errors here
 
