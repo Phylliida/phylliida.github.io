@@ -98,8 +98,8 @@ function showPosition(lat, lon) {
           for (var j = 0; j < things.length; j++)
           {
             var dxtmp = things[j][0]-pts[i][0][0];
-            var dytmp = things[j][0]-pts[i][0][1];
-            if (Math.sqrt(dxtmp*dxtmp+dytmp*dytmp) < 0.00001)
+            var dytmp = things[j][1]-pts[i][0][1];
+            if (Math.sqrt(dxtmp*dxtmp+dytmp*dytmp) < 0.0002 && things[j][2] == pts[i][1])
             {
               found = true;
               break;
