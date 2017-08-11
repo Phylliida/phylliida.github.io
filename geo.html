@@ -11,6 +11,50 @@
 <canvas id="myCanvas" width="20" height="500"></canvas>
   <div id="resres"></div>
 <script>
+var touchX = -100;
+var touchY = -100;
+
+
+function parsePress(e)
+{
+  if (e.changedTouches && e.changedTouches.length > 0)
+  {
+    touchX = e.changedTouches[0].pageX;
+    touchY = e.changedTouches[0].pageY;
+  }
+  else if(e.clientX && e.clientY)
+  {
+    touchX = e.clientX;
+    touchY = e.clientY;
+  }
+}
+
+function removePresss(e)
+{
+  if (e.changedTouches && e.changedTouches.length > 0)
+  {
+    touchX = -1000;
+    touchY = -1000;
+  }
+  else if(e.clientX && e.clientY)
+  {
+    touchX = -1000;
+    touchY = -1000;
+  }
+}
+
+window.addEventListener('ontouchstart', parsePress);
+window.addEventListener('touchstart', parsePress);
+window.addEventListener('mousedown', parsePress);
+window.addEventListener('onmousedown', parsePress);
+
+window.addEventListener('ontouchend', removePresss);
+window.addEventListener('touchend', removePresss);
+window.addEventListener('mouseup', removePresss);
+window.addEventListener('onmouseup', removePresss);
+
+
+
 var screenWidth = window.innerWidth
 || document.documentElement.clientWidth
 || document.body.clientWidth;
@@ -33,9 +77,45 @@ function showPosition(lat, lon) {
   {
     var ptX = (pts[i][0][0]-topLeftX)/width*dim;
     var ptY = (pts[i][0][1]-topLeftY)/height*dim;
-    ctx.font = "12px Arial";
-    ctx.fillText(pts[i][1], ptX, ptY);
+    ctx.fillStyle='black';
+    var dx = pts[i][0][0]-lat;
+    var dy = pts[i][0][1]-lon;
+    if (Math.sqrt(dx*dx+dy*dy) < 0.00012)
+    {
+      ctx.fillStyle='blue';
+    }
+      ctx.font = "12px Arial";
+      ctx.fillText(pts[i][1], ptX, ptY);
+      
+      
+      if (touchX > 0 && touchY > 0)
+      {
+        var dxt = ptX-touchX;
+        var dyt = ptY-touchY;
+        if (Math.sqrt(dxt*dxt+dyt*dyt) < 100)
+        {
+          var found = false;
+          for (var j = 0; j < things.length; j++)
+          {
+            var dxtmp = things[j][0]-pts[i][0][0];
+            var dytmp = things[j][0]-pts[i][0][1];
+            if (Math.sqrt(dxtmp*dxtmp+dytmp*dytmp) < 0.00001)
+            {
+              found = true;
+              break;
+            }
+          }
+          if (!found)
+          {
+            things.push([pts[i][0][0], pts[i][0][1], pts[i][1]]);
+            document.getElementById("resres").innerHTML += "<br/>" + pts[i][1];
+            localStorage.setItem("animalsCaught", JSON.stringify(things));
+          }
+        }
+      } 
   }    
+  
+  
     ctx.beginPath();
     ctx.fillStyle = 'blue';
     ctx.arc(dim/2,dim/2,10,0,2*Math.PI);
@@ -45,10 +125,24 @@ function showPosition(lat, lon) {
 
 var curLat = 0;
 var curLon = 0;
-var numStored = 5;
+var numStored = 20;
+var numUsed = 5;
 var prevLat = [];
 var prevLon = [];
-var count = 0;
+var count = parseInt(localStorage.getItem("count"));
+things = JSON.parse(localStorage.getItem("animalsCaught"))
+if (!things)
+{
+  things = [];
+}
+for (var i = 0; i < things.length; i++)
+{
+  document.getElementById("resres").innerHTML += things[i][2] + "<br/>" ;
+}
+if (!count)
+{
+  count = 0;
+}
 function processPositionHigh(position) {
     processPosition(position, true);
   
@@ -63,27 +157,52 @@ function processPosition(position, isHigh)
   
   var lat = position.coords.latitude;
   var lon = position.coords.longitude;
-  prevLat.push(lat);
-  prevLon.push(lon);
   var avgLat = 0;
   var avgLon = 0;
-  for (var i = 0; i < prevLat.length; i++)
+  for (var i = 0; i < prevLat.length && i < numUsed; i++)
   {
-    avgLat += prevLat[i];
-    avgLon += prevLon[i];
+    avgLat += prevLat[prevLat.length-i-1];
+    avgLon += prevLon[prevLon.length-i-1];
   }
   while (prevLat.length > numStored)
   {
     prevLat.splice(0,1);
     prevLon.splice(0,1);
   }
-  avgLat /= prevLat.length;
-  avgLon /= prevLon.length;
-  curLat = avgLat;
-  curLon = avgLon;
-  count += 1;
-  document.getElementById("resres").innerHTML =  count + "<br/>" + curLat + "<br/>" + curLon;
-  showPosition(curLat, curLon);
+  if (prevLat.length > 0)
+  {
+    var numUsing = Math.max(numUsed, prevLat.length);
+    avgLat /= numUsing;
+    avgLon /= numUsing;
+  }
+  if ((Math.abs(lat - avgLat) > 0.01 && Math.abs(lon-avgLon) > 0.01))
+  {
+    prevLat = [];
+    prevLon = [];
+    avgLat = lat;
+    avgLon = lon;
+  }
+  prevLat.push(lat);
+  prevLon.push(lon);
+  avgLat = (avgLat*prevLat.length+lat)/(prevLat.length+1);
+  avgLon = (avgLon*prevLon.length+lon)/(prevLon.length+1);
+  
+  if (prevLat.length > 0)
+  {
+    curLat = avgLat;
+    curLon = avgLon;
+    count += 1;
+    //document.getElementById("resres").innerHTML =  count + "<br/>" + curLat + "<br/>" + curLon;
+    showPosition(curLat, curLon);
+    
+    if (typeof(Storage) !== "undefined") {
+        localStorage.setItem("count", count + "");
+    } else {
+        console.log("sad no local storage");
+    }
+        
+    
+  }
   setTimeout(function() 
              {
   if (isHigh)
