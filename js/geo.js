@@ -115,7 +115,6 @@ function generatePoints(lat, lon, seed)
       
       var ptCountNoise = arng();
       
-      console.log(ptCountNoise);
       
       var ptCount = sampleThings(3, 18, ptCountNoise);
       
@@ -125,11 +124,12 @@ function generatePoints(lat, lon, seed)
       
       for (var i = 0; i < ptCount; i++)
       {
-        var ptX = arng();
-        var ptY = arng();
-        var anm = arng();
-        var adj = arng();
-        var choiceSeed = arng();
+        var arngPt = getxor4069(Math.round(arng()*9834));
+        var ptX = arngPt();
+        var ptY = arngPt();
+        var anm = arngPt();
+        var adj = arngPt();
+        var choiceSeed = arngPt();
         name = "";
         if (choiceSeed < 0.07)
         {
