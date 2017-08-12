@@ -3,58 +3,355 @@
 <script src="/js/xor4096.js"></script>
 <script src="/js/perlin.js"></script>
 <script src="/js/geo.js"></script>
-<script>
-</script>
 </head>
 
 <body>
-<canvas id="myCanvas" width="20" height="500"></canvas>
   <div id="resres"></div>
 <script>
-var touchX = -100;
-var touchY = -100;
+function Geo(isHighAccuracy, GPSPingRate, getGPSCoords, getCurrentSpeed, onTouchDown, onTouchUp) {
+  this.getGPSCoords = getGPSCoords;
+  this.getSpeed = getCurrentSpeed;
+  this.GPSPingRate = GPSPingRate;
+  this.onTouchDown = onTouchDown;
+  this.onTouchUp = onTouchUp;
+ 
+  // Max speed (anything higher will be capped to this) is 6 meters per second = 13.4 miles per hour
+  this.maxSpeed = 6;
+ 
+  this.prevCheckTime = Date.now();
+  this.metersTraveled = 0.0;
+  this.positionCheckRate = 15;
+  this.curPositionCheck = 0;
+  this.prevLat = null;
+  this.prevLon = null;
+ 
+  this.numGPSPrevUsed = 5;
+  this.latBuffer = [];
+  this.lonBuffer = [];
+  
+  var mThis = this;
+
+  this.ParseTouchDown = function(e)
+  {
+    if (e.changedTouches && e.changedTouches.length > 0)
+    {
+      var touchX = e.changedTouches[0].pageX;
+      var touchY = e.changedTouches[0].pageY;
+      if (mThis.onTouchDown)
+      {
+        mThis.onTouchDown(touchX, touchY);
+      }
+      
+    }
+    else if(e.clientX && e.clientY)
+    {
+      var touchX = e.clientX;
+      var touchY = e.clientY;
+      if (mThis.onTouchDown)
+      {
+        mThis.onTouchDown(touchX, touchY);
+      }
+    }
+  };
+
+  this.ParseTouchUp = function(e)
+  {
+    if (e.changedTouches && e.changedTouches.length > 0)
+    {
+      var touchX = e.changedTouches[0].pageX;
+      var touchY = e.changedTouches[0].pageY;
+      if (mThis.onTouchUp)
+      {
+        mThis.onTouchUp(touchX, touchY);
+      }
+      
+    }
+    else if(e.clientX && e.clientY)
+    {
+      var touchX = e.clientX;
+      var touchY = e.clientY;
+      if (mThis.onTouchUp)
+      {
+        mThis.onTouchUp(touchX, touchY);
+      }
+    }
+  };
+
+  this.CallGPSTracker = function(isHighAccuracy)
+  {
+    var options = {
+      maximumAge: mThis.GPSPingRate,
+      timeout: mThis.GPSPingRate,
+      enableHighAccuracy: isHighAccuracy
+    };
+
+    navigator.geolocation.getCurrentPosition(function(position) {
+      mThis.ProcessPosition(position.coords.latitude, position.coords.longitude, isHighAccuracy);
+    },
+    function(e) {
+      setTimeout(function() {
+        mThis.CallGPSTracker(isHighAccuracy);
+      }, mThis.GPSPingRate);
+    },
+    options
+    );
+  };
+
+  // In kilometers
+  this.PtDistance = function(lat1, lon1, lat2, lon2)
+  {
+    var toRadians = 2*3.1415926536/360.0;
+    var lat1r = lat1*toRadians;
+    var lon1r = lon1*toRadians;
+    var lat2r = lat2*toRadians;
+    var lon2r = lon2*toRadians;
+    
+    var sin_lat1 = Math.sin(lat1r);
+    var cos_lat1 = Math.cos(lat1r);
+    
+    var sin_lat2 = Math.sin(lat2r);
+    var cos_lat2 = Math.cos(lat2r);
+    
+    var delta_lon = lon2r - lon1r;
+    
+    var cos_delta_lon = Math.cos(delta_lon);
+    var sin_delta_lon = Math.sin(delta_lon);
+    
+    var val1 = (cos_lat2 * sin_delta_lon);
+    var val2 = (cos_lat1 * sin_lat2 -
+           sin_lat1 * cos_lat2 * cos_delta_lon);
+    var val3 = sin_lat1 * sin_lat2 + cos_lat1 * cos_lat2 * cos_delta_lon;
+    
+    var EARTH_RADIUS = 6371.009;
+    return Math.abs(Math.atan2(Math.sqrt(val1*val1+val2*val2), val3)*EARTH_RADIUS);
+    
+  }
+  
+  this.ProcessPosition = function(lat, lon, isHighAccuracy)
+  {
+    while (mThis.latBuffer.length > mThis.numGPSPrevUsed)
+    {
+      mThis.latBuffer.splice(0,1);
+      mThis.lonBuffer.splice(0,1);
+    }
+
+    var avgLat = 0;
+    var avgLon = 0;
+    for (var i = 0; i < mThis.latBuffer.length; i++)
+    {
+      avgLat += mThis.latBuffer[i];
+      avgLon += mThis.lonBuffer[i];
+    }
+    
+    if (mThis.latBuffer.length > 0)
+    {
+      avgLat /= mThis.latBuffer.length;
+      avgLon /= mThis.lonBuffer.length;
+    }
+    
+    if ((Math.abs(lat - avgLat) > 0.01 && Math.abs(lon-avgLon) > 0.01))
+    {
+      mThis.latBuffer = [];
+      mThis.lonBuffer = [];
+      avgLat = lat;
+      avgLon = lon;
+    }
+    avgLat = (avgLat*mThis.latBuffer.length+lat)/(mThis.latBuffer.length+1);
+    avgLon = (avgLon*mThis.lonBuffer.length+lon)/(mThis.lonBuffer.length+1);
+    
+    mThis.latBuffer.push(lat);
+    mThis.lonBuffer.push(lon);
+    
+    setTimeout(function() 
+    {
+      mThis.CallGPSTracker(isHighAccuracy);
+    }, mThis.GPSPingRate);
+    
+    if (mThis.latBuffer.length > 0)
+    {
+      if (!(mThis.prevLat && mThis.prevLon))
+      {
+          mThis.prevLat = avgLat;
+          mThis.prevLon = avgLon; 
+      }
+      
+      mThis.curPositionCheck += 1;
+      if (mThis.curPositionCheck >= mThis.positionCheckRate)
+      {
+          var curTime = Date.now();
+          var secondsElapsed = (curTime - mThis.prevCheckTime)/1000.0;
+          var metersTraveled = mThis.PtDistance(mThis.prevLat, mThis.prevLon, avgLat, avgLon)*1000.0;
+          console.log(metersTraveled);
+          
+          var metersPerSecond = metersTraveled/secondsElapsed;
+          
+          if (mThis.getSpeed)
+          {
+            mThis.getSpeed(metersPerSecond);
+          }
+          
+          if (metersTraveled < 1.0)
+          {
+            metersTraveled = 0.0;
+          }
+          
+          metersTraveled = Math.min(metersTraveled, mThis.maxSpeed*secondsElapsed);
+          mThis.metersTraveled += metersTraveled;
+          
+          mThis.prevLat = avgLat;
+          mThis.prevLon = avgLon;
+          mThis.curPositionCheck = 0;
+          
+          mThis.prevCheckTime = Date.now();
+      }
+      if (mThis.getGPSCoords)
+      {
+        mThis.getGPSCoords(avgLat, avgLon);
+      }
+    }
+  };
 
 
-function parsePress(e)
-{
-  if (e.changedTouches && e.changedTouches.length > 0)
+  this.ExpDistr = function(avgAmount, maxAmount, v)
   {
-    touchX = e.changedTouches[0].pageX;
-    touchY = e.changedTouches[0].pageY;
-  }
-  else if(e.clientX && e.clientY)
+    return Math.min(maxAmount, Math.round(-Math.log(v)*avgAmount));
+  };
+
+  // Works for negative values
+  this.GoodMod = function(a, b)
   {
-    touchX = e.clientX;
-    touchY = e.clientY;
-  }
+    return (b + (a%b)) % b;
+  };
+
+
+  this.ClampLatLon = function(lat, lon)
+  {
+    var didChange = true;
+    while (didChange)
+    {
+      didChange = false;
+      while (lat > 360)
+      {
+        lat -= 360;
+        didChange = true;
+      }
+      while (lat < -360)
+      {
+        lat += 360;
+        didChange = true;
+      }
+      while (lon > 360)
+      {
+        lon -= 360;
+        didChange = true;
+      }
+      while (lon < -360)
+      {
+        lon += 360;
+        didChange = true;
+      }
+      while (lat > 90)
+      {
+        lat = 180-lat;
+        didChange = true;
+      }
+      while (lat < -90)
+      {
+        lat = -(180+lat);
+        didChange = true;
+      }
+      while (lon > 180)
+      {
+        lon -= 360;
+        didChange = true;
+      }
+      while (lon < -180)
+      {
+        lon += 360;
+        didChange = true;
+      }
+    }
+    return [lat, lon]
+  };
+
+  this.GeneratePoints = function(lat, lon, seed){
+    var scaleFactor = 10000.0;
+      
+    var latlon = mThis.ClampLatLon(lat, lon);
+    lat = latlon[0];
+    lon = latlon[1];
+    
+    // lat is from -90 to 90
+    lat = lat + 90.0;
+    // lon is from -180 to 180
+    lon = lon + 180.0;
+    
+    // split into about 15m wide cells
+    var latCellOriginal = Math.round(lat*scaleFactor);
+    var lonCellOriginal = Math.round(lon*scaleFactor);
+    
+    var cellActualLat = latCellOriginal/scaleFactor;
+    var cellActualLon = lonCellOriginal/scaleFactor;
+    
+    
+    var latCell = mThis.GoodMod(latCellOriginal,latMod);
+    var lonCell = mThis.GoodMod(lonCellOriginal,lonMod);
+    var points = [];
+    var lookRange = 7; // this needs to be odd
+    var viewRange = 7.0
+    for (var x = 0; x < lookRange; x++)
+    {
+      var xOffset = x-Math.floor(lookRange/2);
+      var curX = mThis.GoodMod(latCell+xOffset, latMod);
+      for (var y = 0; y < lookRange; y++)
+      {
+        var yOffset = y-Math.floor(lookRange/2);
+        var curY = mThis.GoodMod(lonCell+yOffset, lonMod);
+        
+    
+        var arng = getxor4069(Math.round(((curX+1)*latMod+(curY+1)*latMod*lonMod)*7477)+seed*983);
+        
+        var ptCountNoise = arng();
+        
+        
+        var ptCount = mThis.ExpDistr(3, 18, ptCountNoise);
+        
+        
+        var curCellActualLat = cellActualLat;
+        var curCellActualLon = cellActualLon;
+        
+        for (var i = 0; i < ptCount; i++)
+        {
+          var arngPt = getxor4069(Math.round(arng()*8353));
+          var ptX = arngPt()+xOffset;
+          var ptY = arngPt()+yOffset;
+          if(Math.sqrt(ptX*ptX+ptY*ptY) < viewRange)
+          {
+            var actualPtX = (latCellOriginal+ptX)/scaleFactor-90.0;
+            var actualPtY = (lonCellOriginal+ptY)/scaleFactor-180.0;
+            latlon = mThis.ClampLatLon(actualPtX, actualPtY);
+            points.push([ptX, ptY, latlon[0], latlon[1], arngPt]);
+          }
+        }
+      }
+    }
+    return points;
+  };
+  
+  window.addEventListener('ontouchstart', this.ParseTouchDown);
+  window.addEventListener('touchstart', this.ParseTouchDown);
+  window.addEventListener('mousedown', this.ParseTouchDown);
+  window.addEventListener('onmousedown', this.ParseTouchDown);
+
+  window.addEventListener('ontouchend', this.ParseTouchUp);
+  window.addEventListener('touchend', this.ParseTouchUp);
+  window.addEventListener('mouseup', this.ParseTouchUp);
+  window.addEventListener('onmouseup', this.ParseTouchUp);
+  
+  this.CallGPSTracker(isHighAccuracy);
 }
 
-function removePresss(e)
-{
-  if (e.changedTouches && e.changedTouches.length > 0)
-  {
-    touchX = -1000;
-    touchY = -1000;
-  }
-  else if(e.clientX && e.clientY)
-  {
-    touchX = -1000;
-    touchY = -1000;
-  }
-}
-
-window.addEventListener('ontouchstart', parsePress);
-window.addEventListener('touchstart', parsePress);
-window.addEventListener('mousedown', parsePress);
-window.addEventListener('onmousedown', parsePress);
-
-window.addEventListener('ontouchend', removePresss);
-window.addEventListener('touchend', removePresss);
-window.addEventListener('mouseup', removePresss);
-window.addEventListener('onmouseup', removePresss);
-
-
-
+/*
 var screenWidth = window.innerWidth
 || document.documentElement.clientWidth
 || document.body.clientWidth;
@@ -127,9 +424,7 @@ function showPosition(lat, lon) {
 var curLat = 0;
 var curLon = 0;
 var numStored = 20;
-var numUsed = 5;
-var prevLat = [];
-var prevLon = [];
+
 var count = parseInt(localStorage.getItem("count"));
 //localStorage.setItem("animalsCaught", JSON.stringify([]));
 things = JSON.parse(localStorage.getItem("animalsCaught"))
@@ -145,110 +440,19 @@ if (!count)
 {
   count = 0;
 }
-function processPositionHigh(position) {
-    processPosition(position, true);
-  
-}
-  
-  function processPositionLow(position) {
-    processPosition(position, false);
-  }
-  
-function processPosition(position, isHigh)
-  {
-  
-  var lat = position.coords.latitude;
-  var lon = position.coords.longitude;
-  var avgLat = 0;
-  var avgLon = 0;
-  for (var i = 0; i < prevLat.length && i < numUsed; i++)
-  {
-    avgLat += prevLat[prevLat.length-i-1];
-    avgLon += prevLon[prevLon.length-i-1];
-  }
-  while (prevLat.length > numStored)
-  {
-    prevLat.splice(0,1);
-    prevLon.splice(0,1);
-  }
-  if (prevLat.length > 0)
-  {
-    var numUsing = Math.max(numUsed, prevLat.length);
-    avgLat /= numUsing;
-    avgLon /= numUsing;
-  }
-  if ((Math.abs(lat - avgLat) > 0.01 && Math.abs(lon-avgLon) > 0.01))
-  {
-    prevLat = [];
-    prevLon = [];
-    avgLat = lat;
-    avgLon = lon;
-  }
-  prevLat.push(lat);
-  prevLon.push(lon);
-  avgLat = (avgLat*prevLat.length+lat)/(prevLat.length+1);
-  avgLon = (avgLon*prevLon.length+lon)/(prevLon.length+1);
-  
-  if (prevLat.length > 0)
-  {
-    curLat = avgLat;
-    curLon = avgLon;
-    count += 1;
-    //document.getElementById("resres").innerHTML =  count + "<br/>" + curLat + "<br/>" + curLon;
-    showPosition(curLat, curLon);
-    
-    if (typeof(Storage) !== "undefined") {
-        localStorage.setItem("count", count + "");
-    } else {
-        console.log("sad no local storage");
-    }
-        
-    
-  }
-  setTimeout(function() 
-             {
-  if (isHigh)
-  {
-    navigator.geolocation.getCurrentPosition(processPositionHigh, onErrorLow,
-     { maximumAge: 500, timeout: 500, enableHighAccuracy: true } );
-  }
-    else
-    {
-      navigator.geolocation.getCurrentPosition(processPositionLow, onErrorHigh,
-     { maximumAge: 500, timeout: 500, enableHighAccuracy: false } );
-    }
-  }, 300);
-      
-}
-
-
-function onErrorLow(error) {
- //if (error.code === PositionError.TIMEOUT){
-     navigator.geolocation.getCurrentPosition(processPositionHigh, onErrorLow,
-     { maximumAge: 500, timeout: 500, enableHighAccuracy: true } );
- //}
-  // Handle other errors here
-
-}
-
-
-function onErrorHigh(error) {
- //if (error.code === PositionError.TIMEOUT){
-     navigator.geolocation.getCurrentPosition(processPositionLow, onErrorLow,
-     { maximumAge: 500, timeout: 500, enableHighAccuracy: false } );
-// }
-  // Handle other errors here
-
-}
-
-
- navigator.geolocation.getCurrentPosition(processPositionHigh ,onErrorLow,
-{ maximumAge: 500, timeout: 500, enableHighAccuracy: true } );
- //navigator.geolocation.getCurrentPosition(processPositionLow ,onErrorLow,
-//{ maximumAge: 2000, timeout: 1000, enableHighAccuracy: false } );
-
-
   // blah
+ */
+function GetPosition(lat, lon)
+{
+}
+
+function GetSpeed(metersPerSecond)
+{
+  document.getElementById("resres").innerHTML += metersPerSecond + "<br/><br/>" + thing.metersTraveled;
+}
+ 
+var thing = new Geo(true, 500, GetPosition,GetSpeed);
+ 
 </script>
 </body>
 
