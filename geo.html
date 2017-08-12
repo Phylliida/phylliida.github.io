@@ -1,12 +1,261 @@
+
 <html>
 <head>
 <script src="/js/xor4096.js"></script>
 <script src="/js/perlin.js"></script>
 <script src="/js/geo.js"></script>
+<script>
+</script>
 </head>
 
 <body>
+<canvas id="myCanvas" width="20" height="500"></canvas>
+<div id="resresres"></div>
   <div id="resres"></div>
+<script>
+var touchX = -100;
+var touchY = -100;
+
+
+function parsePress(e)
+{
+  if (e.changedTouches && e.changedTouches.length > 0)
+  {
+    touchX = e.changedTouches[0].pageX;
+    touchY = e.changedTouches[0].pageY;
+  }
+  else if(e.clientX && e.clientY)
+  {
+    touchX = e.clientX;
+    touchY = e.clientY;
+  }
+}
+
+function removePresss(e)
+{
+  if (e.changedTouches && e.changedTouches.length > 0)
+  {
+    touchX = -1000;
+    touchY = -1000;
+  }
+  else if(e.clientX && e.clientY)
+  {
+    touchX = -1000;
+    touchY = -1000;
+  }
+}
+
+window.addEventListener('ontouchstart', parsePress);
+window.addEventListener('touchstart', parsePress);
+window.addEventListener('mousedown', parsePress);
+window.addEventListener('onmousedown', parsePress);
+
+window.addEventListener('ontouchend', removePresss);
+window.addEventListener('touchend', removePresss);
+window.addEventListener('mouseup', removePresss);
+window.addEventListener('onmouseup', removePresss);
+
+
+
+var screenWidth = window.innerWidth
+|| document.documentElement.clientWidth
+|| document.body.clientWidth;
+
+var screenHeight = window.innerHeight
+|| document.documentElement.clientHeight
+|| document.body.clientHeight;
+function showPosition(lat, lon) {
+  var c = document.getElementById("myCanvas");
+  var dim = Math.min(screenWidth, screenHeight);
+  c.width = dim;
+  c.height = dim;
+  var ctx = c.getContext("2d");
+  var pts = generatePoints(lat, lon, 10);
+  var topLeftX = lat-0.0003;
+  var topLeftY = lon-0.0003;
+  var width = 0.0006;
+  var height = 0.0006;
+  for (var i = 0; i < pts.length; i++)
+  {
+    var ptX = (pts[i][0][0]-topLeftX)/width*dim;
+    var ptY = (pts[i][0][1]-topLeftY)/height*dim;
+    ctx.fillStyle='black';
+    var dx = pts[i][0][0]-lat;
+    var dy = pts[i][0][1]-lon;
+    if (Math.sqrt(dx*dx+dy*dy) < 0.00012)
+    {
+      ctx.fillStyle='blue';
+      
+      
+      if (touchX > 0 && touchY > 0)
+      {
+        var dxt = ptX-touchX;
+        var dyt = ptY-touchY;
+        if (Math.sqrt(dxt*dxt+dyt*dyt) < 100)
+        {
+          var found = false;
+          for (var j = 0; j < things.length; j++)
+          {
+            var dxtmp = things[j][0]-pts[i][0][0];
+            var dytmp = things[j][1]-pts[i][0][1];
+            if (Math.sqrt(dxtmp*dxtmp+dytmp*dytmp) < 0.0002 && things[j][2] == pts[i][1])
+            {
+              found = true;
+              break;
+            }
+          }
+          if (!found)
+          {
+            things.push([pts[i][0][0], pts[i][0][1], pts[i][1]]);
+            document.getElementById("resres").innerHTML += "<br/>" + pts[i][1];
+            localStorage.setItem("animalsCaught", JSON.stringify(things));
+          }
+        }
+      }
+
+    }
+      ctx.font = "12px Arial";
+      ctx.fillText(pts[i][1], ptX, ptY);      
+  }    
+  
+  
+    ctx.beginPath();
+    ctx.fillStyle = 'blue';
+    ctx.arc(dim/2,dim/2,10,0,2*Math.PI);
+    ctx.fill();
+}
+
+
+var curLat = 0;
+var curLon = 0;
+var numStored = 20;
+var numUsed = 5;
+var prevLat = [];
+var prevLon = [];
+var count = parseInt(localStorage.getItem("count"));
+//localStorage.setItem("animalsCaught", JSON.stringify([]));
+things = JSON.parse(localStorage.getItem("animalsCaught"))
+if (!things)
+{
+  things = [];
+}
+for (var i = 0; i < things.length; i++)
+{
+  document.getElementById("resres").innerHTML += things[i][2] + "<br/>" ;
+}
+if (!count)
+{
+  count = 0;
+}
+function processPositionHigh(position) {
+    processPosition(position, true);
+  
+}
+  
+  function processPositionLow(position) {
+    processPosition(position, false);
+  }
+  
+function processPosition(position, isHigh)
+  {
+  
+  var lat = position.coords.latitude;
+  var lon = position.coords.longitude;
+  var avgLat = 0;
+  var avgLon = 0;
+  for (var i = 0; i < prevLat.length && i < numUsed; i++)
+  {
+    avgLat += prevLat[prevLat.length-i-1];
+    avgLon += prevLon[prevLon.length-i-1];
+  }
+  while (prevLat.length > numStored)
+  {
+    prevLat.splice(0,1);
+    prevLon.splice(0,1);
+  }
+  if (prevLat.length > 0)
+  {
+    var numUsing = Math.max(numUsed, prevLat.length);
+    avgLat /= numUsing;
+    avgLon /= numUsing;
+  }
+  if ((Math.abs(lat - avgLat) > 0.01 && Math.abs(lon-avgLon) > 0.01))
+  {
+    prevLat = [];
+    prevLon = [];
+    avgLat = lat;
+    avgLon = lon;
+  }
+  prevLat.push(lat);
+  prevLon.push(lon);
+  avgLat = (avgLat*prevLat.length+lat)/(prevLat.length+1);
+  avgLon = (avgLon*prevLon.length+lon)/(prevLon.length+1);
+  
+  if (prevLat.length > 0)
+  {
+    curLat = avgLat;
+    curLon = avgLon;
+    count += 1;
+    //document.getElementById("resres").innerHTML =  count + "<br/>" + curLat + "<br/>" + curLon;
+    showPosition(curLat, curLon);
+    
+    if (typeof(Storage) !== "undefined") {
+        localStorage.setItem("count", count + "");
+    } else {
+        console.log("sad no local storage");
+    }
+        
+    
+  }
+  setTimeout(function() 
+             {
+  if (isHigh)
+  {
+    navigator.geolocation.getCurrentPosition(processPositionHigh, onErrorLow,
+     { maximumAge: 500, timeout: 500, enableHighAccuracy: true } );
+  }
+    else
+    {
+      navigator.geolocation.getCurrentPosition(processPositionLow, onErrorHigh,
+     { maximumAge: 500, timeout: 500, enableHighAccuracy: false } );
+    }
+  }, 300);
+      
+}
+
+
+function onErrorLow(error) {
+ //if (error.code === PositionError.TIMEOUT){
+     navigator.geolocation.getCurrentPosition(processPositionHigh, onErrorLow,
+     { maximumAge: 500, timeout: 500, enableHighAccuracy: true } );
+ //}
+  // Handle other errors here
+
+}
+
+
+function onErrorHigh(error) {
+ //if (error.code === PositionError.TIMEOUT){
+     navigator.geolocation.getCurrentPosition(processPositionLow, onErrorLow,
+     { maximumAge: 500, timeout: 500, enableHighAccuracy: false } );
+// }
+  // Handle other errors here
+
+}
+
+
+ navigator.geolocation.getCurrentPosition(processPositionHigh ,onErrorLow,
+{ maximumAge: 500, timeout: 500, enableHighAccuracy: true } );
+ //navigator.geolocation.getCurrentPosition(processPositionLow ,onErrorLow,
+//{ maximumAge: 2000, timeout: 1000, enableHighAccuracy: false } );
+
+
+  // blah
+</script>
+</body>
+
+</html>
+
 <script>
 function Geo(isHighAccuracy, GPSPingRate, getGPSCoords, getCurrentSpeed, onTouchDown, onTouchUp) {
   this.getGPSCoords = getGPSCoords;
@@ -442,13 +691,14 @@ if (!count)
 }
   // blah
  */
+ 
 function GetPosition(lat, lon)
 {
 }
 
 function GetSpeed(metersPerSecond)
 {
-  document.getElementById("resres").innerHTML += metersPerSecond + "<br/><br/>" + thing.metersTraveled;
+  document.getElementById("resresres").innerHTML += metersPerSecond + "<br/><br/>" + thing.metersTraveled;
 }
  
 var thing = new Geo(true, 500, GetPosition,GetSpeed);
