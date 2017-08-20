@@ -1,706 +1,275 @@
 
+
 <html>
 <head>
-<script src="/js/xor4096.js"></script>
-<script src="/js/perlin.js"></script>
-<script src="/js/geo.js"></script>
+<script>function Geo(e,t,n,o,r,i){this.getGPSCoords=n,this.getSpeed=o,this.GPSPingRate=t,this.onTouchDown=r,this.onTouchUp=i,this.maxSpeed=6,this.prevCheckTime=Date.now(),this.metersTraveled=0,this.positionCheckRate=15,this.curPositionCheck=0,this.prevLat=null,this.prevLon=null,this.numGPSPrevUsed=5,this.latBuffer=[],this.lonBuffer=[];var a=this;this.ParseTouchDown=function(e){if(e.changedTouches&&e.changedTouches.length>0){var t=e.changedTouches[0].pageX,n=e.changedTouches[0].pageY;a.onTouchDown&&a.onTouchDown(t,n)}else if(e.clientX&&e.clientY){var t=e.clientX,n=e.clientY;a.onTouchDown&&a.onTouchDown(t,n)}},this.ParseTouchUp=function(e){if(e.changedTouches&&e.changedTouches.length>0){var t=e.changedTouches[0].pageX,n=e.changedTouches[0].pageY;a.onTouchUp&&a.onTouchUp(t,n)}else if(e.clientX&&e.clientY){var t=e.clientX,n=e.clientY;a.onTouchUp&&a.onTouchUp(t,n)}},this.CallGPSTracker=function(e){var t={maximumAge:a.GPSPingRate,timeout:a.GPSPingRate,enableHighAccuracy:e};navigator.geolocation.getCurrentPosition(function(t){a.ProcessPosition(t.coords.latitude,t.coords.longitude,e)},function(t){setTimeout(function(){a.CallGPSTracker(e)},a.GPSPingRate)},t)},this.MetersToDegrees=function(e){return ratioOfCircumfrence=1e3*e/40075.017,ratioOfCircumfrence/360},this.DegreesToMeters=function(e){},this.PtDistance=function(e,t,n,o){var r=.01745329252*e,i=.01745329252*t,a=.01745329252*n,h=.01745329252*o,s=Math.sin(r),u=Math.cos(r),c=Math.sin(a),f=Math.cos(a),l=h-i,d=Math.cos(l),g=f*Math.sin(l),v=u*c-s*f*d,p=s*c+u*f*d;return Math.abs(6371.009*Math.atan2(Math.sqrt(g*g+v*v),p))},this.ProcessPosition=function(e,t,n){for(;a.latBuffer.length>a.numGPSPrevUsed;)a.latBuffer.splice(0,1),a.lonBuffer.splice(0,1);for(var o=0,r=0,i=0;i<a.latBuffer.length;i++)o+=a.latBuffer[i],r+=a.lonBuffer[i];if(a.latBuffer.length>0&&(o/=a.latBuffer.length,r/=a.lonBuffer.length),Math.abs(e-o)>.01&&Math.abs(t-r)>.01&&(a.latBuffer=[],a.lonBuffer=[],o=e,r=t),o=(o*a.latBuffer.length+e)/(a.latBuffer.length+1),r=(r*a.lonBuffer.length+t)/(a.lonBuffer.length+1),a.latBuffer.push(e),a.lonBuffer.push(t),setTimeout(function(){a.CallGPSTracker(n)},a.GPSPingRate),a.latBuffer.length>0){if(a.prevLat&&a.prevLon||(a.prevLat=o,a.prevLon=r),a.curPositionCheck+=1,a.curPositionCheck>=a.positionCheckRate){var h=(Date.now()-a.prevCheckTime)/1e3,s=1e3*a.PtDistance(a.prevLat,a.prevLon,o,r);s<4&&(s=0);var u=s/h;s=Math.min(s,a.maxSpeed*h),a.getSpeed&&a.getSpeed(u,s),a.metersTraveled+=s,a.prevLat=o,a.prevLon=r,a.curPositionCheck=0,a.prevCheckTime=Date.now()}a.getGPSCoords&&a.getGPSCoords(o,r)}},this.ExpDistr=function(e,t,n){return Math.min(t,Math.round(-Math.log(n)*e))},this.GoodMod=function(e,t){return(t+e%t)%t},this.ClampLatLon=function(e,t){for(var n=!0;n;){for(n=!1;e>360;)e-=360,n=!0;for(;e<-360;)e+=360,n=!0;for(;t>360;)t-=360,n=!0;for(;t<-360;)t+=360,n=!0;for(;e>90;)e=180-e,n=!0;for(;e<-90;)e=-(180+e),n=!0;for(;t>180;)t-=360,n=!0;for(;t<-180;)t+=360,n=!0}return[e,t]},this.GeneratePoints=function(e,t,n){var o=a.ClampLatLon(e,t);e=o[0],t=o[1],e+=90,t+=180;for(var r=Math.round(1e4*e),i=Math.round(1e4*t),h=a.GoodMod(r,5001),s=a.GoodMod(i,5503),u=[],c=0;c<11;c++)for(var f=c-Math.floor(5.5),l=a.GoodMod(h+f,5001),d=0;d<11;d++)for(var g=d-Math.floor(5.5),v=a.GoodMod(s+g,5503),p=getxor4069(Math.round(7477*(5001*(l+1)+5001*(v+1)*5503))+983*n),P=p(),T=a.ExpDistr(3,18,P),w=0;w<T;w++){var M=getxor4069(Math.round(8353*p())),m=M()+f,L=M()+g;if(Math.sqrt(m*m+L*L)<6){var C=(r+m)/1e4-90,G=(i+L)/1e4-180;o=a.ClampLatLon(C,G),u.push([m,L,o[0],o[1],M])}}return u},window.addEventListener("ontouchstart",this.ParseTouchDown),window.addEventListener("touchstart",this.ParseTouchDown),window.addEventListener("mousedown",this.ParseTouchDown),window.addEventListener("onmousedown",this.ParseTouchDown),window.addEventListener("ontouchend",this.ParseTouchUp),window.addEventListener("touchend",this.ParseTouchUp),window.addEventListener("mouseup",this.ParseTouchUp),window.addEventListener("onmouseup",this.ParseTouchUp),this.CallGPSTracker(e)}function XorGen(e){var t=this;t.next=function(){var e,n,o=t.w,r=t.X,i=t.i;return t.w=o=o+1640531527|0,n=r[i+34&127],e=r[i=i+1&127],n^=n<<13,e^=e<<17,n^=n>>>15,e^=e>>>12,n=r[i]=n^e,t.i=i,n+(o^o>>>16)|0},function(e,t){var n,o,r,i,a,h=[],s=128;for(t===(0|t)?(o=t,t=null):(t+="\0",o=0,s=Math.max(s,t.length)),r=0,i=-32;i<s;++i)t&&(o^=t.charCodeAt((i+32)%t.length)),0===i&&(a=o),o^=o<<10,o^=o>>>15,o^=o<<4,o^=o>>>13,i>=0&&(a=a+1640531527|0,r=0==(n=h[127&i]^=o+a)?r+1:0);for(r>=128&&(h[127&(t&&t.length||0)]=-1),r=127,i=512;i>0;--i)o=h[r+34&127],n=h[r=r+1&127],o^=o<<13,n^=n<<17,o^=o>>>15,n^=n>>>12,h[r]=o^n;e.w=a,e.X=h,e.i=r}(t,e)}function getxor4069(e){null==e&&(e=+new Date);var t=new XorGen(e),n=function(){return(t.next()>>>0)/(4*(1<<30))};return n.double=function(){do{var e=((t.next()>>>11)+(t.next()>>>0)/(4*(1<<30)))/(1<<21)}while(0===e);return e},n.int32=t.next,n}</script>
+<style>
+body {
+  margin: 0;
+  padding: 0;
+}
+</style>
 <script>
-</script>
-</head>
 
-<body>
-<canvas id="myCanvas" width="20" height="500"></canvas>
-<div id="resresres"></div>
-  <div id="resres"></div>
-<script>
-var touchX = -100;
-var touchY = -100;
-
-
-function parsePress(e)
+var now = new Date();
+var fullDaysSinceEpoch = Math.floor(now/8.64e7);
+console.log(fullDaysSinceEpoch);
+if (!localStorage.getItem("curDay"))
 {
-  if (e.changedTouches && e.changedTouches.length > 0)
-  {
-    touchX = e.changedTouches[0].pageX;
-    touchY = e.changedTouches[0].pageY;
-  }
-  else if(e.clientX && e.clientY)
-  {
-    touchX = e.clientX;
-    touchY = e.clientY;
-  }
+  localStorage.setItem("curDay", fullDaysSinceEpoch  + "");
 }
-
-function removePresss(e)
+var curDay = parseInt(localStorage.getItem("curDay"));
+if (curDay != fullDaysSinceEpoch)
 {
-  if (e.changedTouches && e.changedTouches.length > 0)
-  {
-    touchX = -1000;
-    touchY = -1000;
-  }
-  else if(e.clientX && e.clientY)
-  {
-    touchX = -1000;
-    touchY = -1000;
-  }
+  localStorage.setItem("collected", JSON.stringify([]));
 }
 
-window.addEventListener('ontouchstart', parsePress);
-window.addEventListener('touchstart', parsePress);
-window.addEventListener('mousedown', parsePress);
-window.addEventListener('onmousedown', parsePress);
-
-window.addEventListener('ontouchend', removePresss);
-window.addEventListener('touchend', removePresss);
-window.addEventListener('mouseup', removePresss);
-window.addEventListener('onmouseup', removePresss);
+localStorage.setItem("curDay", fullDaysSinceEpoch  + "");
 
 
-
-var screenWidth = window.innerWidth
-|| document.documentElement.clientWidth
-|| document.body.clientWidth;
-
-var screenHeight = window.innerHeight
-|| document.documentElement.clientHeight
-|| document.body.clientHeight;
-function showPosition(lat, lon) {
-  var c = document.getElementById("myCanvas");
-  var dim = Math.min(screenWidth, screenHeight);
-  c.width = dim;
-  c.height = dim;
-  var ctx = c.getContext("2d");
-  var pts = generatePoints(lat, lon, 10);
-  var topLeftX = lat-0.0003;
-  var topLeftY = lon-0.0003;
-  var width = 0.0006;
-  var height = 0.0006;
-  for (var i = 0; i < pts.length; i++)
-  {
-    var ptX = (pts[i][0][0]-topLeftX)/width*dim;
-    var ptY = (pts[i][0][1]-topLeftY)/height*dim;
-    ctx.fillStyle='black';
-    var dx = pts[i][0][0]-lat;
-    var dy = pts[i][0][1]-lon;
-    if (Math.sqrt(dx*dx+dy*dy) < 0.00012)
-    {
-      ctx.fillStyle='blue';
-      
-      
-      if (touchX > 0 && touchY > 0)
-      {
-        var dxt = ptX-touchX;
-        var dyt = ptY-touchY;
-        if (Math.sqrt(dxt*dxt+dyt*dyt) < 100)
-        {
-          var found = false;
-          for (var j = 0; j < things.length; j++)
-          {
-            var dxtmp = things[j][0]-pts[i][0][0];
-            var dytmp = things[j][1]-pts[i][0][1];
-            if (Math.sqrt(dxtmp*dxtmp+dytmp*dytmp) < 0.0002 && things[j][2] == pts[i][1])
-            {
-              found = true;
-              break;
-            }
-          }
-          if (!found)
-          {
-            things.push([pts[i][0][0], pts[i][0][1], pts[i][1]]);
-            document.getElementById("resres").innerHTML += "<br/>" + pts[i][1];
-            localStorage.setItem("animalsCaught", JSON.stringify(things));
-          }
-        }
-      }
-
-    }
-      ctx.font = "12px Arial";
-      ctx.fillText(pts[i][1], ptX, ptY);      
-  }    
-  
-  
-    ctx.beginPath();
-    ctx.fillStyle = 'blue';
-    ctx.arc(dim/2,dim/2,10,0,2*Math.PI);
-    ctx.fill();
-}
-
-
-var curLat = 0;
-var curLon = 0;
-var numStored = 20;
-var numUsed = 5;
-var prevLat = [];
-var prevLon = [];
-var count = parseInt(localStorage.getItem("count"));
-//localStorage.setItem("animalsCaught", JSON.stringify([]));
-things = JSON.parse(localStorage.getItem("animalsCaught"))
-if (!things)
+if (!localStorage.getItem("distWalked"))
 {
-  things = [];
+  localStorage.setItem("distWalked", "0.0");
 }
-for (var i = 0; i < things.length; i++)
+if (!localStorage.getItem("moneyWalked"))
 {
-  document.getElementById("resres").innerHTML += things[i][2] + "<br/>" ;
+  localStorage.setItem("moneyWalked", "0.0");
 }
-if (!count)
+if (!localStorage.getItem("water"))
 {
-  count = 0;
+  localStorage.setItem("water", "0.0");
 }
-function processPositionHigh(position) {
-    processPosition(position, true);
-  
-}
-  
-  function processPositionLow(position) {
-    processPosition(position, false);
-  }
-  
-function processPosition(position, isHigh)
-  {
-  
-  var lat = position.coords.latitude;
-  var lon = position.coords.longitude;
-  var avgLat = 0;
-  var avgLon = 0;
-  for (var i = 0; i < prevLat.length && i < numUsed; i++)
-  {
-    avgLat += prevLat[prevLat.length-i-1];
-    avgLon += prevLon[prevLon.length-i-1];
-  }
-  while (prevLat.length > numStored)
-  {
-    prevLat.splice(0,1);
-    prevLon.splice(0,1);
-  }
-  if (prevLat.length > 0)
-  {
-    var numUsing = Math.max(numUsed, prevLat.length);
-    avgLat /= numUsing;
-    avgLon /= numUsing;
-  }
-  if ((Math.abs(lat - avgLat) > 0.01 && Math.abs(lon-avgLon) > 0.01))
-  {
-    prevLat = [];
-    prevLon = [];
-    avgLat = lat;
-    avgLon = lon;
-  }
-  prevLat.push(lat);
-  prevLon.push(lon);
-  avgLat = (avgLat*prevLat.length+lat)/(prevLat.length+1);
-  avgLon = (avgLon*prevLon.length+lon)/(prevLon.length+1);
-  
-  if (prevLat.length > 0)
-  {
-    curLat = avgLat;
-    curLon = avgLon;
-    count += 1;
-    //document.getElementById("resres").innerHTML =  count + "<br/>" + curLat + "<br/>" + curLon;
-    showPosition(curLat, curLon);
-    
-    if (typeof(Storage) !== "undefined") {
-        localStorage.setItem("count", count + "");
-    } else {
-        console.log("sad no local storage");
-    }
-        
-    
-  }
-  setTimeout(function() 
-             {
-  if (isHigh)
-  {
-    navigator.geolocation.getCurrentPosition(processPositionHigh, onErrorLow,
-     { maximumAge: 500, timeout: 500, enableHighAccuracy: true } );
-  }
-    else
-    {
-      navigator.geolocation.getCurrentPosition(processPositionLow, onErrorHigh,
-     { maximumAge: 500, timeout: 500, enableHighAccuracy: false } );
-    }
-  }, 300);
-      
-}
-
-
-function onErrorLow(error) {
- //if (error.code === PositionError.TIMEOUT){
-     navigator.geolocation.getCurrentPosition(processPositionHigh, onErrorLow,
-     { maximumAge: 500, timeout: 500, enableHighAccuracy: true } );
- //}
-  // Handle other errors here
-
-}
-
-
-function onErrorHigh(error) {
- //if (error.code === PositionError.TIMEOUT){
-     navigator.geolocation.getCurrentPosition(processPositionLow, onErrorLow,
-     { maximumAge: 500, timeout: 500, enableHighAccuracy: false } );
-// }
-  // Handle other errors here
-
-}
-
-
- navigator.geolocation.getCurrentPosition(processPositionHigh ,onErrorLow,
-{ maximumAge: 500, timeout: 500, enableHighAccuracy: true } );
- //navigator.geolocation.getCurrentPosition(processPositionLow ,onErrorLow,
-//{ maximumAge: 2000, timeout: 1000, enableHighAccuracy: false } );
-
-
-  // blah
-</script>
-
-<script>
-function Geo(isHighAccuracy, GPSPingRate, getGPSCoords, getCurrentSpeed, onTouchDown, onTouchUp) {
-  this.getGPSCoords = getGPSCoords;
-  this.getSpeed = getCurrentSpeed;
-  this.GPSPingRate = GPSPingRate;
-  this.onTouchDown = onTouchDown;
-  this.onTouchUp = onTouchUp;
- 
-  // Max speed (anything higher will be capped to this) is 6 meters per second = 13.4 miles per hour
-  this.maxSpeed = 6;
- 
-  this.prevCheckTime = Date.now();
-  this.metersTraveled = 0.0;
-  this.positionCheckRate = 15;
-  this.curPositionCheck = 0;
-  this.prevLat = null;
-  this.prevLon = null;
- 
-  this.numGPSPrevUsed = 5;
-  this.latBuffer = [];
-  this.lonBuffer = [];
-  
-  var mThis = this;
-
-  this.ParseTouchDown = function(e)
-  {
-    if (e.changedTouches && e.changedTouches.length > 0)
-    {
-      var touchX = e.changedTouches[0].pageX;
-      var touchY = e.changedTouches[0].pageY;
-      if (mThis.onTouchDown)
-      {
-        mThis.onTouchDown(touchX, touchY);
-      }
-      
-    }
-    else if(e.clientX && e.clientY)
-    {
-      var touchX = e.clientX;
-      var touchY = e.clientY;
-      if (mThis.onTouchDown)
-      {
-        mThis.onTouchDown(touchX, touchY);
-      }
-    }
-  };
-
-  this.ParseTouchUp = function(e)
-  {
-    if (e.changedTouches && e.changedTouches.length > 0)
-    {
-      var touchX = e.changedTouches[0].pageX;
-      var touchY = e.changedTouches[0].pageY;
-      if (mThis.onTouchUp)
-      {
-        mThis.onTouchUp(touchX, touchY);
-      }
-      
-    }
-    else if(e.clientX && e.clientY)
-    {
-      var touchX = e.clientX;
-      var touchY = e.clientY;
-      if (mThis.onTouchUp)
-      {
-        mThis.onTouchUp(touchX, touchY);
-      }
-    }
-  };
-
-  this.CallGPSTracker = function(isHighAccuracy)
-  {
-    var options = {
-      maximumAge: mThis.GPSPingRate,
-      timeout: mThis.GPSPingRate,
-      enableHighAccuracy: isHighAccuracy
-    };
-
-    navigator.geolocation.getCurrentPosition(function(position) {
-      mThis.ProcessPosition(position.coords.latitude, position.coords.longitude, isHighAccuracy);
-    },
-    function(e) {
-      setTimeout(function() {
-        mThis.CallGPSTracker(isHighAccuracy);
-      }, mThis.GPSPingRate);
-    },
-    options
-    );
-  };
-
-  // In kilometers
-  this.PtDistance = function(lat1, lon1, lat2, lon2)
-  {
-    var toRadians = 2*3.1415926536/360.0;
-    var lat1r = lat1*toRadians;
-    var lon1r = lon1*toRadians;
-    var lat2r = lat2*toRadians;
-    var lon2r = lon2*toRadians;
-    
-    var sin_lat1 = Math.sin(lat1r);
-    var cos_lat1 = Math.cos(lat1r);
-    
-    var sin_lat2 = Math.sin(lat2r);
-    var cos_lat2 = Math.cos(lat2r);
-    
-    var delta_lon = lon2r - lon1r;
-    
-    var cos_delta_lon = Math.cos(delta_lon);
-    var sin_delta_lon = Math.sin(delta_lon);
-    
-    var val1 = (cos_lat2 * sin_delta_lon);
-    var val2 = (cos_lat1 * sin_lat2 -
-           sin_lat1 * cos_lat2 * cos_delta_lon);
-    var val3 = sin_lat1 * sin_lat2 + cos_lat1 * cos_lat2 * cos_delta_lon;
-    
-    var EARTH_RADIUS = 6371.009;
-    return Math.abs(Math.atan2(Math.sqrt(val1*val1+val2*val2), val3)*EARTH_RADIUS);
-    
-  }
-  
-  this.ProcessPosition = function(lat, lon, isHighAccuracy)
-  {
-    while (mThis.latBuffer.length > mThis.numGPSPrevUsed)
-    {
-      mThis.latBuffer.splice(0,1);
-      mThis.lonBuffer.splice(0,1);
-    }
-
-    var avgLat = 0;
-    var avgLon = 0;
-    for (var i = 0; i < mThis.latBuffer.length; i++)
-    {
-      avgLat += mThis.latBuffer[i];
-      avgLon += mThis.lonBuffer[i];
-    }
-    
-    if (mThis.latBuffer.length > 0)
-    {
-      avgLat /= mThis.latBuffer.length;
-      avgLon /= mThis.lonBuffer.length;
-    }
-    
-    if ((Math.abs(lat - avgLat) > 0.01 && Math.abs(lon-avgLon) > 0.01))
-    {
-      mThis.latBuffer = [];
-      mThis.lonBuffer = [];
-      avgLat = lat;
-      avgLon = lon;
-    }
-    avgLat = (avgLat*mThis.latBuffer.length+lat)/(mThis.latBuffer.length+1);
-    avgLon = (avgLon*mThis.lonBuffer.length+lon)/(mThis.lonBuffer.length+1);
-    
-    mThis.latBuffer.push(lat);
-    mThis.lonBuffer.push(lon);
-    
-    setTimeout(function() 
-    {
-      mThis.CallGPSTracker(isHighAccuracy);
-    }, mThis.GPSPingRate);
-    
-    if (mThis.latBuffer.length > 0)
-    {
-      if (!(mThis.prevLat && mThis.prevLon))
-      {
-          mThis.prevLat = avgLat;
-          mThis.prevLon = avgLon; 
-      }
-      
-      mThis.curPositionCheck += 1;
-      if (mThis.curPositionCheck >= mThis.positionCheckRate)
-      {
-          var curTime = Date.now();
-          var secondsElapsed = (curTime - mThis.prevCheckTime)/1000.0;
-          var metersTraveled = mThis.PtDistance(mThis.prevLat, mThis.prevLon, avgLat, avgLon)*1000.0;
-          console.log(metersTraveled);
-          
-          var metersPerSecond = metersTraveled/secondsElapsed;
-          
-          if (mThis.getSpeed)
-          {
-            mThis.getSpeed(metersPerSecond);
-          }
-          
-          if (metersTraveled < 1.0)
-          {
-            metersTraveled = 0.0;
-          }
-          
-          metersTraveled = Math.min(metersTraveled, mThis.maxSpeed*secondsElapsed);
-          mThis.metersTraveled += metersTraveled;
-          
-          mThis.prevLat = avgLat;
-          mThis.prevLon = avgLon;
-          mThis.curPositionCheck = 0;
-          
-          mThis.prevCheckTime = Date.now();
-      }
-      if (mThis.getGPSCoords)
-      {
-        mThis.getGPSCoords(avgLat, avgLon);
-      }
-    }
-  };
-
-
-  this.ExpDistr = function(avgAmount, maxAmount, v)
-  {
-    return Math.min(maxAmount, Math.round(-Math.log(v)*avgAmount));
-  };
-
-  // Works for negative values
-  this.GoodMod = function(a, b)
-  {
-    return (b + (a%b)) % b;
-  };
-
-
-  this.ClampLatLon = function(lat, lon)
-  {
-    var didChange = true;
-    while (didChange)
-    {
-      didChange = false;
-      while (lat > 360)
-      {
-        lat -= 360;
-        didChange = true;
-      }
-      while (lat < -360)
-      {
-        lat += 360;
-        didChange = true;
-      }
-      while (lon > 360)
-      {
-        lon -= 360;
-        didChange = true;
-      }
-      while (lon < -360)
-      {
-        lon += 360;
-        didChange = true;
-      }
-      while (lat > 90)
-      {
-        lat = 180-lat;
-        didChange = true;
-      }
-      while (lat < -90)
-      {
-        lat = -(180+lat);
-        didChange = true;
-      }
-      while (lon > 180)
-      {
-        lon -= 360;
-        didChange = true;
-      }
-      while (lon < -180)
-      {
-        lon += 360;
-        didChange = true;
-      }
-    }
-    return [lat, lon]
-  };
-
-  this.GeneratePoints = function(lat, lon, seed){
-    var scaleFactor = 10000.0;
-      
-    var latlon = mThis.ClampLatLon(lat, lon);
-    lat = latlon[0];
-    lon = latlon[1];
-    
-    // lat is from -90 to 90
-    lat = lat + 90.0;
-    // lon is from -180 to 180
-    lon = lon + 180.0;
-    
-    // split into about 15m wide cells
-    var latCellOriginal = Math.round(lat*scaleFactor);
-    var lonCellOriginal = Math.round(lon*scaleFactor);
-    
-    var cellActualLat = latCellOriginal/scaleFactor;
-    var cellActualLon = lonCellOriginal/scaleFactor;
-    
-    
-    var latCell = mThis.GoodMod(latCellOriginal,latMod);
-    var lonCell = mThis.GoodMod(lonCellOriginal,lonMod);
-    var points = [];
-    var lookRange = 7; // this needs to be odd
-    var viewRange = 7.0
-    for (var x = 0; x < lookRange; x++)
-    {
-      var xOffset = x-Math.floor(lookRange/2);
-      var curX = mThis.GoodMod(latCell+xOffset, latMod);
-      for (var y = 0; y < lookRange; y++)
-      {
-        var yOffset = y-Math.floor(lookRange/2);
-        var curY = mThis.GoodMod(lonCell+yOffset, lonMod);
-        
-    
-        var arng = getxor4069(Math.round(((curX+1)*latMod+(curY+1)*latMod*lonMod)*7477)+seed*983);
-        
-        var ptCountNoise = arng();
-        
-        
-        var ptCount = mThis.ExpDistr(3, 18, ptCountNoise);
-        
-        
-        var curCellActualLat = cellActualLat;
-        var curCellActualLon = cellActualLon;
-        
-        for (var i = 0; i < ptCount; i++)
-        {
-          var arngPt = getxor4069(Math.round(arng()*8353));
-          var ptX = arngPt()+xOffset;
-          var ptY = arngPt()+yOffset;
-          if(Math.sqrt(ptX*ptX+ptY*ptY) < viewRange)
-          {
-            var actualPtX = (latCellOriginal+ptX)/scaleFactor-90.0;
-            var actualPtY = (lonCellOriginal+ptY)/scaleFactor-180.0;
-            latlon = mThis.ClampLatLon(actualPtX, actualPtY);
-            points.push([ptX, ptY, latlon[0], latlon[1], arngPt]);
-          }
-        }
-      }
-    }
-    return points;
-  };
-  
-  window.addEventListener('ontouchstart', this.ParseTouchDown);
-  window.addEventListener('touchstart', this.ParseTouchDown);
-  window.addEventListener('mousedown', this.ParseTouchDown);
-  window.addEventListener('onmousedown', this.ParseTouchDown);
-
-  window.addEventListener('ontouchend', this.ParseTouchUp);
-  window.addEventListener('touchend', this.ParseTouchUp);
-  window.addEventListener('mouseup', this.ParseTouchUp);
-  window.addEventListener('onmouseup', this.ParseTouchUp);
-  
-  this.CallGPSTracker(isHighAccuracy);
-}
-
-/*
-var screenWidth = window.innerWidth
-|| document.documentElement.clientWidth
-|| document.body.clientWidth;
-
-var screenHeight = window.innerHeight
-|| document.documentElement.clientHeight
-|| document.body.clientHeight;
-function showPosition(lat, lon) {
-  var c = document.getElementById("myCanvas");
-  var dim = Math.min(screenWidth, screenHeight);
-  c.width = dim;
-  c.height = dim;
-  var ctx = c.getContext("2d");
-  var pts = generatePoints(lat, lon, 10);
-  var topLeftX = lat-0.0003;
-  var topLeftY = lon-0.0003;
-  var width = 0.0006;
-  var height = 0.0006;
-  for (var i = 0; i < pts.length; i++)
-  {
-    var ptX = (pts[i][0][0]-topLeftX)/width*dim;
-    var ptY = (pts[i][0][1]-topLeftY)/height*dim;
-    ctx.fillStyle='black';
-    var dx = pts[i][0][0]-lat;
-    var dy = pts[i][0][1]-lon;
-    if (Math.sqrt(dx*dx+dy*dy) < 0.00012)
-    {
-      ctx.fillStyle='blue';
-      
-      
-      if (touchX > 0 && touchY > 0)
-      {
-        var dxt = ptX-touchX;
-        var dyt = ptY-touchY;
-        if (Math.sqrt(dxt*dxt+dyt*dyt) < 100)
-        {
-          var found = false;
-          for (var j = 0; j < things.length; j++)
-          {
-            var dxtmp = things[j][0]-pts[i][0][0];
-            var dytmp = things[j][1]-pts[i][0][1];
-            if (Math.sqrt(dxtmp*dxtmp+dytmp*dytmp) < 0.0002 && things[j][2] == pts[i][1])
-            {
-              found = true;
-              break;
-            }
-          }
-          if (!found)
-          {
-            things.push([pts[i][0][0], pts[i][0][1], pts[i][1]]);
-            document.getElementById("resres").innerHTML += "<br/>" + pts[i][1];
-            localStorage.setItem("animalsCaught", JSON.stringify(things));
-          }
-        }
-      }
-
-    }
-      ctx.font = "12px Arial";
-      ctx.fillText(pts[i][1], ptX, ptY);      
-  }    
-  
-  
-    ctx.beginPath();
-    ctx.fillStyle = 'blue';
-    ctx.arc(dim/2,dim/2,10,0,2*Math.PI);
-    ctx.fill();
-}
-
-
-var curLat = 0;
-var curLon = 0;
-var numStored = 20;
-
-var count = parseInt(localStorage.getItem("count"));
-//localStorage.setItem("animalsCaught", JSON.stringify([]));
-things = JSON.parse(localStorage.getItem("animalsCaught"))
-if (!things)
+if (!localStorage.getItem("fire"))
 {
-  things = [];
+  localStorage.setItem("fire", "0.0");
 }
-for (var i = 0; i < things.length; i++)
+if (!localStorage.getItem("grass"))
 {
-  document.getElementById("resres").innerHTML += things[i][2] + "<br/>" ;
+  localStorage.setItem("grass", "0.0");
 }
-if (!count)
+if (!localStorage.getItem("weight"))
 {
-  count = 0;
+  localStorage.setItem("weight", "0.0");
 }
-  // blah
- */
- 
+if (!localStorage.getItem("size"))
+{
+  localStorage.setItem("size", "0.0");
+}
+if (!localStorage.getItem("collected"))
+{
+  localStorage.setItem("collected", JSON.stringify([]));
+}
+var distWalked = parseFloat(localStorage.getItem("distWalked"));
+var moneyWalked = parseFloat(localStorage.getItem("moneyWalked"));
+var water = parseFloat(localStorage.getItem("water"));
+var fire = parseFloat(localStorage.getItem("fire"));
+var grass = parseFloat(localStorage.getItem("grass"));
+var weight = parseFloat(localStorage.getItem("weight"));
+var size = parseFloat(localStorage.getItem("size"));
+var collected = JSON.parse(localStorage.getItem("collected"));
+var screenWidth;
+var screenHeight;
+var dim;
+
+var touchX = -1;
+var touchY = -1;
+function TouchDown(x, y)
+{
+  touchX = x;
+  touchY = y;
+  doneTouch = false;
+}
+
+var doneTouch = false;
+function TouchUp(x, y)
+{
+  doneTouch = true;
+}
+
+window.onload = function() {
+     
+  screenWidth = window.innerWidth
+  || document.documentElement.clientWidth
+  || document.body.clientWidth;
+  screenHeight = window.innerHeight
+  || document.documentElement.clientHeight
+  || document.body.clientHeight;
+  var c = document.getElementById("world");
+  dim = (screenWidth + screenHeight)/2.0;
+  c.width = screenWidth;
+  c.height = screenHeight;
+  console.log(screenWidth + " " + screenHeight);
+  geo = new Geo(true, (curDay*10) % (365*4), GetPosition,GetSpeed, TouchDown, TouchUp);
+};
+var geo;
 function GetPosition(lat, lon)
 {
-}
+  /*
+  var screenWidth = window.innerWidth
+  || document.documentElement.clientWidth
+  || document.body.clientWidth;
+  var screenHeight = window.innerHeight
+  || document.documentElement.clientHeight
+  || document.body.clientHeight;
+  var dim = (screenWidth + screenHeight)/2.0;
+  c.width = screenWidth;
+  c.height = screenHeight;
+  */
+  var c = document.getElementById("world");
+  var ctx = c.getContext("2d");
+  var viewRange = geo.MetersToDegrees(20.0);
+  var tmpTinyRange = geo.MetersToDegrees(0.001);
+  var viewWidth = viewRange*screenWidth/dim;
+  var viewHeight = viewRange*screenHeight/dim;
+  var topLeftViewX = lat-viewWidth/2;
+  var topLeftViewY = lon-viewHeight/2;
+  ctx.beginPath();
+  ctx.rect(0, 0, screenWidth, screenHeight);
+  ctx.fillStyle = "#aaaaaa";
+  ctx.fill();
+  var points = geo.GeneratePoints(lat, lon, 27);
+  for (var i = 0; i < points.length; i++)
+  {
+    var pt = points[i];
+    var ptX = pt[0];
+    var ptY = pt[1];
+    var ptLatX = pt[2];
+    var ptLatY = pt[3];
+    var dx = ptLatX-lat;
+    var dy = ptLatY-lon;
+    var dist = Math.sqrt(dx*dx+dy*dy);
+    var minVal = 10.0/15.0;
+    var maxDist = viewRange*0.45;
+    var ratio = Math.sqrt(Math.max(maxDist-dist,0.000001)/(maxDist))
+    var col = ratio*(1.0-minVal)+minVal;
+    col = Math.round(255*col);
+    var ptScreenX = (ptLatX-topLeftViewX)*screenWidth/viewWidth;
+    var ptScreenY = (ptLatY-topLeftViewY)*screenHeight/viewHeight;
+    var prng = pt[4];
+    prng();
+    prng();
+    prng();
+    prng();
+    prng();
+    if (prng() < 0.012)
+    {
+      var curtype = Math.floor(prng()*4.999);
+      var cols = [
+        [255, 0, 0], // fire
+        [0, 255, 0], // grass
+        [0, 0, 255], // water
+        [255, 255, 255], // size
+        [0, 0, 0] // weight
+      ];
+      var kinds = [
+        'fire',
+        'grass',
+        'water',
+        'size',
+        'weight'
+      ];
+      
+      
+      var alreadyGot = false;
+      for (var j = 0; j < collected.length; j++)
+      {
+        if (Math.abs(collected[j][0]-ptLatX) < 0.000001 && Math.abs(collected[j][1] - ptLatY) < 0.000001)
+        {
+          alreadyGot = true;
+          break;
+        }
+      }
+      if (alreadyGot)
+      {
+        continue;
+      }
+      
+      
+      var col = cols[curtype];
+      var r = col[0];
+      var g = col[1];
+      var b = col[2];
+      var kind = kinds[curtype];
+      
+      
+      if (touchX > 0 && touchY > 0 && Math.abs(touchX - ptScreenX) < 30 && Math.abs(touchY - ptScreenY) < 30)
+      {
+        collected.push([ptLatX, ptLatY]);
+        localStorage.setItem("collected", JSON.stringify(collected));
+        if (kind === 'fire')
+        {
+          fire += 1;
+          localStorage.setItem("fire", fire + "");
+        }
+        else if(kind == 'grass')
+        {
+          grass += 1;
+          localStorage.setItem("grass", grass + "");
+        }
+        else if(kind == 'water')
+        {
+          water += 1;
+          localStorage.setItem("water", water + "");
+        }
+        else if(kind == 'size')
+        {
+          size += 1;
+          localStorage.setItem("size", size + "");
+        }
+        else if(kind == "weight")
+        {
+          weight += 1;
+          localStorage.setItem("weight", weight + "");
+        }
+        continue;
+      }
+      
+      
+      ctx.beginPath();
+      ctx.fillStyle = 'rgb(' + r + ', ' + g + ', ' + b + ')';
+      ctx.font = "14px Arial";    
+      ctx.arc(ptScreenX-5,ptScreenY-5,10,0,2*Math.PI);
+      ctx.fill();
+      
+      
+      
+    }
+  }
+  
+  ctx.beginPath();
+  ctx.fillStyle = 'black';
+  ctx.arc(dim/2-10,dim/2-10,20,0,2*Math.PI);
+  ctx.fill();
+  
+  ctx.fillStyle = 'black';
+  ctx.font = "15px Arial";
+  ctx.fillText("walked: " + Math.round(distWalked), 20, 30); 
+  ctx.font = "13px Arial";   
+  ctx.fillText("fire: " + Math.round(fire), 20, 50);    
+  ctx.fillText("water: " + Math.round(water), 20, 65);    
+  ctx.fillText("grass: " + Math.round(grass), 20, 80);    
+  ctx.fillText("size: " + Math.round(size), 20, 95);    
+  ctx.fillText("weight: " + Math.round(weight), 20, 110);
 
-function GetSpeed(metersPerSecond)
+  if (doneTouch)
+  {
+    touchX = -1;
+    touchY = -1;
+  }  
+}
+function GetSpeed(metersPerSecond, metersDiff)
 {
-  document.getElementById("resresres").innerHTML += metersPerSecond + "<br/><br/>" + thing.metersTraveled;
+  distWalked += metersDiff;
+  moneyWalked += metersDiff;
+  localStorage.setItem("distWalked", distWalked);
+  localStorage.setItem("moneyWalked", moneyWalked);
 }
- 
-var thing = new Geo(true, 500, GetPosition,GetSpeed);
- 
-</script>
-</body>
 
+</script>
+
+
+</head>
+<body>
+<canvas id="world"></canvas>
+</body>
 </html>
