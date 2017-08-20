@@ -1,0 +1,264 @@
+<html>
+<head>
+<script>
+function SyncedStorage(t,e,i){this.clientId=t,this.onApiLoad=i;var n=this;this.setItem=function(t,e){n.settingsObject[t]=e},this.getItem=function(t){return n.settingsObject[t]},this.removeItem=function(t){delete n.settingsObject[t]},this.reload=function(t){gapi.client.drive.files.get({fileId:this.settingsFileId,mimeType:"application/json",alt:"media"}).then(function(e){n.settingsObject=JSON.parse(e.body),t&&t()})},this.updateFileContent=function(t,e,i){var n=new XMLHttpRequest;n.responseType="json",n.onreadystatechange=function(){n.readyState==XMLHttpRequest.DONE&&i(n.response)},n.open("PATCH","https://www.googleapis.com/upload/drive/v3/files/"+t+"?uploadType=media"),n.setRequestHeader("Authorization","Bearer "+gapi.auth.getToken().access_token),n.send(e)},this.save=function(t){var e=new Blob([JSON.stringify(n.settingsObject)],{type:"application/json"});n.updateFileContent(n.settingsFileId,e,function(e){t&&t()})},this.loadConfigFile=function(t,e){n.getConfigFile(t,function(i,o){o?e(null,o):i?e(i,null):n.makeConfigFile(t,function(t,i){e(t,i)})})},this.makeConfigFile=function(t,e){var i={mimeType:"application/json",body:"{}"},n=function(t){t.id?e(t,null):e(null,t)};gapi.client.drive.files.insert({title:t,parents:["appDataFolder"],media:i,fields:"id"}).execute(n)},this.getConfigFile=function(t,e){gapi.client.drive.files.list({parents:["appDataFolder"],title:"config.json",pageSize:100}).execute(function(i,n){var o=!1,a=null;i.items.forEach(function(e){e.title===t&&(!o||e.id<o)&&(a=e,o=e.id)}),e(a,null)})},this.onAuthComplete=function(t){gapi.client.load("drive","v2",function(){n.loadConfigFile(e,function(e,i){i?t(i):(n.settingsFileId=e.id,n.reload(function(){t(null)}))})})},this.handleAuthResultManual=function(t,e){t&&!t.error?n.onAuthComplete(e):e(null,t.error)},this.handleAuthResultImmediate=function(e,i){e&&!e.error?n.onAuthComplete(i):gapi.auth.authorize({client_id:t,scope:["https://www.googleapis.com/auth/drive.appfolder","https://www.googleapis.com/auth/drive.file"],immediate:!1},function(t){n.handleAuthResultManual(t,i)})},this.authenticate=function(e){gapi.auth.authorize({client_id:t,scope:["https://www.googleapis.com/auth/drive.appfolder","https://www.googleapis.com/auth/drive.file"],immediate:!0},function(t){n.handleAuthResultImmediate(t,e)})},gapi.load("client",function(){setTimeout(function(){n.authenticate(function(t){n.onApiLoad(n,t)})},1)})}
+</script>
+</head>
+<body>
+
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+Local stuff:<br/>
+<div id="curThings"></div>
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+Saved remotely stuff:<br/>
+<div id="savedThings"></div>
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br /><br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br /><br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br /><br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<button id="clearlocald", onclick="clearlocal()" disabled=true>Clear Local</button>
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<br /><br /><br /><br />
+<script>
+var syncedStorage = null;
+
+function clearlocal()
+{
+  var keys = [];
+  for ( var i = 0, len = localStorage.length; i < len; ++i ) {
+    keys.push(localStorage.key(i));
+  }
+  for (var i = 0; i < keys.length; i++)
+  {
+    localStorage.removeItem(keys[i]);
+  }
+  viewLocal();
+}
+
+function viewLocal()
+{
+  document.getElementById("curThings").innerHTML = "";
+  for ( var i = 0, len = localStorage.length; i < len; ++i ) {
+    document.getElementById("curThings").innerHTML += localStorage.key(i) + ": " + localStorage.getItem(localStorage.key(i)) + "<br />";
+  }
+}
+
+function viewSaved()
+{ 
+  document.getElementById("savedThings").innerHTML = "";
+  for (var key in syncedStorage.settingsObject) {
+    if (syncedStorage.settingsObject.hasOwnProperty(key)) {
+      document.getElementById("savedThings").innerHTML += key + ": " + syncedStorage.settingsObject[key] + "<br/>";
+    }
+  }
+}
+
+function loadedSyncedStorage(resSyncedStorage, err)
+{
+  if(err)
+  {
+    console.error(err);
+    return;
+  }
+  syncedStorage = resSyncedStorage;
+  //document.getElementById("plsSaveMe").disabled = false;
+  //document.getElementById("plsLoadMe").disabled = false;
+  document.getElementById("clearlocald").disabled = false;
+  viewSaved();
+  viewLocal();
+  //syncedStorage.setItem("hi", "totesbeanlmao");
+
+}
+
+function loadedDriveAPI()
+{
+viewLocal();
+  SyncedStorage('696152477143-ge4ksf8da69n2id28jhlsr7makg634fs.apps.googleusercontent.com', 'config.json', loadedSyncedStorage);
+}
+viewLocal();
+function saveme(){
+  viewLocal();
+  syncedStorage.settingsObject = {};
+  for ( var i = 0, len = localStorage.length; i < len; ++i ) {
+    syncedStorage.setItem(localStorage.key(i), localStorage.getItem(localStorage.key(i)));
+  }
+  syncedStorage.save(function() {
+    document.getElementById("plsSaveMe").disabled = true;
+    viewSaved();
+  });
+}
+
+function loadMe() {
+  for (var key in syncedStorage.settingsObject) {
+    if (syncedStorage.settingsObject.hasOwnProperty(key)) {
+      localStorage.setItem(key, syncedStorage[key]);
+    }
+  }
+  document.getElementById("plsLoadMe").disabled = true;
+  viewSaved();
+  viewLocal();
+}
+
+</script>
+
+<script src="http://apis.google.com/js/client.js?onload=loadedDriveAPI"></script>
+</body>
+</html>
