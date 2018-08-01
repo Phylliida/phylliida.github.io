@@ -86,12 +86,16 @@ GOL.prototype.set = function(state) {
     var gl = this.igloo.gl;
     var rgba = new Uint8Array(this.statesize[0] * this.statesize[1] * 4);
     for (var i = 0; i < state.length; i++) {
+        rgba[i] = state[i];
+        
+        /*
         var ii = i * 4;
         //rgba[ii + 0] = rgba[ii + 1] = rgba[ii + 2] = state[i] ? 255 : 0;
         rgba[ii + 2] = state[i] ? 255 : 0;
-        rgba[ii + 0] = state[i] ? 0 : 125;
+        rgba[ii + 0] = state[i] ? 0 : 255;
         rgba[ii + 1] =  state[i] ? 0 : Math.round(255/1.5);
         rgba[ii + 3] = 255;
+        */
     }
     this.textures.front.subset(rgba, 0, 0, this.statesize[0], this.statesize[1]);
     return this;
@@ -103,11 +107,16 @@ GOL.prototype.set = function(state) {
  * @returns {GOL} this
  */
 GOL.prototype.setRandom = function(p) {
-    var gl = this.igloo.gl, size = this.statesize[0] * this.statesize[1];
-    p = p == null ? 0.5 : p;
+    var gl = this.igloo.gl, size = this.statesize[0] * this.statesize[1]*4;
+    p = p == null ? 0.8 : p;
     var rand = new Uint8Array(size);
-    for (var i = 0; i < size; i++) {
-        rand[i] = Math.random() < p ? 1 : 0;
+    for (var i = 0; i < size; i+= 4) {
+        var isA = Math.random() < p;
+        
+        rand[i*4] = isA ? 255 : 0;
+        rand[i*4+1] = 170;
+        rand[i*4+2] = isA ? 0 : 255;
+        rand[i*4+3] = 255;
     }
     this.set(rand);
     return this;
@@ -118,7 +127,19 @@ GOL.prototype.setRandom = function(p) {
  * @returns {GOL} this
  */
 GOL.prototype.setEmpty = function() {
-    this.set(new Uint8Array(this.statesize[0] * this.statesize[1]));
+  
+    var emptyState = new Uint8Array(this.statesize[0] * this.statesize[1]*4);
+    var numCells = this.statesize[0]*this.statesize[1];
+    var ii = 0;
+    for (var i = 0; i < numCells; i++)
+    {
+      emptyState[ii] = 255;
+      emptyState[ii+1] = 170;
+      emptyState[ii+2] = 0;
+      emptyState[ii+3] = 255;
+      ii += 4;
+    }
+    this.set(emptyState);
     
     var midSpotX = Math.floor(this.statesize[0]/2);
     var midSpotY = Math.floor(this.statesize[1]/2);
@@ -165,14 +186,17 @@ GOL.prototype.step = function() {
         .attrib('quad', this.buffers.quad, 2)
         .uniformi('state', 0)
         .uniform('scale', this.statesize)
-        .uniform('simF', parseFloat(document.getElementById("fVal").value)/1000.0)
-        .uniform('simK', parseFloat(document.getElementById("kVal").value)/1000.0)
+        .uniform('simF', globalFVal)
+        .uniform('simK', globalKVal)
         .uniform('simdA', parseFloat(document.getElementById("dAVal").value)/1000.0)
-        .uniform('simdB', parseFloat(document.getElementById("dBVal").value)/1000.0)
+        .uniform('simdB', globaldBVal)
         .draw(gl.TRIANGLE_STRIP, 4);
     this.swap();
     return this;
 };
+
+var uriHolderThing;
+
 
 /**
  * Render the Game of Life state stored on the GPU.
@@ -205,7 +229,7 @@ GOL.prototype.poke = function(x, y, state) {
     var gl = this.igloo.gl,
         v = state * 255;
     
-    this.textures.front.subset([255-v, Math.round(255/1.5), v, 255], x, y, 1, 1);
+    this.textures.front.subset([255-v, Math.round(255.0/1.5), v, 255], x, y, 1, 1);
     return this;
 };
 
@@ -217,9 +241,9 @@ GOL.prototype.get = function() {
     this.framebuffers.step.attach(this.textures.front);
     var rgba = new Uint8Array(w * h * 4);
     gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, rgba);
-    var state = new Uint8Array(w * h);
-    for (var i = 0; i < w * h; i++) {
-        state[i] = rgba[i * 4] > 128 ? 1 : 0;
+    var state = new Uint8Array(w * h*4);
+    for (var i = 0; i < w * h*4; i++) {
+        state[i] = rgba[i];
     }
     return state;
 };
@@ -234,11 +258,8 @@ GOL.prototype.get = function() {
 function stepStuff()
 {
   gol.step();
-  gol.draw();
   gol.step();
-  gol.draw();
   gol.step();
-  gol.draw();
   gol.step();
   gol.draw();
   setTimeout(stepStuff, 1);
@@ -345,9 +366,12 @@ function Controller(gol) {
 /* Initialize everything. */
 var gol = null, controller = null;
 $(document).ready(function() {
-    updateSliders();
+    resetParams();
+    var uriHolderThingTmp = new URI();
+    uriHolderThing = new URI("https://yams.com/?" + uriHolderThingTmp.fragment());
+    assignUriToSliders();
     var $canvas = $('#life');
-    gol = new GOL($canvas[0]).draw().start();
+    gol = new GOL($canvas[0], 1).draw().start();
     controller = new Controller(gol);
 });
 
@@ -358,11 +382,58 @@ $(window).on('keydown', function(event) {
 
 
 
-function updateSliders() {
-  document.getElementById("curFVal").innerText = parseFloat(document.getElementById("fVal").value)/1000.0;
-  document.getElementById("curKVal").innerText = parseFloat(document.getElementById("kVal").value)/1000.0;
-  document.getElementById("curdAVal").innerText = parseFloat(document.getElementById("dAVal").value)/1000.0;
-  document.getElementById("curdBVal").innerText = parseFloat(document.getElementById("dBVal").value)/1000.0;
+function assignUriToSliders()
+{
+  // get key-val dictionary of uri params
+  var uriVals = uriHolderThing.search(true);
+  if (uriVals.hasOwnProperty("F") && !isNaN(parseFloat(uriVals['F'])))
+  {
+    document.getElementById("fVal").value = Math.round(parseFloat(uriVals['F'])*1000);
+    globalFVal = parseFloat(uriVals['F']);
+  }
+  
+  if (uriVals.hasOwnProperty("K") && !isNaN(parseFloat(uriVals['K'])))
+  {
+    document.getElementById("kVal").value = Math.round(parseFloat(uriVals['K'])*1000);
+    globalKVal = parseFloat(uriVals['K']);
+  }
+    
+  if (uriVals.hasOwnProperty("DB") && !isNaN(parseFloat(uriVals['DB'])))
+  {
+    document.getElementById("dBVal").value = Math.round(parseFloat(uriVals['DB'])*1000);
+    globaldBVal = parseFloat(uriVals['DB']);
+  }
+  
+  
+  updateSliderLogs();
+  
+}
+
+
+var globalFVal = 0.048;
+var globalKVal = 0.067;
+var globaldBVal = 0.286;
+
+
+function modifiedSliders()
+{
+   if (uriHolderThing)
+   {
+    globalFVal = parseFloat(document.getElementById("fVal").value)/1000.0;
+      globalKVal = parseFloat(document.getElementById("kVal").value)/1000.0;
+    globaldBVal = parseFloat(document.getElementById("dBVal").value)/1000.0;
+    uriHolderThing.search({'K': globalKVal, 'F': globalFVal, 'DB': globaldBVal});
+    console.log(uriHolderThing.search() + "");
+    window.location.hash = "" + uriHolderThing.query();
+  }
+  updateSliderLogs();
+
+}
+
+function updateSliderLogs() {
+  document.getElementById("curFVal").innerText = "" + globalFVal;
+  document.getElementById("curKVal").innerText = "" + globalKVal;
+  document.getElementById("curdBVal").innerText = "" + globaldBVal;
 }
 
 
@@ -373,13 +444,10 @@ function updateTextInput(val) {
 function resetParams()
 {
   // 0.048 simK 0.1 simdA 1 simdB 0.286 simdt 1 is also cool
-    console.log("simF " + (parseFloat(document.getElementById("fVal").value)/1000.0) + " simK " + (parseFloat(document.getElementById("kVal").value)/1000.0) + " simdA " + 
-        (parseFloat(document.getElementById("dAVal").value)/1000.0) + " simdB " +
-        (parseFloat(document.getElementById("dBVal").value)/1000.0));
   document.getElementById("fVal").value = 48;
   document.getElementById("kVal").value = 67;
   document.getElementById("dAVal").value = 1000;
-  document.getElementById("dBVal").value = 286;
+  modifiedSliders();
 }
 
 
