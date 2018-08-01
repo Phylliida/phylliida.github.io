@@ -12,7 +12,7 @@ uniform float simdt;
 
 vec2 get(vec2 offset) {
     vec2 res = texture2D(state, (gl_FragCoord.xy + offset) / scale).xz;
-    vec2 actualRes = vec2(min(1.0, res.x*2.0), res.y);
+    vec2 actualRes = vec2(res.x, res.y);
     return actualRes;
 }
 
@@ -22,6 +22,8 @@ void main() {
   float dB = simdB;
   float f = simF;
   float k = simK;
+  //float dt = simdt; // not passed in rn
+  
   float dt = 1.0;
   
   vec2 grad =
@@ -43,5 +45,5 @@ void main() {
   
   
   
-  gl_FragColor = vec4(newA/2.0, newA/1.5, newB, 1.0);
+  gl_FragColor = vec4(newA, newA/1.5, newB, 1.0);
 }

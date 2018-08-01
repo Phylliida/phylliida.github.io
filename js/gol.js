@@ -205,7 +205,7 @@ GOL.prototype.poke = function(x, y, state) {
     var gl = this.igloo.gl,
         v = state * 255;
     
-    this.textures.front.subset([255-v+125, Math.round(255/1.5), v, 255], x, y, 1, 1);
+    this.textures.front.subset([255-v, Math.round(255/1.5), v, 255], x, y, 1, 1);
     return this;
 };
 
@@ -361,8 +361,8 @@ $(window).on('keydown', function(event) {
 function updateSliders() {
   document.getElementById("curFVal").innerText = parseFloat(document.getElementById("fVal").value)/1000.0;
   document.getElementById("curKVal").innerText = parseFloat(document.getElementById("kVal").value)/1000.0;
-  document.getElementById("curdAVal").innerText = parseFloat(document.getElementById("dAVal").value)/100.0;
-  document.getElementById("curdBVal").innerText = parseFloat(document.getElementById("dBVal").value)/100.0;
+  document.getElementById("curdAVal").innerText = parseFloat(document.getElementById("dAVal").value)/1000.0;
+  document.getElementById("curdBVal").innerText = parseFloat(document.getElementById("dBVal").value)/1000.0;
 }
 
 
