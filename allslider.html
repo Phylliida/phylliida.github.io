@@ -1,0 +1,210 @@
+<html>
+<head>
+<script src="/punycode.js"></script>
+<style>
+/* from https://stackoverflow.com/a/10639419/2924421 */
+html{
+	min-height:100%;/* make sure it is at least as tall as the viewport */
+	position:relative;
+}
+body{
+	height:100%; /* force the BODY element to match the height of the HTML element */
+}
+#cloud-container{
+	position:absolute;
+	top:0;
+	bottom:0;
+	left:0;
+	right:0;
+	overflow:hidden;
+	z-index:-1; /* Remove this line if it's not going to be a background! */
+}
+.slider {
+	-webkit-appearance: none;
+	height: 15px;
+	width: 100vh;
+	border-radius: 0px;
+	background: #d3d3d3;
+	outline: none;
+	opacity: 0.7;
+	margin-top: 0px;
+	-webkit-transition: .2s;
+	transition: opacity .2s;
+}
+
+
+.slider::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 25px;
+	height: 25px;
+	border-radius: 50%;
+	background: #AAAAAA;
+	cursor: pointer;
+}
+
+.slider::-moz-range-thumb {
+	width: 25px;
+	height: 25px;
+	border-radius: 50%;
+	background: #AAAAAA;
+	cursor: pointer;
+}
+
+
+.slider {
+	position: absolute;
+	margin-top: 50vh;
+	margin-left: -49vh;
+	transform: rotate(90deg);
+	-moz-transform: rotate(90deg); /*do same for other browsers if required*/
+}
+
+
+button {
+    background-color: #BBBBBB; /* Green */
+    color: black;
+	width: 100px;
+	height: 100px;
+    padding: 0px 0px;
+    text-align: center;
+    display: inline-block;
+    font-size: 16px;
+}
+
+#buttonHolder
+{
+	margin-left: 30px;
+}
+
+</style>
+</head>
+<body>
+<script>
+
+function setClipboardWithMe()
+{
+	var myId = parseInt(this.class.substring(1));
+	
+	try
+	{
+		var textThing = punycode.ucs2.encode([myId]);
+		copyToClipboard(textThing);
+	}
+	catch(err)
+	{
+		console.log(this.class + " has error"  + err);
+	}
+}
+
+var needToGo = false;
+function updateStuffH()
+{
+	needToGo = true;
+}
+
+function updateStuffHH()
+{
+	if (needToGo)
+	{
+		updateStuff();
+		needToGo = false;
+		setTimeout(updateStuffHH, 100);
+	}
+	else
+	{
+		setTimeout(updateStuffHH, 100);
+	}
+	
+}
+
+var allButtons = [];
+var numButtons = 100;
+var uniOffset = 100;
+function setupStuff()
+{
+	var buttonHolder = document.getElementById("buttonHolder");
+	for (var i = uniOffset; i < numButtons+uniOffset; i++)
+	{
+		var thing = document.createElement("button");
+		thing.onclick = setClipboardWithMe;
+		allButtons.push(thing);
+		try
+		{
+			var textThing = punycode.ucs2.encode([i]);
+			thing.innerHTML = i + "<br/>" + textThing;
+			thing.class = "c" + i;
+			buttonHolder.appendChild(thing);
+		}
+		catch(err)
+		{
+		}
+	}
+}
+
+function updateStuff()
+{
+	uniOffset = parseInt(document.getElementById("baseId").value);
+	console.log(uniOffset);
+	for (var i = 0; i < numButtons; i++)
+	{
+		try
+		{
+			var num = i+uniOffset;
+			var textThing = punycode.ucs2.encode([num]);
+			allButtons[i].innerHTML = textThing + "<br>" + num + "<br>" + "0x" + num.toString(16);
+			allButtons[i].class = "c" + (num);
+		}
+		catch(err)
+		{
+			console.log(err);
+		}
+	}
+}
+
+
+
+// from https://stackoverflow.com/a/33928558/2924421
+
+// Copies a string to the clipboard. Must be called from within an 
+// event handler such as click. May return false if it failed, but
+// this is not always possible. Browser support for Chrome 43+, 
+// Firefox 42+, Safari 10+, Edge and IE 10+.
+// IE: The clipboard feature may be disabled by an administrator. By
+// default a prompt is shown the first time the clipboard is 
+// used (per session).
+function copyToClipboard(text) {
+    if (window.clipboardData && window.clipboardData.setData) {
+        // IE specific code path to prevent textarea being shown while dialog is visible.
+        return clipboardData.setData("Text", text); 
+
+    } else if (document.queryCommandSupported && document.queryCommandSupported("copy")) {
+        var textarea = document.createElement("textarea");
+        textarea.textContent = text;
+        textarea.style.position = "fixed";  // Prevent scrolling to bottom of page in MS Edge.
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            return document.execCommand("copy");  // Security exception may be thrown by some browsers.
+        } catch (ex) {
+            console.warn("Copy to clipboard failed.", ex);
+            return false;
+        } finally {
+            document.body.removeChild(textarea);
+        }
+    }
+}
+
+</script>
+<div id="cloud-container">
+<input type="range" min="0" max="10000" value="0" id="baseId" class="slider" oninput="updateStuffH();">
+</div>
+	<br/><br/>
+<div id="buttonHolder"></div>
+<script>
+	
+setupStuff();
+updateStuffHH();
+</script>
+</body>
+</html>

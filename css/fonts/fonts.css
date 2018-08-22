@@ -1,0 +1,28 @@
+@font-face 
+{
+	font-family: 'lmmono12-regular';
+	src: url("LatinModernMathFont/latinmodern-math.otf") format("opentype");
+}
+
+@font-face
+{
+	font-family: 'inconsolata';
+	src: url("Inconsolata/Inconsolata-Regular.ttf");
+}
+
+@font-face
+{
+	font-family: 'boneveno';
+	src: url("Bonveno/bonvenocf-light-webfont.woff") format('woff');
+}
+
+@font-face
+{
+	font-family: 'alex-brush';
+	src: url("AlexBrush/alexbrush-regular-webfont.ttf");
+}
+@font-face
+{
+	font-family: 'amaticsc';
+	src: url('Amaticsc/amaticsc-regular-webfont.ttf');
+}

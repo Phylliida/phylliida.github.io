@@ -1,0 +1,342 @@
+<html>
+<head>
+<script src="/punycode.js"></script>
+<link rel="stylesheet" type="text/css" href="/css/fonts/fonts.css">
+<style>
+button {
+    background-color: #BBBBBB; /* Green */
+    color: black;
+	width: 100px;
+	height: 100px;
+    padding: 0px 0px;
+    text-align: center;
+    display: inline-block;
+    font-size: 16px;
+    /*font-family: "Arial", "lmmono12-regular", "emojiiFont", "unifont", "NotoSansCJK", "Symbola", "Musica", "Unidings", "Myanmar", "NotomojiColor", "Notomoji", "sans-serif";*/
+}
+
+.buttonh {
+    background-color: #BBBBBB; /* Green */
+    color: black;
+    padding: 15px 32px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    width: 300px;
+    height: 50px;
+}
+#charids {
+    color: black;
+	width: 80%;
+	height: 40px;
+    padding: 20px 0px;
+    text-align: left;
+    display: inline-block;
+    font-size: 16px;
+}
+#workspace {
+    color: black;
+	width: 80%;
+	height: 40px;
+    padding: 5px 5px;
+    text-align: left;
+    display: inline-block;
+    font-size: 16px;
+}
+input {
+    color: black;
+    text-align: left;
+    display: inline-block;
+    font-size: 16px;
+    height: 40px;
+    padding: 5px 5px;
+}
+
+body {
+    /*font-family: 'lmmono12-regular', 'emojiiFont', 'unifont', 'NotoSansCJK', 'Symbola', 'Musica', 'Unidings', 'Myanmar', 'NotomojiColor', 'Notomoji', 'sans-serif';*/
+
+}
+
+#buttonHolder
+{
+	margin-left: 30px;
+}
+</style>
+</head>
+<body>
+<a href="/combining.html">Combining mark text generator</a><br/><br/>
+<button class="buttonh" onclick="doCopyToClipboard('\u202E')">
+    Copy RL Override (202E)
+</button>
+<br />
+<button class="buttonh" onclick="doCopyToClipboard('\u200b')">
+    Copy Zero Width Space (200B)
+</button>
+<br />
+Write utf numbers without \U, with spaces inbetween each char<br />
+<input id="charids" value="0x263A 9786"></input>
+<br/>
+<button class="buttonh" onclick="doCopyToClipboard()">
+    Copy custom symbols
+</button>
+<br/><br/>
+<div id="customSymbols"></div>
+<br/><br/>
+<h3>Click on a button in the table to copy it:</h3>
+Workspace:<input id="workspace" value=""></input>
+<br/>
+Table offset:<input id="tableOffset" value="0x13"></input><button class="buttonh" onclick="updateStuff();">Update table</button><button class="buttonh" onclick="toggleNumbers();">Toggle numbers</button>
+<div id="buttonHolder"></div><br />
+
+
+<script>
+
+document.getElementById("charids").oninput = function ()
+{
+	updatePreview();
+}
+
+var showingNumbers = false;
+function toggleNumbers()
+{
+  if (showingNumbers)
+  {
+    showingNumbers = false;
+  }
+  else
+  {
+    showingNumbers = true;
+  }
+   updateStuff();
+}
+
+function getCustomText(elementId)
+{
+  var text = elementId;
+  if (!elementId)
+  {
+      var chars = "" + document.getElementById('charids').value;
+      var charCodes = chars.split(' ');
+      text = "";
+      var nums = [];
+      for (var i = 0; i < charCodes.length; i++)
+      {
+        if (charCodes[i].length == 0)
+        {
+          continue;
+        }
+        try
+        {
+          var num = parseInt(charCodes[i]);
+        }
+        catch(err)
+        {
+          //nums.push(
+        }
+        //console.log(num + "");
+        nums.push(num);
+    }
+    try
+    {
+      text = punycode.ucs2.encode(nums);
+      currentGoodCustomText = text;
+    }
+    catch(err)
+    {
+      
+    }
+  }
+	return currentGoodCustomText;
+}
+
+var currentGoodCustomText = "";
+
+function updatePreview()
+{
+	document.getElementById("customSymbols").innerText = getCustomText();
+}
+
+function doCopyToClipboard(val) {
+  
+  if (val)
+  {
+    copyToClipboard(val);
+  }
+  else
+  {
+    copyToClipboard(getCustomText());
+  }
+}
+
+
+
+
+// from https://stackoverflow.com/a/33928558/2924421
+
+// Copies a string to the clipboard. Must be called from within an 
+// event handler such as click. May return false if it failed, but
+// this is not always possible. Browser support for Chrome 43+, 
+// Firefox 42+, Safari 10+, Edge and IE 10+.
+// IE: The clipboard feature may be disabled by an administrator. By
+// default a prompt is shown the first time the clipboard is 
+// used (per session).
+function copyToClipboard(text) {
+    if (window.clipboardData && window.clipboardData.setData) {
+        // IE specific code path to prevent textarea being shown while dialog is visible.
+        return clipboardData.setData("Text", text); 
+
+    } else if (document.queryCommandSupported && document.queryCommandSupported("copy")) {
+        var textarea = document.createElement("textarea");
+        textarea.textContent = text;
+        textarea.style.position = "fixed";  // Prevent scrolling to bottom of page in MS Edge.
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            return document.execCommand("copy");  // Security exception may be thrown by some browsers.
+        } catch (ex) {
+            console.warn("Copy to clipboard failed.", ex);
+            return false;
+        } finally {
+            document.body.removeChild(textarea);
+        }
+    }
+}
+
+
+
+
+
+function setClipboardWithMe()
+{
+	var myId = parseInt(this.class.substring(1));
+	
+	try
+	{
+		var textThing = punycode.ucs2.encode([myId]);
+		copyToClipboard(textThing);
+	}
+	catch(err)
+	{
+		console.log(this.class + " has error"  + err);
+	}
+}
+var smallSize="40px";
+
+var allButtons = [];
+var numButtons = 300;
+var uniOffset = 40;
+function setupStuff()
+{
+	var buttonHolder = document.getElementById("buttonHolder");
+	for (var i = uniOffset; i < numButtons+uniOffset; i++)
+	{
+		var thing = document.createElement("button");
+		thing.onclick = setClipboardWithMe;
+		allButtons.push(thing);
+		try
+		{
+			var textThing = punycode.ucs2.encode([i]);
+      if (showingNumbers)
+      {
+        thing.innerHTML = textThing + "<br>" + i + "<br>" + "0x" + i.toString(16);
+        thing.style.width = "100px";
+        thing.style.height = "100px";
+      }
+      else
+      {
+        thing.innerHTML = textThing;
+        thing.style.width = smallSize;
+        thing.style.height = smallSize;
+      }	
+      thing.class = "c" + i;
+			buttonHolder.appendChild(thing);
+		}
+		catch(err)
+		{
+		}
+	}
+}
+
+function addMoreButtons()
+{
+	var buttonHolder = document.getElementById("buttonHolder");
+  var prevNumButtons = numButtons;
+  numButtons += 100;
+  for (var i = uniOffset+prevNumButtons; i < uniOffset+numButtons; i++)
+	{
+		var thing = document.createElement("button");
+		thing.onclick = setClipboardWithMe;
+		allButtons.push(thing);
+    try
+		{
+			var textThing = punycode.ucs2.encode([i]);
+      if (showingNumbers)
+      {
+        thing.innerHTML = textThing + "<br>" + i + "<br>" + "0x" + i.toString(16);
+        thing.style.width = "100px";
+        thing.style.height = "100px";
+      }
+      else
+      {
+        thing.innerHTML = textThing;
+        thing.style.width = smallSize;
+        thing.style.height = smallSize;
+      }	
+      thing.class = "c" + i;
+			buttonHolder.appendChild(thing);
+		}
+		catch(err)
+		{
+		}
+  }
+}
+
+function updateStuff()
+{
+  try
+  {
+    uniOffset = parseInt(document.getElementById("tableOffset").value);
+  }
+  catch(err)
+  {
+  }
+	for (var i = 0; i < numButtons; i++)
+	{
+		try
+		{
+			var num = i+uniOffset;
+			var textThing = punycode.ucs2.encode([num]);
+      if (showingNumbers)
+      {
+        allButtons[i].innerHTML = textThing + "<br>" + num + "<br>" + "0x" + num.toString(16);
+        allButtons[i].style.width = "100px";
+        allButtons[i].style.height = "100px";
+      }
+      else
+      {
+        allButtons[i].innerHTML = textThing;
+        allButtons[i].style.width = smallSize;
+        allButtons[i].style.height = smallSize;
+      }
+			allButtons[i].class = "c" + (num);
+		}
+		catch(err)
+		{
+			allButtons[i].innerHTML = err;
+		}
+	}
+}
+
+
+
+
+updatePreview();
+setupStuff();
+updateStuff()
+</script>
+
+<button onclick="addMoreButtons();">more</button>
+
+
+</html>

@@ -8,6 +8,10 @@ body {
     -webkit-user-select: none;
     -webkit-touch-callout: none;
 }
+body, html { 
+    overflow-x: hidden; 
+    overflow-y: auto;
+}
 
 .slider {
     -webkit-appearance: none;

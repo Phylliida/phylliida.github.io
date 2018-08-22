@@ -1,0 +1,227 @@
+<html>
+<head>
+<script src="/punycode.js"></script>
+<link rel="stylesheet" type="text/css" href="/css/fonts/fonts.css">
+<style>
+
+input {
+    color: black;
+	width: 100px;
+	height: 40px;
+    padding: 0px 0px;
+    text-align: center;
+    display: inline-block;
+    font-size: 16px;
+}
+
+#resultoutput {
+  text-align: left;
+  padding: 20px 20px;
+  width: 100%;
+}
+
+#resultoutput2 {
+  text-align: left;
+  padding: 20px 20px;
+  width: 100%;
+}
+
+button {
+
+    /*font-family: 'lmmono12-regular', 'emojiiFont', 'unifont', 'NotoSansCJK', 'Symbola', 'Musica', 'Unidings', 'Myanmar', 'NotomojiColor', 'Notomoji', 'sans-serif';*/
+    background-color: #BBBBBB; /* Green */
+    color: black;
+	width: 90px;
+	height: 90px;
+    padding: 0px 0px;
+    text-align: center;
+    display: inline-block;
+    font-size: 16px;
+}
+
+#buttonHolder
+{
+}
+
+
+</style>
+</head>
+<body>
+<a href="/copier.html">Unicode to clipboard</a><br/><br/>
+Apply to: <input id="appliedToText" value="A" oninput="updatePreview();"></input><h3>current contents (click to copy):</h3><button id="resultoutput" onclick="setClipboardWithPreview();"></button><br/><br/><button id="resetButton" onclick="resetCopied();">Reset Cur</button><button id="appendButton" onclick="appendCopied();">Append</button><button id="resetHist" onclick="resetHist();">Reset Res</button>
+<br />
+<button id="resultoutput2" onclick="setClipboard2WithPreview();"></button>
+<script>
+
+function setClipboardWithPreview()
+{
+		copyToClipboard(getPreviewText());
+}
+
+function setClipboard2WithPreview()
+{
+		copyToClipboard(getHistoryText());
+}
+
+function resetHist()
+{
+  allHistory = [];
+  updatePreview();
+}
+
+
+function getPreviewText()
+{
+  var prevText = document.getElementById("appliedToText").value;
+  var resText = "";
+  for (var j = 0; j < prevText.length; j++)
+  {
+    var curLetter = prevText[j];
+    for (var i = 0; i < allLetters.length; i++)
+    {
+      curLetter += allLetters[i];
+    }
+    resText += curLetter;
+  }
+  return resText;
+}
+
+
+function getHistoryText()
+{
+  var res = "";
+  for (var i = 0; i < allHistory.length; i++)
+  {
+    res += allHistory[i];
+  }
+  return res;
+}
+
+
+
+function updatePreview()
+{
+   document.getElementById("resultoutput").innerHTML = getPreviewText();
+   document.getElementById("resultoutput2").innerHTML = getHistoryText();
+}
+
+function setClipboardWithMe()
+{
+	var myId = parseInt(this.class.substring(1));
+	
+	try
+	{
+		var textThing = punycode.ucs2.encode([myId]);
+    allLetters.push(textThing);
+		copyToClipboard(textThing);
+    updatePreview();
+    
+	}
+	catch(err)
+	{
+		console.log(this.class + " has error"  + err);
+	}
+}
+
+
+var allHistory = [];
+
+
+var allLetters = [];
+
+function resetCopied()
+{
+  allLetters = [];
+  copyToClipboard(allLetters);
+  updatePreview();
+}
+
+function appendCopied()
+{
+  allHistory.push(getPreviewText());
+  updatePreview();
+}
+
+var allButtons = [];
+function setupStuff()
+{
+	var buttonHolder = document.getElementById("buttonHolder");
+  
+  var rangesNames = ["Combining Diacritical Marks (0300–036F)", "Combining Diacritical Marks Extended (1AB0–1AFF)", "Combining Diacritical Marks Supplement (1DC0–1DFF)", "Combining Diacritical Marks for Symbols (20D0–20FF)", "Combining Half Marks (FE20–FE2F)"]
+  
+  var rangesMin = [0x0300, 0x1AB0, 0x1DC0, 0x20D0, 0xFE20];
+  var rangesMax = [0x036F, 0x1AFF, 0x1DFF, 0x20FF, 0xFE2F];
+  
+  for (var j = 0; j < rangesMin.length; j++)
+  {
+    var rangeName = rangesNames[j].replace("–", "&#8722;");
+    console.log(rangeName);
+    var title = document.createElement("h3");
+    title.innerHTML = rangeName;
+    buttonHolder.appendChild(title);
+    for (var i = rangesMin[j]; i < rangesMax[j]; i++)
+    {
+      var thing = document.createElement("button");
+      thing.onclick = setClipboardWithMe;
+      allButtons.push(thing);
+      try
+      {
+        var textThing = punycode.ucs2.encode([i]);
+        thing.innerHTML = "A" + textThing + "<br>" + i + "<br>" + "0x" + i.toString(16);
+        thing.class = "c" + i;
+        buttonHolder.appendChild(thing);
+      }
+      catch(err)
+      {
+      }
+    }
+  }
+}
+
+
+
+
+// from https://stackoverflow.com/a/33928558/2924421
+
+// Copies a string to the clipboard. Must be called from within an 
+// event handler such as click. May return false if it failed, but
+// this is not always possible. Browser support for Chrome 43+, 
+// Firefox 42+, Safari 10+, Edge and IE 10+.
+// IE: The clipboard feature may be disabled by an administrator. By
+// default a prompt is shown the first time the clipboard is 
+// used (per session).
+function copyToClipboard(text) {
+    if (window.clipboardData && window.clipboardData.setData) {
+        // IE specific code path to prevent textarea being shown while dialog is visible.
+        return clipboardData.setData("Text", text); 
+
+    } else if (document.queryCommandSupported && document.queryCommandSupported("copy")) {
+        var textarea = document.createElement("textarea");
+        textarea.textContent = text;
+        textarea.style.position = "fixed";  // Prevent scrolling to bottom of page in MS Edge.
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            return document.execCommand("copy");  // Security exception may be thrown by some browsers.
+        } catch (ex) {
+            console.warn("Copy to clipboard failed.", ex);
+            return false;
+        } finally {
+            document.body.removeChild(textarea);
+        }
+    }
+}
+</script>
+<div id="cloud-container">
+</div>
+	<br/><br/>
+
+  <h3>Click on a button in the table to copy it:</h3>
+<div id="buttonHolder"></div>
+<script>
+	
+setupStuff();
+resetCopied();
+</script>
+</body>
+</html>
