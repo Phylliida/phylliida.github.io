@@ -1,0 +1,480 @@
+<html>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+  
+  <head>
+    <script src="/js/pubnub.js"></script>
+    <script src="/js/webrtc.js"></script>
+     <script src='https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js'></script> 
+    
+  </head>
+  <body>
+    
+    Name: <input id="ayy"></input>
+  <button id="beans">Connect</button>
+  <br />
+  
+    
+    
+    
+    <script>
+      
+    var left = "";
+	var right = "";
+	var up = "";
+	var down = "";
+	
+    var attemptLeft = "";
+	var attemptRight = "";
+	var attemptUp = "";
+	var attemptDown = "";
+      
+    var users = {};
+      
+    var user = PUBNUB.uuid();
+    var pubnub = PUBNUB.init({
+      publish_key: 'pub-c-a2281ecc-42fb-47c8-91b6-f80ad06357ca',
+      subscribe_key: 'sub-c-bfbc4b56-0904-11e7-b95c-0619f8945a4f',
+      uuid: user,
+      ssl: true
+    });
+      
+      
+    $("#ayy").keyup(function(event){
+        if(event.keyCode == 13){
+            $("#beans").click();
+        }
+    });
+      
+     $("#beans").click(function()
+     {
+		startedConnecting = true;
+		SendMyData();
+     });
+      
+	 var allHolder;
+	 
+	 
+	 var startedConnecting = false;
+	  
+	function UpdateButtons()
+	{
+		console.log("updating buttons");
+		if (!startedConnecting)
+		{
+			return;
+		}
+		if (allHolder)
+		{
+			document.body.removeChild(allHolder);
+		}
+		allHolder = document.createElement("div");
+		
+		if (attemptDown == "" && down == "")
+		{
+			allHolder.appendChild(document.createTextNode("Down:"));
+			allHolder.appendChild(document.createElement("br"));
+			for (var userName in users) {
+				if (users.hasOwnProperty(userName) && users[userName].name != "") {
+					var other = users[userName];
+					if (other.up == "")
+					{
+						var btn = document.createElement("button");
+						
+						var t;
+						if (other.attemptUp == user) t = document.createTextNode("::" + other.name + "::");
+						else t = document.createTextNode(other.name);
+						btn.appendChild(t);
+						
+						btn.onclick = function() {
+							attemptDown = other.user;
+							SendMyData();
+						};
+						allHolder.appendChild(btn);
+						allHolder.appendChild(document.createElement("br"));
+					}
+				}
+			}
+			allHolder.appendChild(document.createElement("br"));
+		}
+		else if(down == "")
+		{
+			var btn = document.createTextNode("down connecting to " + users[attemptDown].name);
+			allHolder.appendChild(btn);
+			allHolder.appendChild(document.createElement("br"));
+		}
+		else
+		{
+			var btn = document.createTextNode("down connected to " + users[down].name);
+			allHolder.appendChild(btn);
+			allHolder.appendChild(document.createElement("br"));
+		}
+		
+		if (attemptUp == "" && up == "")
+		{
+			allHolder.appendChild(document.createTextNode("Up:"));
+			allHolder.appendChild(document.createElement("br"));
+			for (var userName in users) {
+				if (users.hasOwnProperty(userName) && users[userName].name != "") {
+					var other = users[userName];
+					if (other.down == "")
+					{
+						var btn = document.createElement("button");
+						
+						var t;
+						if (other.attemptDown == user) t = document.createTextNode("::" + other.name + "::");
+						else t = document.createTextNode(other.name);
+						btn.appendChild(t);
+						
+						btn.onclick = function() {
+							attemptUp = other.user;
+							SendMyData();
+						};
+						allHolder.appendChild(btn);
+						allHolder.appendChild(document.createElement("br"));
+					}
+				}
+			}
+			allHolder.appendChild(document.createElement("br"));
+		}
+		
+		else if(up == "")
+		{
+			var btn = document.createTextNode("up connecting to " + users[attemptUp].name);
+			allHolder.appendChild(btn);
+			allHolder.appendChild(document.createElement("br"));
+		}
+		else
+		{
+			var btn = document.createTextNode("up connected to " + users[up].name);
+			allHolder.appendChild(btn);
+			allHolder.appendChild(document.createElement("br"));
+		}
+		
+		
+		if (attemptLeft == "" && left == "")
+		{
+		
+			allHolder.appendChild(document.createTextNode("Left:"));
+			allHolder.appendChild(document.createElement("br"));
+			for (var userName in users) {
+				if (users.hasOwnProperty(userName) && users[userName].name != "") {
+					var other = users[userName];
+					if (other.right == "")
+					{
+						var btn = document.createElement("button");
+						var t;
+						if (other.attemptRight == user) t = document.createTextNode("::" + other.name + "::");
+						else t = document.createTextNode(other.name);
+						btn.appendChild(t);
+						btn.onclick = function() {
+							attemptLeft = other.user;
+							SendMyData();
+						};
+						allHolder.appendChild(btn);
+						allHolder.appendChild(document.createElement("br"));
+					}
+				}
+			}
+			allHolder.appendChild(document.createElement("br"));
+		}
+		else if(left == "")
+		{
+			var btn = document.createTextNode("left connecting to " + users[attemptLeft].name);
+			allHolder.appendChild(btn);
+			allHolder.appendChild(document.createElement("br"));
+		}
+		else
+		{
+			var btn = document.createTextNode("left connected to " + users[left].name);
+			allHolder.appendChild(btn);
+			allHolder.appendChild(document.createElement("br"));
+		}
+		
+		
+		if (attemptRight == "" && right == "")
+		{
+		
+			allHolder.appendChild(document.createTextNode("Right:"));
+			allHolder.appendChild(document.createElement("br"));
+			for (var userName in users) {
+				if (users.hasOwnProperty(userName) && users[userName].name != "") {
+					var other = users[userName];
+					if (other.left == "")
+					{
+						var btn = document.createElement("button");
+						var t;
+						if (other.attemptLeft == user) t = document.createTextNode("::" + other.name + "::");
+						else t = document.createTextNode(other.name);
+						
+						
+						btn.appendChild(t);
+						
+						btn.onclick = function() {
+							attemptRight = other.user;
+							SendMyData();
+						};
+						allHolder.appendChild(btn);
+						allHolder.appendChild(document.createElement("br"));
+					}
+				}
+			}
+			
+		}
+		
+		else if(right == "")
+		{
+			var btn = document.createTextNode("right connecting to " + users[attemptRight].name);
+			allHolder.appendChild(btn);
+			allHolder.appendChild(document.createElement("br"));
+		}
+		else
+		{
+			var btn = document.createTextNode("right connected to " + users[right].name);
+			allHolder.appendChild(btn);
+			allHolder.appendChild(document.createElement("br"));
+		}
+		document.body.appendChild(allHolder);
+		
+	
+	}
+	
+	
+	function SendMyData()
+	{
+		if (!startedConnecting)
+		{
+			return;
+		}
+        if ($("#ayy").val().trim() === "")
+        {
+         return; 
+        }
+       //$("#result").val($("#result").val() + $("#ayy").val() + "\r\n");
+       //$('#result').trigger('input');
+       namesDeleting = [];
+       for (var userName in users) {
+            if (users.hasOwnProperty(userName)) {
+				var other = users.userName;
+			
+              try
+              {
+				var messageSending = JSON.stringify({
+					"name": $("#ayy").val(),
+					"left": left,
+					"right": right,
+					"up": up,
+					"down": down,
+					"attemptLeft": attemptLeft,
+					"attemptRight": attemptRight,
+					"attemptUp": attemptUp,
+					"attemptDown": attemptDown,
+                  });
+				  
+				  
+				  
+				  
+				  
+                 pubnub.publish({
+                    user: userName,
+                    message: messageSending});
+				  $("#ayy").prop('disabled', true);
+				  $("#beans").prop('disabled', true);
+				  
+				  
+				  
+				  
+				  
+              }
+              catch(e)
+              {
+                namesDeleting.push(userName);
+                console.log(userName + " disconnected");
+              }
+			  
+			  
+			  
+            }
+        }
+       for (var i = 0; i < users.length; i++)
+       {
+        delete users[namesDeleting[i]]; 
+       }
+	   UpdateButtons();
+        // $("#ayy").val("");
+	}
+      
+    function SeeFace(newUser)
+      {
+        console.log("saw face: " + newUser);
+        if (newUser == user)
+          {
+            return;
+          }
+          
+          if (users[newUser])
+          {
+            
+          }
+          else
+          {
+			var datUser = {
+				"user": newUser,
+				"name": "",
+				"left": "",
+				"right": "",
+				"up": "",
+				"down": "",
+				"attemptLeft": "",
+				"attemptRight": "",
+				"attemptUp": "",
+				"attemptDown": ""
+			}
+             users[newUser] = datUser;
+            
+			UpdateButtons();
+             pubnub.subscribe({
+              user: newUser,
+              callback: function (message) {
+                console.log(message + " from " + newUser);
+                //$("#result").val($("#result").val() + message + "\r\n");
+                //$('#result').trigger('input');
+				users[newUser].left = message.left;
+				users[newUser].right = message.right;
+				users[newUser].up = message.up;
+				users[newUser].down = message.down;
+				
+				users[newUser].attemptLeft = message.attemptLeft;
+				users[newUser].attemptRight = message.attemptRight;
+				users[newUser].attemptUp = message.attemptUp;
+				users[newUser].attemptDown = message.attemptDown;
+				users[newUser].name = message.name;
+				
+				if (message.attemptLeft == user)
+				{
+					var dir = "right";
+					if (attemptRight == newUser && right == "")
+					{
+						//alert("connected " + dir + " " + newUser + " with name " + message.name);
+						right = attemptRight;
+						UpdateButtons();
+						SendMyData();
+					}
+					else if (right == "")
+					{
+						//alert(newUser + " with name " + message.name + " is trying to connect to " + dir);
+					}
+				}
+				if (message.attemptRight == user)
+				{
+					var dir = "left";
+					if (attemptLeft == newUser && left == "")
+					{
+						//alert("connected " + dir + " " + newUser + " with name " + message.name);
+						left = attemptLeft;
+						UpdateButtons();
+						SendMyData();
+					}
+					else if (left == "")
+					{
+						//alert(newUser + " with name " + message.name + " is trying to connect to " + dir);
+					}
+				}
+				if (message.attemptUp == user)
+				{
+					var dir = "down";
+					if (attemptDown == newUser && down == "")
+					{
+						//alert("connected " + dir + " " + newUser + " with name " + message.name);
+						down = attemptDown;
+						UpdateButtons();
+						SendMyData();
+					}
+					else if (down == "")
+					{
+						//alert(newUser + " with name " + message.name + " is trying to connect to " + dir);
+					}
+				}
+				if (message.attemptDown == user)
+				{
+					var dir = "up";
+					if (attemptUp == newUser && up == "")
+					{
+						//alert("connected " + dir + " " + newUser + " with name " + message.name);
+						up = attemptUp;
+						UpdateButtons();
+						SendMyData();
+					}
+					else if (up == "")
+					{
+						//alert(newUser + " with name " + message.name + " is trying to connect to " + dir);
+					}
+				}
+				UpdateButtons();
+               },
+               connect : function() { 
+                 console.log("connected to: " + newUser);
+				 UpdateButtons();
+               }
+             });
+            
+              pubnubMain.publish({ 
+                  channel : "joined", 
+                  message : user 
+              });
+          }
+      }
+      
+      
+    var pubnubMain = PUBNUB.init({
+      publish_key: 'pub-c-a2281ecc-42fb-47c8-91b6-f80ad06357ca',
+      subscribe_key: 'sub-c-bfbc4b56-0904-11e7-b95c-0619f8945a4f',
+      ssl: true
+    });
+      
+     pubnubMain.subscribe({ 
+        // connect to a channel 
+        channel : "joined", 
+        // resubscribe and reconnect
+        restore : true, 
+        // message received 
+        callback : function(newUser) {
+          SeeFace(newUser);
+        }, 
+        //  conneciton lost
+        disconnect : function() {
+			//alert("Connection Lost!");
+		}, 
+        // connection restored 
+        reconnect : function() {
+			//alert("And we're Back!")
+		}, 
+        // connection established 
+        connect : function() { 
+            // send a message 
+            pubnubMain.publish({ 
+                channel : "joined", 
+                message : user 
+            }) 
+        }
+     });
+      $( document ).ready(function() {
+
+      $('textarea').each(function () {
+        this.setAttribute('style', 'height:' + (this.scrollHeight) + 'px;overflow-y:hidden;');
+      }).on('input', function () {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
+      });
+});
+      
+    </script>
+	<canvas id="world"></canvas>
+    
+  </body>
+</html>
+ 
+
+
+
