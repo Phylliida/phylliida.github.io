@@ -13,6 +13,7 @@
     
     Name: <input id="ayy"></input>
   <button id="beans">Connect</button>
+  <canvas id="world"></canvas>
   <br />
   
     
@@ -69,6 +70,26 @@
 		{
 			document.body.removeChild(allHolder);
 		}
+
+		var c = document.getElementById("world");
+		var ctx = c.getContext("2d");
+		var width = 600;
+		var height = 600;
+		c.width = width;
+		c.height = height;
+		ctx.beginPath();
+		ctx.rect(0, 0, width, height);
+		ctx.fillStyle = "#aaaaaa";
+		ctx.fill();
+
+		var squareWidth = 20;
+		var betweenOffset = 4;
+		ctx.beginPath();
+		ctx.rect(width/2-squareWidth/2, height/2-squareWidth/2, squareWidth, squareWidth);
+		ctx.fillStyle = "#333333";
+		ctx.fill();
+		  
+		  
 		allHolder = document.createElement("div");
 		
 		if (attemptDown == "" && down == "")
@@ -109,6 +130,13 @@
 			var btn = document.createTextNode("down connected to " + users[down].name);
 			allHolder.appendChild(btn);
 			allHolder.appendChild(document.createElement("br"));
+			
+			
+			
+			ctx.beginPath();
+			ctx.rect(width/2-squareWidth/2, height/2-squareWidth/2 - squareWidth -  betweenOffset, squareWidth, squareWidth);
+			ctx.fillStyle = "#333333";
+			ctx.fill();
 		}
 		
 		if (attemptUp == "" && up == "")
@@ -150,6 +178,13 @@
 			var btn = document.createTextNode("up connected to " + users[up].name);
 			allHolder.appendChild(btn);
 			allHolder.appendChild(document.createElement("br"));
+			
+			
+			
+			ctx.beginPath();
+			ctx.rect(width/2-squareWidth/2, height/2-squareWidth/2 + squareWidth + betweenOffset, squareWidth, squareWidth);
+			ctx.fillStyle = "#333333";
+			ctx.fill();
 		}
 		
 		
@@ -190,6 +225,12 @@
 			var btn = document.createTextNode("left connected to " + users[left].name);
 			allHolder.appendChild(btn);
 			allHolder.appendChild(document.createElement("br"));
+			
+			
+			ctx.beginPath();
+			ctx.rect(width/2-squareWidth/2 - squareWidth - betweenOffset, height/2-squareWidth/2, squareWidth, squareWidth);
+			ctx.fillStyle = "#333333";
+			ctx.fill();
 		}
 		
 		
@@ -234,7 +275,18 @@
 			var btn = document.createTextNode("right connected to " + users[right].name);
 			allHolder.appendChild(btn);
 			allHolder.appendChild(document.createElement("br"));
+			
+			
+			ctx.beginPath();
+			ctx.rect(width/2-squareWidth/2 + squareWidth + betweenOffset, height/2-squareWidth/2, squareWidth, squareWidth);
+			ctx.fillStyle = "#333333";
+			ctx.fill();
+			  
 		}
+		
+		
+		
+		
 		document.body.appendChild(allHolder);
 		
 	
@@ -456,7 +508,7 @@
             pubnubMain.publish({ 
                 channel : "joined", 
                 message : user 
-            }) 
+            }); 
         }
      });
       $( document ).ready(function() {
