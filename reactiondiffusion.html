@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Reaction-Diffusion Simulation</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <link rel="stylesheet" href="gol.css"/>
+    <script src="lib/igloo-0.1.0.js"></script>
+    <script src="lib/jquery-2.1.1.min.js"></script>
+    <script src="js/URI.min.js"></script>
+    <script src="js/gol.js"></script>
+  </head>
+  <body>
+    <h1>Reaction-Diffusion Simulation</h1>
+    <!-- Canvas dimensions must be powers of two. -->
+    <center><canvas id="life" width="512" height="512"></canvas></center>
+    <div class="description">
+      <p>
+        See <a href="http://www.karlsims.com/rd.html">here</a> for an explanation of what's happening. Much of this code is adapted from <a href="https://nullprogram.com/webgl-game-of-life/">here</a>.
+      </p>
+      <button onclick="resetParams();">Reset params</button>&nbsp;&nbsp;&nbsp;
+      <button onclick="resetSimulation();">Reset simulation</button><br/>
+     <form>
+    </form>
+      F: &nbsp;<input type="range" min="20" max="100" value="48" id="fVal" class="slider" oninput="modifiedSliders();">&nbsp;&nbsp;<span id="curFVal"></span><br/>
+      K: &nbsp;<input type="range" min="20" max="100" value="67" id="kVal" class="slider" oninput="modifiedSliders();">&nbsp;&nbsp;<span id="curKVal"></span><br/>
+      <span hidden>Da: <input type="range" min="0" max="1000" value="1000"  id="dAVal" oninput="modifiedSliders();">&nbsp;&nbsp;<span id="curdAVal"></span><br/></span>
+      Db:<input type="range" min="0" max="1000" value="286" id="dBVal" class="slider" oninput="modifiedSliders();">&nbsp;&nbsp;<span id="curdBVal"></span><br/>
+     
+      <h2>Controls</h2>
+      <ul>
+        <li>
+          <span class="input">Left-click</span>
+          <span class="result">draw B cells</span>
+        </li>
+        <li>
+          <span class="input">Delete</span>
+          <span class="result">Reset simulation</span>
+        </li>
+      </ul>
+    </div>
+    <div class="fps">
+    </div>
+  </body>
+</html>

@@ -1,44 +1,92 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Reaction-Diffusion Simulation</title>
+    <title>Phylliida</title>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <link rel="stylesheet" href="gol.css"/>
     <script src="lib/igloo-0.1.0.js"></script>
     <script src="lib/jquery-2.1.1.min.js"></script>
+<link href="/css/portfolio.css" rel="stylesheet"></link>
     <script src="js/URI.min.js"></script>
     <script src="js/gol.js"></script>
   </head>
   <body>
-    <h1>Reaction-Diffusion Simulation</h1>
-    <!-- Canvas dimensions must be powers of two. -->
-    <center><canvas id="life" width="512" height="512"></canvas></center>
-    <div class="description">
-      <p>
-        See <a href="http://www.karlsims.com/rd.html">here</a> for an explanation of what's happening. Much of this code is adapted from <a href="https://nullprogram.com/webgl-game-of-life/">here</a>.
-      </p>
-      <button onclick="resetParams();">Reset params</button>&nbsp;&nbsp;&nbsp;
-      <button onclick="resetSimulation();">Reset simulation</button><br/>
-     <form>
-    </form>
-      F: &nbsp;<input type="range" min="20" max="100" value="48" id="fVal" class="slider" oninput="modifiedSliders();">&nbsp;&nbsp;<span id="curFVal"></span><br/>
-      K: &nbsp;<input type="range" min="20" max="100" value="67" id="kVal" class="slider" oninput="modifiedSliders();">&nbsp;&nbsp;<span id="curKVal"></span><br/>
-      <span hidden>Da: <input type="range" min="0" max="1000" value="1000"  id="dAVal" oninput="modifiedSliders();">&nbsp;&nbsp;<span id="curdAVal"></span><br/></span>
-      Db:<input type="range" min="0" max="1000" value="286" id="dBVal" class="slider" oninput="modifiedSliders();">&nbsp;&nbsp;<span id="curdBVal"></span><br/>
-     
-      <h2>Controls</h2>
-      <ul>
-        <li>
-          <span class="input">Left-click</span>
-          <span class="result">draw B cells</span>
-        </li>
-        <li>
-          <span class="input">Delete</span>
-          <span class="result">Reset simulation</span>
-        </li>
-      </ul>
+    <h1>Phylliida's Portfolio</h1>
+    
+    Open source minecraft-like engine
+    <br/>
+    <h2><a href="https://github.com/Phylliida/Blocks">Open source</a>, made in Unity C#</h2>
+<h2><a href="https://blocksengine.blogspot.com/2019/05/rendering-lots-of-blocks-efficiently-in.html">Heavily optimized</a> to render large number of blocks</h2>
+     <br/>
+     <img src="/images/blocksLargeWorld.png"></img><br/>
+     <h2>Uses a "cublic chunks" system so the world can be "infinite" on the y axis as well</h2>
+     <h2>Supports custom block models, textures, and logic</h2>
+    <img src="/images/blocksCustomModels.png"></img><br/>
+    <h2>Has a 3D <a href="https://blocksengine.blogspot.com/2019/04/efficient-pathfinding-in-minecraft-type.html">pathfinding system</a> that works over hundreds of blocks</h2>
+    <h2>Seperate sky and block light system so no lighting updates are needed at night</h2>
+    <h2>Low lighting is meant to be similar to how humans see more blues in low lighthing</h2>
+        <img src="/images/Lighting.png"></img><br/>
+
+    <div id="imageHolder">
+    
+      <img src="/images/header.png" style="width: 60%;"></img>
     </div>
-    <div class="fps">
-    </div>
+<h2>Uses real time raycasting ran in a compute shader to render fractals at 90fps in VR</h2>
+<h2>Released on <a href="https://store.steampowered.com/app/506160/VR_Fractals/">Steam</a> and <a href="https://www.oculus.com/experiences/rift/1706363059403972/?locale=en_US">Oculus Home</a></b2>
+
+
+<br />
+<br />
+<br />
+
+<img src="/images/sc1.png"></img>
+<img src="/images/sc2.png"></img>
+<br />
+<br />
+<img src="/images/sc3.png"></img>
+<img src="/images/sc4.png"></img>
+
+<br />
+<br />
+<br />
+
+<div id="imageHolder">
+<img src="/images/sheader.png" style="width: 60%;"></img>
+</div>
+<h2>
+
+<h2>A 3D Falling Sand/Powder Toy type game in Virtual Reality</h2>
+<h2>Required very heavy optimization to get it working fast enough for VR</h2>
+<h2>Released on <a href="https://store.steampowered.com/app/632040/VR_Sand/">Steam</a> and <a href="https://www.oculus.com/experiences/rift/1337446473017832/?locale=en_US">Oculus Home</a></b2>
+
+<br />
+<br />
+<br />
+
+<img src="/images/ssc1.png"></img>
+<img src="/images/ssc2.png"></img>
+<br />
+<br />
+<img src="/images/ssc3.png"></img>
+<img src="/images/ssc4.png"></img>
+<br />
+<br />
+<img src="/images/ssc5.png"></img>
+<br />
+<br />
+
+<div id="imageHolder">
+<img src="/images/MultiscreensHeader.jpg" style="width: 60%;"></img>
+</div>
+<h2>A program in VR that lets you have as many virtual monitors as you want.</h2>
+<h2>My first self published software project, released on <a href="https://store.steampowered.com/app/512400/Multiscreens/">Steam</a></h2>
+<h2>Was made redundant by better alternatives so I <a href="https://github.com/Phylliida/UnityWindowsCapture">open sourced it</a></h2>
+<img src="/images/multiscreens1.jpg"></img>
+<img src="/images/multiscreens2.jpg"></img>
+<br />
+<br />
+<img src="/images/multiscreens3.jpg"></img>
+
+
   </body>
 </html>
