@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<!-- Jquery -->
+<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+<script>
+var fontSize = 12;
+var delayTimeInMilliseconds = 100;
+var afterCommaDelayTime = 200;
+var afterSentenceDelayTime = 300;
+var isStopped = false;
+var curSpeedReadingIndexGlobal = 0;
+
+var defaultFontSize = 20;
+var defaultDelayTime = 100;
+var defaultDelayAfterComma = 200;
+var defaultDelayAfterSentence = 300;
+
+function readNumberFromInput(idString, defaultValue) {
+    var inputValueString = $("#" + idString.toString()).val().replace(/\D/g, '');
+    if (inputValueString === "") {
+        return defaultValue;
+    } else {
+        return parseInt(inputValueString);
+    }
+}
+
+
+function updateValues() {
+    fontSize = readNumberFromInput("fontSize", defaultFontSize);
+    delayTimeInMilliseconds = readNumberFromInput("delayTime", defaultDelayTime);
+    afterCommaDelayTime = readNumberFromInput("delayAfterComma", defaultDelayAfterComma);
+    afterSentenceDelayTime = readNumberFromInput("delayAfterSentence", defaultDelayAfterSentence);
+}
+
+
+function startSpeedReading() {
+
+    $("#startButton").val("Restart Speed Reading");
+
+    // This hides or shows buttons, from http://stackoverflow.com/questions/11364020/hidden-property-of-button-in-html
+
+    $("#pauseButton").prop('disabled', false);
+    $("#resumeButton").prop('disabled', true);
+    $("#stopButton").prop('disabled', false);
+
+
+    var curSpeedReadingIndex = curSpeedReadingIndexGlobal + 1;
+    curSpeedReadingIndexGlobal = curSpeedReadingIndex;
+    isStopped = false;
+    // This returns only the numeric portion of the input box http://stackoverflow.com/questions/1862130/strip-non-numeric-characters-from-string
+
+
+
+    var inputText = $("#inputText").val();
+    // Split string into sentences, this is a tweaked version of http://stackoverflow.com/questions/11761563/javascript-regexp-for-splitting-text-into-sentences-and-keeping-the-delimiter
+    var inputSentences = inputText.match(/([^\.!\?]+[\.!\?]+)|(.*)/g);
+    var context = $("#speedReadCanvas")[0].getContext('2d');
+    context.font = fontSize + "px Georgia";
+
+    if (inputSentences.length == 0) {
+        return;
+    }
+
+
+    // Split sentence string by whitespace, from http://stackoverflow.com/a/26425713/2924421
+    var curWordIndex = 0;
+    var curSentenceIndex = 0;
+    // Split string by whitespace, from http://stackoverflow.com/questions/14912502/how-do-i-split-a-string-by-whitespace-and-ignoring-leading-and-trailing-whitespa
+    inputSentences[curSentenceIndex] = inputSentences[curSentenceIndex].replace("-", "- ");
+    var curSentence = inputSentences[curSentenceIndex].match(/\S+/g);
+    for (var i = 0; i < curSentence.length; i++)
+    curSentence[i] = curSentence[i].replace("- ", "-");
+
+
+    outputSpeedReadSentence(context, inputSentences, curSentenceIndex, curSentence, curWordIndex, curSpeedReadingIndex);
+}
+
+function outputSpeedReadSentence(context, inputSentences, curSentenceIndex, curSentence, curWordIndex, curSpeedReadingIndex) {
+    if (curSpeedReadingIndexGlobal != curSpeedReadingIndex) return;
+
+    if (isStopped) {
+        setTimeout(function () {
+            outputSpeedReadSentence(context, inputSentences, curSentenceIndex, curSentence, curWordIndex, curSpeedReadingIndex);
+        }, 200);
+        return;
+    }
+
+    updateValues();
+    context.font = fontSize + "px Georgia";
+
+    // Get words before current word, from http://stackoverflow.com/questions/10342728/join-array-from-startindex-to-endindex
+    var previousWords = curSentence.slice(0, curWordIndex).join(" ");
+    var nextWords = "";
+
+
+
+    // If there are words after this, retrieve them, otherwise we use blank for words after this
+    if (curWordIndex < curSentence.length) {
+        nextWords = curSentence.slice(curWordIndex + 1, curSentence.length).join(" ");
+    }
+
+    var wordPosX = 340;
+    var wordPosY = 150;
+    var brightnessOfOtherWords = 140;
+
+    // Draw line marking where the word will begin
+    // From http://www.w3schools.com/tags/canvas_lineto.asp
+    //var lineHeight = fontSize + 50;
+    //var metrics = context.measureText("M"); // This is pretty close to the width of the font, but it would be preferable to do this in a more formal way because I can imagine some fonts for which M is more wide than tall or vice versa.
+    //context.beginPath();
+    //context.moveTo(wordPosX,wordPosY-lineHeight/2-metrics.width/2);
+    //context.lineTo(wordPosX, wordPosY+lineHeight/2);
+    //context.stroke();
+
+
+
+    // Get width of text in pixels, from http://www.html5canvastutorials.com/tutorials/html5-canvas-text-metrics/
+    var widthOfPreviousWords = context.measureText(previousWords + " ");
+    var widthOfCurrentWords;
+    var curWord = "";
+    if (curSentence[curWordIndex][curSentence[curWordIndex].length - 1] == "-") {
+        curWord = $.trim(curSentence[curWordIndex]);
+        needToUseComma = true;
+    } else {
+        curWord = $.trim(curSentence[curWordIndex]);
+    }
+
+
+
+    context.fillStyle = 'black';
+
+    var prevFont = context.font;
+    context.font = "bold " + context.font;
+
+    widthOfCurrentWords = context.measureText(curWord);
+
+
+    context.clearRect(0, 0, 700, 300);
+    context.fillStyle = 'rgb(' + brightnessOfOtherWords + ', ' + brightnessOfOtherWords + ', ' + brightnessOfOtherWords + ')';
+    context.font = prevFont;
+
+    context.fillText(previousWords + " ", wordPosX - widthOfPreviousWords.width - widthOfCurrentWords.width / 2, wordPosY);
+
+
+
+    context.fillStyle = 'black';
+    prevFont = context.font;
+    context.font = "bold " + context.font;
+
+    context.fillText(curWord, wordPosX - widthOfCurrentWords.width / 2, wordPosY);
+    var needToUseComma = false;
+
+    if (curSentence[curWordIndex][curSentence[curWordIndex].length - 1] == "," || curSentence[curWordIndex][curSentence[curWordIndex].length - 1] == ";") {
+        needToUseComma = true;
+    }
+
+
+
+    context.font = prevFont;
+    context.fillStyle = 'rgb(' + brightnessOfOtherWords + ', ' + brightnessOfOtherWords + ', ' + brightnessOfOtherWords + ')';
+
+
+
+    var widthOfNextWords = context.measureText(nextWords);
+    context.fillText(nextWords, wordPosX + widthOfCurrentWords.width / 2 + context.measureText(" ").width, wordPosY);
+
+
+    if (curWordIndex >= curSentence.length - 1) {
+        curSentenceIndex = curSentenceIndex + 1;
+        curWordIndex = 0;
+        if (curSentenceIndex >= inputSentences.length) return;
+        inputSentences[curSentenceIndex] = inputSentences[curSentenceIndex].replace("-", "- ");
+        var curSentence = inputSentences[curSentenceIndex].match(/\S+/g);
+        for (var i = 0; i < curSentence.length; i++)
+        curSentence[i] = curSentence[i].replace("- ", "-");
+        // From http://stackoverflow.com/questions/2647867/how-to-determine-if-variable-is-undefined-or-null
+        if (typeof curSentence === 'undefined') {
+            return;
+        }
+        setTimeout(function () {
+            outputSpeedReadSentence(context, inputSentences, curSentenceIndex, curSentence, curWordIndex, curSpeedReadingIndex);
+        }, delayTimeInMilliseconds + afterSentenceDelayTime);
+    } else {
+        curWordIndex = curWordIndex + 1;
+        if (!needToUseComma) {
+            setTimeout(function () {
+                outputSpeedReadSentence(context, inputSentences, curSentenceIndex, curSentence, curWordIndex, curSpeedReadingIndex);
+            }, delayTimeInMilliseconds);
+        } else {
+            setTimeout(function () {
+                outputSpeedReadSentence(context, inputSentences, curSentenceIndex, curSentence, curWordIndex, curSpeedReadingIndex);
+            }, delayTimeInMilliseconds + afterCommaDelayTime);
+
+        }
+    }
+}
+
+function pauseSpeedReading() {
+    $("#pauseButton").prop('disabled', true);
+    $("#resumeButton").prop('disabled', false);
+    $("#stopButton").prop('disabled', false);
+    isStopped = true;
+}
+
+function resumeSpeedReading() {
+    $("#pauseButton").prop('disabled', false);
+    $("#resumeButton").prop('disabled', true);
+    $("#stopButton").prop('disabled', false);
+    isStopped = false;
+}
+
+function stopSpeedReading() {
+    curSpeedReadingIndexGlobal = curSpeedReadingIndexGlobal + 1;
+
+    $("#pauseButton").prop('disabled', true);
+    $("#resumeButton").prop('disabled', true);
+    $("#stopButton").prop('disabled', true);
+
+    $("startButton").val("Start Speed Reading");
+    isStopped = true;
+    var context = $("#speedReadCanvas")[0].getContext("2d");
+    context.clearRect(0, 0, 700, 300);
+}
+
+window.onload = function () {
+    $("#fontSize").val(defaultFontSize);
+    $("#delayTime").val(defaultDelayTime);
+    $("#delayAfterComma").val(defaultDelayAfterComma);
+    $("#delayAfterSentence").val(defaultDelayAfterSentence);
+    $("#startButton").click(function () {
+        startSpeedReading();
+    });
+    $("#pauseButton").click(function () {
+        pauseSpeedReading();
+    });
+    $("#resumeButton").click(function () {
+        resumeSpeedReading();
+    });
+    $("#stopButton").click(function () {
+        stopSpeedReading();
+    });
+};
+</script>
+</head>
+
+<body><script type="text/javascript">
+
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-26341965-1']);
+  _gaq.push(['_setDomainName', '.geocities.ws']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+
+</script>
+
+
+Input Text<br />
+<textarea id="inputText"></textarea>
+<br />
+<canvas id="speedReadCanvas" style="border:1px solid #d3d3d3;" width="700" height="300">
+</canvas>
+<!-- This only allowed numeric input, from http://stackoverflow.com/questions/469357/html-text-input-allow-only-numeric-input -->
+<br />
+Font Size:<br /><input onkeypress="updateValues();" id="fontSize" type="number"></input>
+<br />Delay Time:<br /><input onkeypress="updateValues();" id="delayTime" type="number"></input>
+<br />Delay After Comma:<br /><input onkeypress="updateValues();" id="delayAfterComma" type="number"></input>
+<br />Delay After Sentence:<br /><input onkeypress="updateValues();" id="delayAfterSentence" type="number"></input>
+
+<input id="startButton" type="button" onclick="startSpeedReading();" value="Start Speed Reading" />
+
+<input id="pauseButton" disabled="true" type="button" onclick="pauseSpeedReading();" value="Pause Speed Reading" />
+
+<input id="resumeButton" disabled="true" type="button" onclick="resumeSpeedReading();" value="Resume Speed Reading" />
+
+<input id="stopButton" disabled="true" type="button" onclick="stopSpeedReading();" value="Stop Speed Reading" />
+
+</body>
+<!-- Hosted by www.Geocities.ws -->
+</html>
