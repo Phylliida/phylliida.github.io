@@ -1,0 +1,11 @@
+{
+"companyName": "DefaultCompany",
+"productName": "Robotics Editor Project",
+"dataUrl": "WebGLBuildFixed.data.unityweb",
+"asmCodeUrl": "WebGLBuildFixed.asm.code.unityweb",
+"asmMemoryUrl": "WebGLBuildFixed.asm.memory.unityweb",
+"asmFrameworkUrl": "WebGLBuildFixed.asm.framework.unityweb",
+"TOTAL_MEMORY": 268435456,
+"splashScreenStyle": "Dark",
+"backgroundColor": "#222C36"
+}
