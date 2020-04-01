@@ -122,6 +122,28 @@ function setClipboardWithMe()
 		console.log(this.class + " has error"  + err);
 	}
 }
+	
+function isMobile() { return ('ontouchstart' in document.documentElement); }
+
+function updateThingsff()
+{
+	var myId = parseInt(this.class.substring(1));
+	
+	try
+	{
+		var textThing = punycode.ucs2.encode([myId]);
+    allLetters.push(textThing);
+		if (!isMobile()) {
+			copyToClipboard(textThing);
+		}
+                updatePreview();
+    
+	}
+	catch(err)
+	{
+		console.log(this.class + " has error"  + err);
+	}
+}
 
 
 var allHistory = [];
@@ -247,7 +269,7 @@ function setupStuff()
 	    {
 		var unicodeVal = curTable[i];
 	      var thing = document.createElement("button");
-	      thing.onclick = setClipboardWithMe;
+	      thing.onclick = updateThingsff;
 	      allButtons.push(thing);
 	      try
 	      {
