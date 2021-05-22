@@ -1,0 +1,757 @@
+<html>
+<head>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<script>
+
+var worldWidth = 13;
+var worldHeight = 13;
+var pixelsPerWidth = 20;
+var pixelsPerHeight = 20;
+var outlineWidth = 0.5;
+var paddingX = 50;
+var paddingY = 100;
+var sideMenuPaddingX = pixelsPerWidth;
+var sideMenuPaddingY = pixelsPerHeight*2;
+
+var menuWidth = 0, menuHeight = 0; // computed when rendering menu
+
+var animTicks = 128;
+
+var sideMenuPaddingSize = 20;
+
+
+var menuColliders = [];
+
+var worldHistory = [];
+        
+// From https://stackoverflow.com/a/2259502/2924421
+var rotatePoint = function(point, rotateAround, angleRadians)
+{
+  var s = Math.sin(angleRadians);
+  var c = Math.cos(angleRadians);
+
+  // translate point back to origin:
+  var shiftedX = point.x - rotateAround.x;
+  var shiftedY = point.y - rotateAround.y;
+
+  // rotate point
+  var xnew = shiftedX * c - shiftedY * s;
+  var ynew = shiftedX * s + shiftedY * c;
+
+  // translate point back:
+  var pointX = xnew + rotateAround.x;
+  var pointY = ynew + rotateAround.y;
+  return {x: pointX, y: pointY};
+};
+
+var pts = function(point){
+    return "(" + point.x + "," + point.y + ")";
+};
+var fan = {
+  update : function(world, tick, posX, posY) {
+    
+  },
+  draw : function(ctx, tick, leftX, topY, rightX, bottomY) {
+    var xMid = (leftX + rightX)/2.0;
+    var yMid = (topY + bottomY)/2.0;
+    var rotateRadians = tick/(0.0+animTicks)*2*Math.PI;
+    var center = {x: xMid, y: yMid};
+    var fanOffset = 5;
+    var topFanPoint = rotatePoint({x: xMid, y: topY+fanOffset}, center, rotateRadians);
+    var leftFanPoint = rotatePoint({x: leftX+fanOffset, y: yMid}, center, rotateRadians);
+    var bottomFanPoint = rotatePoint({x: xMid, y: bottomY-fanOffset}, center, rotateRadians);
+    var rightFanPoint = rotatePoint({x: rightX-fanOffset, y: yMid}, center, rotateRadians);
+    //console.log(pts(topFanPoint) + " " + pts(leftFanPoint) + " " + pts(bottomFanPoint) + " " + pts(rightFanPoint));
+    ctx.lineWidth = 3;
+    drawLine(ctx, topFanPoint.x, topFanPoint.y, bottomFanPoint.x, bottomFanPoint.y);
+    drawLine(ctx, leftFanPoint.x, leftFanPoint.y, rightFanPoint.x, rightFanPoint.y);
+  }
+};
+
+var empty = {
+  update : function(world, tick, posX, posY) {
+  },
+  draw : function(ctx, tick, leftX, topY, rightX, bottomY) {
+  },
+  drawPreview : function(ctx, tick, leftX, topY, rightx, bottomY){
+  
+  }
+};
+
+var solid = {
+  update : function(world, tick, posX, posY) {
+    
+  },
+  draw : function(ctx, tick, leftX, topY, rightX, bottomY) {
+    ctx.fillRect(leftX+outlineWidth,topY+outlineWidth,rightX-leftX-outlineWidth*2+1, bottomY-topY-outlineWidth*2+1); // x y width height
+  }
+};
+
+var drawLine = function(ctx, startX, startY, endX, endY) {
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+};
+
+var circle = {
+  update : function(world, tick, posX, posY) {
+    
+  },
+  draw : function(ctx, tick, leftX, topY, rightX, bottomY) {
+    ctx.beginPath();
+    ctx.arc((leftX+rightX)/2, (topY+bottomY)/2, (rightX-leftX+1)/2-4, 0, 2 * Math.PI);
+    ctx.stroke();
+  }
+};
+
+var filledCircle = {
+  update : function(world, tick, posX, posY) {
+    
+  },
+  draw : function(ctx, tick, leftX, topY, rightX, bottomY) {
+    ctx.beginPath();
+    ctx.arc((leftX+rightX)/2, (topY+bottomY)/2, (rightX-leftX+1)/2-4, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+};
+
+
+var items = [
+    //fan,
+    //empty,
+    //solid,
+    circle,
+    filledCircle
+]
+
+
+var sideMenuWidth, sideMenuHeight, sideOffset, upOffset, canvasWidth, canvasHeight, sideMenuLeftX, sideMenuTopY, worldLeftX, worldTopY;
+
+var computeParams = function(ctx, ticks) {
+    var menuSizes = drawMenu(ctx, ticks);
+    sideMenuWidth = menuSizes.rightX-menuSizes.leftX+1;
+    sideMenuHeight = menuSizes.bottomY-menuSizes.topY+1;
+
+    sideOffset = paddingX+sideMenuPaddingX+sideMenuWidth+sideMenuPaddingX;
+    upOffset = paddingY;
+
+    canvasWidth = paddingX+sideMenuPaddingX+sideMenuWidth+sideMenuPaddingX+pixelsPerWidth*worldWidth+paddingX;
+    canvasHeight = Math.max(
+        paddingY+pixelsPerHeight*worldHeight+paddingY,// height of world
+        paddingY+sideMenuPaddingY+sideMenuHeight+sideMenuPaddingY+paddingY // height of side menu
+    )
+
+    sideMenuLeftX = paddingX+sideMenuPaddingX;
+    sideMenuTopY = paddingY+sideMenuPaddingY;
+
+    worldLeftX = sideOffset;
+    worldTopY = upOffset;
+};
+
+var mouseCoordsToWorldCoords = function(x, y) {
+      var worldX = Math.floor((x-worldLeftX)/pixelsPerWidth);
+      var worldY = Math.floor((y-worldTopY)/pixelsPerHeight);
+      return {x: worldX, y: worldY}
+};
+
+var worldPosIsInWorld = function(worldPos) {
+    return worldPos.x >= 0 && worldPos.x < worldWidth && worldPos.y >= 0 && worldPos.y < worldHeight;
+};
+
+var createCopyItem = function(world, startX, startY, endX, endY){
+    var nonEmptyMinX = endX;
+    var nonEmptyMaxX = startX;
+    var nonEmptyMinY = endY;
+    var nonEmptyMaxY = startY;
+    
+    // shrink down to just the non-empty stuff
+    var hadAtLeastOneNonEmpty = false;
+    for (var x = startX; x <= endX; x++) {
+        for (var y = startY; y <= endY; y++) {
+            if (world.data[x][y] != empty) {
+                hadAtLeastOneNonEmpty = true;
+                nonEmptyMinX = Math.min(nonEmptyMinX, x);
+                nonEmptyMaxX = Math.max(nonEmptyMaxX, x);
+                nonEmptyMinY = Math.min(nonEmptyMinY, y);
+                nonEmptyMaxY = Math.max(nonEmptyMaxY, y);
+            }
+        }
+    }
+    // return null, it's empty
+    if (!hadAtLeastOneNonEmpty) {
+        return null;
+    }
+    // make only contain items
+    else {
+        startX = nonEmptyMinX;
+        startY = nonEmptyMinY;
+        endX = nonEmptyMaxX;
+        endY = nonEmptyMaxY;
+    }
+    
+    
+    var copyData = [];
+    for (var x = startX; x <= endX; x++) {
+        var row = [];
+        for (var y = startY; y <= endY; y++) {
+            row.push(world.data[x][y]);
+        }
+        copyData.push(row);
+    }
+    
+    var copyItem = {
+      data: copyData,
+      update : function(world, tick, posX, posY) {
+        
+      },
+      draw : function(ctx, tick, leftX, topY, rightX, bottomY) {
+        for (var x = 0; x < this.data.length; x++) {
+            for (var y = 0; y < this.data[0].length; y++) {
+                var xOffset = x*pixelsPerWidth;
+                var yOffset = y*pixelsPerHeight;
+                this.data[x][y].draw(ctx, tick, leftX+xOffset, topY+yOffset, rightX+xOffset, bottomY+yOffset);
+            }
+        }
+      },
+      canPlace : function(world, posX, posY) {
+        for (var x = 0; x < this.data.length; x++) {
+            for (var y = 0; y < this.data[0].length; y++){
+                var localWorldPos = {x: x+posX, y: y+posY};
+                if (worldPosIsInWorld(localWorldPos)){
+                    var worldObject = world.data[localWorldPos.x][localWorldPos.y];
+                    var copyObject = this.data[x][y];
+                    // if either is empty, we match
+                    // otherwise, make sure we match
+                    if (worldObject != empty && copyObject != empty && 
+                        worldObject != copyObject) {
+                        return false;
+                    }
+                }
+                else
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
+      }
+    };
+    return copyItem;
+};
+
+var drawGrid = function(ctx, leftX, topY, cellWidth, cellHeight, nCellsX, nCellsY) {
+    var rightX = leftX+nCellsX*cellWidth;
+    var bottomY = topY+nCellsY*cellHeight;
+    // Horizontal lines (need +1 because have one at top of every cell, then an additional line at the bottom of the last row)
+    for (var y = 0; y < nCellsY+1; y++) {
+        var yPos = topY+y*cellHeight;
+        drawLine(ctx, leftX-outlineWidth, yPos, rightX+outlineWidth, yPos); // - and + outline width is so the corners line up
+    }
+    // Vertical lines (need +1 because have one at left of every cell, then an additional line at the right of the last column)
+    for (var x = 0; x < nCellsX+1; x++) {
+        var xPos = leftX+x*cellWidth;
+        drawLine(ctx, xPos, topY-outlineWidth, xPos, bottomY+outlineWidth);
+    }
+};
+
+
+var drawMenu = function(ctx, ticks) {
+    
+    menuColliders = [];
+    var currentItemY = sideMenuTopY;
+    var nextRowX = sideMenuLeftX;
+    var curRowX = sideMenuLeftX;
+    var bottomMenuY = sideMenuTopY;
+    var rightMenuX = sideMenuLeftX;
+    for (var i = 0; i < items.length; i++){
+        ctx.strokeStyle = "black";
+        ctx.fillStyle = "black";
+        ctx.lineWidth = 1;
+        var leftX = curRowX;
+        var topY = currentItemY;
+        var rightX = leftX+pixelsPerWidth-1;
+        var bottomY = topY+pixelsPerHeight-1;
+        items[i].draw(ctx, ticks, leftX, topY, rightX, bottomY);
+        ctx.strokeStyle = "gray";
+        ctx.fillStyle = "gray";
+        ctx.lineWidth = outlineWidth*2;
+        ctx.beginPath();
+        var boxWidth = rightX -leftX+1;
+        var boxHeight = bottomY-topY+1;
+        if (items[i].data != null) {
+            boxWidth = boxWidth*items[i].data.length;
+            boxHeight = boxHeight*items[i].data[0].length;
+        }
+        
+        bottomMenuY = Math.max(topY+boxHeight, bottomMenuY);
+        rightMenuX = Math.max(leftX+boxWidth, rightMenuX);
+        menuColliders.push({leftX:leftX, topY:topY, rightX:leftX+boxWidth, bottomY:topY+boxHeight, item:items[i]}); 
+        nextRowX = Math.max(nextRowX, curRowX+boxWidth+pixelsPerWidth);
+        currentItemY += boxHeight+pixelsPerHeight;
+        if (currentItemY > worldHeight*pixelsPerHeight+worldTopY) {
+            currentItemY = sideMenuTopY;
+            curRowX = nextRowX;
+        }
+        ctx.rect(leftX, topY, boxWidth, boxHeight);
+        ctx.stroke();
+    }
+    return {leftX: sideMenuLeftX, topY: sideMenuTopY, rightX: rightMenuX, bottomY: bottomMenuY}
+    
+}
+
+var copyData = function(data) {
+    var copy = [];
+    for (var x = 0; x < data.length; x++) {
+        var row = []
+        for (var y = 0; y < data[x].length; y++){
+            row.push(data[x][y]);
+        }
+        copy.push(row);
+    }
+    return copy;
+};
+
+var redoBuffer = [];
+
+
+$(document).ready ( function(){
+
+    
+    var world = {
+        data: [],
+        getData : function(x, y) {
+            if (x < 0 || x >= worldWidth || y < 0 || y >= worldHeight) {
+                return solid;
+            }
+            else {
+                return world.data[x][y];
+            }
+        }
+    };
+    
+    for (var i = 0; i < worldWidth; i++){
+        curRow = [];
+        for (var j = 0; j < worldHeight; j++) {
+            curRow.push(empty); continue;
+        }
+        world.data.push(curRow);
+    }
+    
+    worldHistory.push(copyData(world.data));
+    
+    var undo = function(){
+        if (worldHistory.length > 1) {
+            // Thing at very top is current world, so we need to go back two
+            world.data = copyData(worldHistory[worldHistory.length-2]);
+            redoBuffer.push(worldHistory[worldHistory.length-1]);
+            worldHistory.splice(-1, 1);
+            console.log("history len:" + worldHistory.length);
+        }
+    };
+    
+    var redo = function() {
+        if (redoBuffer.length > 0) {
+            world.data = copyData(redoBuffer[redoBuffer.length-1]);
+            worldHistory.push(copyData(world.data));
+            redoBuffer.splice(-1, 1);
+        }
+    };
+    
+   
+    var c = $("#world");
+    var ctx = c[0].getContext('2d');
+    
+    
+    var objectDragging = null;
+    
+    var mouseX = 0;
+    var mouseY = 0;
+    
+    var CKEY = 67;
+    var DKEY = 68;
+    var DELKEY = 46;
+    var WHITEKEY = 87;
+    var BLACKKEY = 66;
+    var UNDOKEY = 85;
+    var REDOKEY = 82;
+    
+    var pressingC = false;
+    var copying = false;
+    var startCopyX = 0, startCopyY = 0;
+    
+    document.addEventListener('keydown', e => {
+        if (e.keyCode == CKEY) {
+            pressingC = true;
+        }
+        console.log("key code: " + e.keyCode);
+        if (e.keyCode == UNDOKEY) {
+            undo();
+        }
+        
+        if (e.keyCode == REDOKEY) {
+            redo();
+        }
+        
+        if (e.keyCode == DELKEY || e.keyCode == DKEY) {
+            var worldPos = mouseCoordsToWorldCoords(mouseX, mouseY);
+            if (worldPosIsInWorld(worldPos)) {
+                world.data[worldPos.x][worldPos.y] = empty;
+            }
+            
+            for (var i = 0; i < menuColliders.length; i++){
+                var col = menuColliders[i];
+                if (mouseX >= col.leftX && mouseX <= col.rightX && mouseY >= col.topY && mouseY <= col.bottomY){
+                    items.splice(items.indexOf(col.item), 1);
+                }
+            }
+        }
+        if (e.keyCode == WHITEKEY) {
+            var worldPos = mouseCoordsToWorldCoords(mouseX, mouseY);
+            if (worldPosIsInWorld(worldPos)) {
+                world.data[worldPos.x][worldPos.y] = circle;
+            }
+        }
+        
+        if (e.keyCode == BLACKKEY) {
+            var worldPos = mouseCoordsToWorldCoords(mouseX, mouseY);
+            if (worldPosIsInWorld(worldPos)) {
+                world.data[worldPos.x][worldPos.y] = filledCircle;
+            }
+        }
+    });
+    document.addEventListener('keyup', e => {
+        if (e.keyCode == CKEY) {
+            pressingC = false;
+            copying = false;
+        }
+    });
+    
+    document.getElementById("world").addEventListener('mousemove', e => {
+      mouseX = e.offsetX;
+      mouseY = e.offsetY;
+    });
+    document.getElementById("world").addEventListener('mousedown', e => {
+      var x = e.offsetX;
+      var y = e.offsetY;
+      
+      var worldPos = mouseCoordsToWorldCoords(x, y);
+      if (pressingC) {
+        startCopyX = Math.max(Math.min(worldPos.x, worldWidth-1), 0);
+        startCopyY = Math.max(Math.min(worldPos.y, worldHeight-1), 0);
+        copying = true;
+        return;
+      }
+      
+      for (var i = 0; i < menuColliders.length; i++){
+        var col = menuColliders[i];
+        if (x >= col.leftX && x <= col.rightX && y >= col.topY && y <= col.bottomY){
+            objectDragging = col.item;
+        }
+      }
+      // Also try grabbing objects on the field
+      if (objectDragging == null) {
+        if (worldPosIsInWorld(worldPos)) {
+          var itemAtPos = world.data[worldPos.x][worldPos.y];
+          if (itemAtPos != empty) {
+            // grab object
+            objectDragging = itemAtPos;
+            // set object there to empty
+            world.data[worldPos.x][worldPos.y] = empty;
+          }
+        }
+      }
+    });
+
+    document.getElementById("world").addEventListener('mouseup', e => {
+      var x = e.offsetX;
+      var y = e.offsetY;
+      
+      var worldPos = mouseCoordsToWorldCoords(x, y);
+      if (pressingC) {
+        var endCopyX = Math.max(Math.min(worldPos.x, worldWidth-1), 0);
+        var endCopyY = Math.max(Math.min(worldPos.y, worldHeight-1), 0);
+        var curStartCopyX = startCopyX;
+        var curStartCopyY = startCopyY;
+        
+        // Sort so start is top left corner
+        if (endCopyX < curStartCopyX) {
+            var tmp = endCopyX;
+            endCopyX = curStartCopyX;
+            curStartCopyX = tmp;
+        }
+        if (endCopyY < curStartCopyY) {
+            var tmp = endCopyY;
+            endCopyY = curStartCopyY;
+            curStartCopyY = tmp;
+        }
+        var copyItem = createCopyItem(world, curStartCopyX, curStartCopyY, endCopyX, endCopyY);
+        if (copyItem != null) { // will be null if empty
+            items.push(copyItem);
+        }
+        copying = false;
+        return;
+      }
+      
+      if (worldPosIsInWorld(worldPos)) {
+        // Drag and drop item
+        if (objectDragging != null) {
+          if (objectDragging.data != null){
+            var canPlace = objectDragging.canPlace(world, worldPos.x, worldPos.y);
+            
+            if (canPlace) {
+                for (var x = 0; x < objectDragging.data.length; x++) {
+                    for (var y = 0; y < objectDragging.data[0].length; y++){
+                        var copyObject = objectDragging.data[x][y];
+                        if (copyObject != empty) { // empty doesn't override
+                            world.data[x+worldPos.x][y+worldPos.y] = copyObject;
+                        }
+                    }
+                }
+            }
+            else {
+                //console.log("can't place, conflict");
+            }
+          }
+          else{
+            world.data[worldPos.x][worldPos.y] = objectDragging;
+          }
+        }
+      }
+      // Reset drag and drop item
+      objectDragging = null;
+    });
+
+    
+    
+    var getItemsNumRows = function() {
+        
+    };
+    
+    
+    
+    
+    var draw = function(ticks){
+        
+        var prevWorld = worldHistory[worldHistory.length-1];
+        var worldChanged = false;
+        for (var x = 0; x < worldWidth; x++){
+            for (var y = 0; y < worldHeight; y++){
+                if (prevWorld[x][y] != world.data[x][y]) {
+                    worldChanged = true;
+                }
+            }
+        }
+        if (worldChanged) {
+            console.log("world changed");
+            worldHistory.push(copyData(world.data));
+            redoBuffer = [];
+        }
+        
+        computeParams(ctx, ticks);
+        // set width and height
+        ctx.canvas.height = canvasHeight;
+        ctx.canvas.width = canvasWidth;
+        
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0,0,canvasWidth, canvasHeight);
+        var t0 = performance.now();
+        
+        //// Side Menu ////
+        drawMenu(ctx, ticks);
+        /*
+        ctx.strokeStyle = "gray";
+        ctx.fillStyle = "gray";
+        ctx.lineWidth = outlineWidth*2; // we do *2 because this actually covers outlines of two cells
+        drawGrid(ctx, sideMenuLeftX, sideMenuTopY, pixelsPerWidth, pixelsPerHeight, 1, items.length);
+        */
+        
+        
+        /*
+        ctx.fillStyle = "gray";
+        ctx.strokeStyle = "gray";
+        // Side menu vertical cell outlines
+        for (var i = 0; i < 1; i++){
+            var leftX = i*pixelsPerWidth+sideMenuOutlineWidth;
+            var rightX = leftX+pixelsPerWidth-1;
+            var topY = upOffset+pixelsPerHeight;
+            var bottomY = topY+(items.length)*pixelsPerHeight;
+            drawLine(ctx, leftX, topY, leftX, bottomY+1);
+            drawLine(ctx, rightX, topY, rightX, bottomY+1);
+        }
+        // Side menu horizontal cell outlines
+        for (var j = 0; j < items.length; j++){
+            var topY = (j+1)*pixelsPerHeight+upOffset;
+            var bottomY = topY+pixelsPerHeight-1;
+            drawLine(ctx, sideMenuOutlineWidth, topY, sideMenuOutlineWidth+sideMenuSize-1, topY);
+            drawLine(ctx, sideMenuOutlineWidth, bottomY, sideMenuOutlineWidth+sideMenuSize-1, bottomY);
+        }
+        */
+        
+        
+        
+        //// Outline ////
+        ctx.strokeStyle = "black";
+        ctx.fillStyle = "black";
+        ctx.lineWidth = outlineWidth*2;
+        
+        drawGrid(ctx, worldLeftX, worldTopY, pixelsPerWidth, pixelsPerHeight, worldWidth, worldHeight);
+        
+        /*
+        // Top outline
+        drawLine(ctx, outlineLeftX, outlineTopY, outlineRightX, outlineTopY)
+        // Left outline
+        drawLine(ctx, outlineLeftX, outlineTopY, outlineLeftX, outlineBottomY);
+        // Right outline
+        drawLine(ctx, outlineRightX, outlineTopY, outlineRightX, outlineBottomY)
+        // Bottom outline
+        drawLine(ctx, outlineLeftX, outlineBottomY, outlineRightX, outlineBottomY)
+        
+        // Draw cell outlines as long lines (this makes them cleanly line up, if you do boxes around individual cells it adds dots in the corners where they don't entirely overlap and it makes them look a little wiggly when you zoom in and out)
+        // Vertical cell outlines
+        for (var i = 0; i < worldWidth; i++){
+            var leftX = i*pixelsPerWidth+sideOffset;
+            var rightX = leftX+pixelsPerWidth-1;
+            drawLine(ctx, leftX, 0, leftX, canvasHeight-1);
+            drawLine(ctx, rightX, 0, rightX, canvasHeight-1);
+        }
+        // Horizontal cell outlines
+        for (var j = 0; j < worldHeight; j++){
+            var topY = j*pixelsPerHeight+outlineWidth;
+            var bottomY = topY+pixelsPerHeight-1;
+            drawLine(ctx, sideOffset, topY, canvasWidth-1, topY);
+            drawLine(ctx, sideOffset, bottomY, canvasWidth-1, bottomY);
+        }
+        */
+        
+        ctx.strokeStyle = "black";
+        ctx.fillStyle = "black";
+        ctx.lineWidth = 1;
+        
+        //// Draw cells ////
+        for (var i = 0; i < worldWidth; i++){
+            for (var j = 0; j < worldHeight; j++){
+                var leftX = i*pixelsPerWidth+worldLeftX;
+                var topY = j*pixelsPerHeight+worldTopY;
+                var rightX = leftX+pixelsPerWidth-1;
+                var bottomY = topY+pixelsPerHeight-1;
+                ctx.lineWidth = 1;
+                world.data[i][j].draw(ctx, ticks, leftX, topY, rightX, bottomY);
+            }
+        }
+        
+        //// Object Dragging ////
+        if (objectDragging != null) {
+            var worldPos = mouseCoordsToWorldCoords(mouseX, mouseY);
+            
+            if (worldPosIsInWorld(worldPos)) {
+                var canShowPreview = true;
+                if (objectDragging.data != null){
+                    canShowPreview = objectDragging.canPlace(world, worldPos.x, worldPos.y);
+                }
+                if (canShowPreview) {
+                    var leftX = worldPos.x*pixelsPerWidth+worldLeftX;
+                    var topY = worldPos.y*pixelsPerHeight+worldTopY;
+                    var rightX = leftX+pixelsPerWidth-1;
+                    var bottomY = topY+pixelsPerHeight-1;
+                    // Draw preview of putting it there
+                    // First, clear the cell
+                    if (objectDragging.data == null) { // don't clear cell for copy object
+                        ctx.fillStyle = "white";
+                        ctx.strokeStyle = "white";
+                        ctx.fillRect(leftX+outlineWidth, topY+outlineWidth, rightX-leftX-outlineWidth*2+1, bottomY-topY-outlineWidth*2+1);
+                    }
+                    // Then draw object, but grayed out
+                    ctx.fillStyle = "gray";
+                    ctx.strokeStyle = "gray";
+                    ctx.lineWidth = 1;
+                    objectDragging.draw(ctx, ticks, leftX, topY, rightX, bottomY);
+                }
+            }
+        
+            ctx.strokeStyle = "black";
+            ctx.fillStyle = "black";
+            ctx.lineWidth = 1;
+        
+            var leftX = mouseX - pixelsPerWidth/2;
+            var topY = mouseY - pixelsPerWidth/2;
+            var rightX = leftX+pixelsPerWidth-1;
+            var bottomY = topY+pixelsPerHeight-1;
+            objectDragging.draw(ctx, ticks, leftX, topY, rightX, bottomY);
+        }
+        
+        
+        //// Copying
+        if (copying) {
+            var worldPos = mouseCoordsToWorldCoords(mouseX, mouseY);
+            var endCopyX = Math.max(Math.min(worldPos.x, worldWidth-1), 0);
+            var endCopyY = Math.max(Math.min(worldPos.y, worldHeight-1), 0);
+            var curStartCopyX = startCopyX;
+            var curStartCopyY = startCopyY;
+            
+            // Sort so start is top left corner
+            if (endCopyX < curStartCopyX) {
+                var tmp = endCopyX;
+                endCopyX = curStartCopyX;
+                curStartCopyX = tmp;
+            }
+            if (endCopyY < curStartCopyY) {
+                var tmp = endCopyY;
+                endCopyY = curStartCopyY;
+                curStartCopyY = tmp;
+            }
+            
+            var leftX = curStartCopyX*pixelsPerWidth+worldLeftX;
+            var topY = curStartCopyY*pixelsPerHeight+worldTopY;
+            ctx.strokeStyle = "black";
+            ctx.fillStyle = "black";
+            ctx.lineWidth = 1;
+            //ctx.lineWidth = outlineWidth*2+3;
+            drawGrid(ctx, leftX, topY, pixelsPerWidth, pixelsPerHeight, endCopyX-curStartCopyX+1, endCopyY-curStartCopyY+1);
+            /*
+            for (var x = startCopyX; x <= endCopyX; x++){
+                for (var y = startCopyY; y <= endCopyY; y++) {
+                    
+                    drawGrid(ctx, worldLeftX, worldTopY, pixelsPerWidth, pixelsPerHeight, worldWidth, worldHeight);
+                }
+            }
+            */
+            
+        }
+        
+        
+        var t1 = performance.now();
+        //console.log("took:" + (t1 - t0) + " millis ");
+    };
+
+    $(function(){
+        // draw
+        draw();
+        var ticksAnim = 0;
+        
+        setInterval(function() {
+            ticksAnim = (ticksAnim + 1) % animTicks;
+            draw(ticksAnim);
+        }, 10);
+    });
+})
+
+</script>
+</head>
+<body>
+<canvas id="world"></canvas>
+<br/><br/>
+Rules: <br>
+Go, but you can either place a piece or do a "copy" move that creates a new piece<br>
+You can place anything copied as long as it contains at least one of your color pieces.<br>
+<br>
+Controls:<br>
+Hold down C and drag mouse: Copy<br>
+With mouse, drag pieces around<br>
+W: Place white<br>
+B: Place black<br>
+D: Delete<br>
+U: Undo<br>
+R: Redo<br>
+</body>
+</html>
