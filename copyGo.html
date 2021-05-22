@@ -346,7 +346,6 @@ $(document).ready ( function(){
             world.data = copyData(worldHistory[worldHistory.length-2]);
             redoBuffer.push(worldHistory[worldHistory.length-1]);
             worldHistory.splice(-1, 1);
-            console.log("history len:" + worldHistory.length);
         }
     };
     
@@ -384,7 +383,6 @@ $(document).ready ( function(){
         if (e.keyCode == CKEY) {
             pressingC = true;
         }
-        console.log("key code: " + e.keyCode);
         if (e.keyCode == UNDOKEY) {
             undo();
         }
@@ -543,7 +541,6 @@ $(document).ready ( function(){
             }
         }
         if (worldChanged) {
-            console.log("world changed");
             worldHistory.push(copyData(world.data));
             redoBuffer = [];
         }
@@ -746,7 +743,7 @@ Go, but you can either place a piece or do a "copy" move that creates a new piec
 You can place anything copied as long as it contains at least one of your color pieces<br>
 <br>
 Controls:<br>
-Hold down C, hold left mouse, drag, then release left mouse: Copy<br>
+Hold down C, hold click and drag mouse, then release mouse: Copy<br>
 With mouse, drag pieces around<br>
 W: Place white<br>
 B: Place black<br>
