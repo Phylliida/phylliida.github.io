@@ -1,0 +1,1636 @@
+<html>
+<head>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<script>
+
+
+// one way wall that lets things through vertically (or horizontally) but not other way around
+
+var worldWidth = 128;
+var worldHeight = 128;
+var pixelsPerWidth = 20;
+var pixelsPerHeight = 20;
+var outlineWidth = 0.5;
+var paddingX = 50;
+var paddingY = 100;
+var sideMenuPaddingX = pixelsPerWidth;
+var sideMenuPaddingY = pixelsPerHeight*2;
+
+var menuWidth = 0, menuHeight = 0; // computed when rendering menu
+
+var animTicks = 128;
+var updateTicks = 16;
+
+var sideMenuPaddingSize = 20;
+
+var worldGlobal;
+
+var menuColliders = [];
+
+var worldHistory = [];
+
+        
+// From https://stackoverflow.com/a/2259502/2924421
+var rotatePoint = function(point, rotateAround, angleRadians)
+{
+  var s = Math.sin(angleRadians);
+  var c = Math.cos(angleRadians);
+
+  // translate point back to origin:
+  var shiftedX = point.x - rotateAround.x;
+  var shiftedY = point.y - rotateAround.y;
+
+  // rotate point
+  var xnew = shiftedX * c - shiftedY * s;
+  var ynew = shiftedX * s + shiftedY * c;
+
+  // translate point back:
+  var pointX = xnew + rotateAround.x;
+  var pointY = ynew + rotateAround.y;
+  return {x: pointX, y: pointY};
+};
+
+var pts = function(point){
+    return "(" + point.x + "," + point.y + ")";
+};
+
+
+var isMovable = function(item){
+    return item == circle;
+};
+
+var isSolid = function(item) {
+    return item == solid || item == fan || item == filledCircle || item == leftfan || item == rightfan || item == upfan || item == downfan;
+};
+
+var fan = {
+  label: "fan",
+  update : function(world, tick, posX, posY) {
+    for (var x = posX+1; x < worldWidth; x++) {
+        var item = world.data[x][posY];
+        if (isMovable(item)) {
+            world.nextPos[x][posY].x += 1;
+        } else if (isSolid(item)) {
+            break;
+        }
+    }
+    for (var y = posY+1; y < worldHeight; y++) {
+        var item = world.data[posX][y];
+        if (isMovable(item)) {
+            world.nextPos[posX][y].y += 1;
+        } else if (isSolid(item)) {
+            break;
+        }
+    }
+    for (var x = posX-1; x >= 0; x--) {
+        var item = world.data[x][posY];
+        if (isMovable(item)) {
+            world.nextPos[x][posY].x -= 1;
+        } else if (isSolid(item)) {
+            break;
+        }
+    }
+    for (var y = posY-1; y >= 0; y--) {
+        var item = world.data[posX][y];
+        if (isMovable(item)) {
+            world.nextPos[posX][y].y -= 1;
+        } else if (isSolid(item)) {
+            break;
+        }
+    }
+  },
+  draw : function(ctx, tick, leftX, topY, rightX, bottomY) {
+    var xMid = (leftX + rightX)/2.0;
+    var yMid = (topY + bottomY)/2.0;
+    var rotateRadians = (tick % Math.round(animTicks/2))/(0.0+animTicks/2)*2*Math.PI;
+    var center = {x: xMid, y: yMid};
+    var fanOffset = 5;
+    var topFanPoint = rotatePoint({x: xMid, y: topY+fanOffset}, center, rotateRadians);
+    var leftFanPoint = rotatePoint({x: leftX+fanOffset, y: yMid}, center, rotateRadians);
+    var bottomFanPoint = rotatePoint({x: xMid, y: bottomY-fanOffset}, center, rotateRadians);
+    var rightFanPoint = rotatePoint({x: rightX-fanOffset, y: yMid}, center, rotateRadians);
+    //console.log(pts(topFanPoint) + " " + pts(leftFanPoint) + " " + pts(bottomFanPoint) + " " + pts(rightFanPoint));
+    ctx.lineWidth = 3;
+    drawLine(ctx, topFanPoint.x, topFanPoint.y, bottomFanPoint.x, bottomFanPoint.y);
+    drawLine(ctx, leftFanPoint.x, leftFanPoint.y, rightFanPoint.x, rightFanPoint.y);
+  }
+};
+
+var upfan = {
+  label: "upfan",
+  update : function(world, tick, posX, posY) {
+    
+    var canBlow = true;
+    if (posY+1 < worldHeight) {
+        if (world.data[posX][posY+1] == circle) {
+            canBlow = false;
+        }
+    }
+    if (canBlow)
+    {
+        for (var y = posY-1; y >= 0; y--) {
+            var item = world.data[posX][y];
+            if (isMovable(item)) {
+                world.nextPos[posX][y].y -= 1;
+            } else if (isSolid(item)) {
+                break;
+            }
+        }
+    }
+  },
+  draw : function(ctx, tick, leftX, topY, rightX, bottomY) {
+    var xMid = (leftX + rightX)/2.0;
+    var yMid = (topY + bottomY)/2.0;
+    
+    var canBlow = true;
+    var worldPos = mouseCoordsToWorldCoords((leftX+rightX)/2, (topY+bottomY)/2);
+    if (worldPosIsInWorld(worldPos)) {
+        if (worldPos.y+1 < worldHeight) {
+            if (worldGlobal.data[worldPos.x][worldPos.y+1] == circle) {
+                canBlow = false;
+            }
+        }
+    }
+    var rotateRadians = (tick % Math.round(animTicks/2))/(0.0+animTicks/2)*2*Math.PI;
+    if (!canBlow) {
+        rotateRadians = 0;
+    }
+    var center = {x: xMid, y: yMid};
+    var fanOffset = 5;
+    var topFanPoint = rotatePoint({x: xMid, y: topY+fanOffset}, center, rotateRadians);
+    var leftFanPoint = rotatePoint({x: leftX+fanOffset, y: yMid}, center, rotateRadians);
+    var bottomFanPoint = rotatePoint({x: xMid, y: bottomY-fanOffset}, center, rotateRadians);
+    var rightFanPoint = rotatePoint({x: rightX-fanOffset, y: yMid}, center, rotateRadians);
+    //console.log(pts(topFanPoint) + " " + pts(leftFanPoint) + " " + pts(bottomFanPoint) + " " + pts(rightFanPoint));
+    ctx.lineWidth = 3;
+    drawLine(ctx, topFanPoint.x, topFanPoint.y, bottomFanPoint.x, bottomFanPoint.y);
+    drawLine(ctx, leftFanPoint.x, leftFanPoint.y, rightFanPoint.x, rightFanPoint.y);
+    
+    ctx.lineWidth = 1;
+    
+    var boundaryOffset = fanOffset-2;
+    // Top
+    //drawLine(ctx, leftX+boundaryOffset, topY+boundaryOffset, rightX-boundaryOffset, topY+boundaryOffset);
+    // Left
+    drawLine(ctx, leftX+boundaryOffset, topY+boundaryOffset, leftX+boundaryOffset, bottomY-boundaryOffset);
+    // Right
+    drawLine(ctx, rightX-boundaryOffset, topY+boundaryOffset, rightX-boundaryOffset, bottomY-boundaryOffset);
+    // Bottom
+    drawLine(ctx, leftX+boundaryOffset, bottomY-boundaryOffset, rightX-boundaryOffset, bottomY-boundaryOffset);
+  }
+};
+
+var leftfan = {
+  label: "leftfan",
+  update : function(world, tick, posX, posY) {
+  
+    var canBlow = true;
+    if (posX+1 < worldWidth) {
+        if (world.data[posX+1][posY] == circle) {
+            canBlow = false;
+        }
+    }
+    if (canBlow)
+    {
+        for (var x = posX-1; x >= 0; x--) {
+            var item = world.data[x][posY];
+            if (isMovable(item)) {
+                world.nextPos[x][posY].x -= 1;
+            } else if (isSolid(item)) {
+                break;
+            }
+        }
+    }
+  },
+  draw : function(ctx, tick, leftX, topY, rightX, bottomY) {
+    var xMid = (leftX + rightX)/2.0;
+    var yMid = (topY + bottomY)/2.0;
+    var canBlow = true;
+    var worldPos = mouseCoordsToWorldCoords((leftX+rightX)/2, (topY+bottomY)/2);
+    if (worldPosIsInWorld(worldPos)) {
+        if (worldPos.x+1 < worldWidth) {
+            if (worldGlobal.data[worldPos.x+1][worldPos.y] == circle) {
+                canBlow = false;
+            }
+        }
+    }
+    var rotateRadians = (tick % Math.round(animTicks/2))/(0.0+animTicks/2)*2*Math.PI;
+    if (!canBlow) {
+        rotateRadians = 0;
+    }
+    var center = {x: xMid, y: yMid};
+    var fanOffset = 5;
+    var topFanPoint = rotatePoint({x: xMid, y: topY+fanOffset}, center, rotateRadians);
+    var leftFanPoint = rotatePoint({x: leftX+fanOffset, y: yMid}, center, rotateRadians);
+    var bottomFanPoint = rotatePoint({x: xMid, y: bottomY-fanOffset}, center, rotateRadians);
+    var rightFanPoint = rotatePoint({x: rightX-fanOffset, y: yMid}, center, rotateRadians);
+    //console.log(pts(topFanPoint) + " " + pts(leftFanPoint) + " " + pts(bottomFanPoint) + " " + pts(rightFanPoint));
+    ctx.lineWidth = 3;
+    drawLine(ctx, topFanPoint.x, topFanPoint.y, bottomFanPoint.x, bottomFanPoint.y);
+    drawLine(ctx, leftFanPoint.x, leftFanPoint.y, rightFanPoint.x, rightFanPoint.y);
+    
+    ctx.lineWidth = 1;
+    
+    var boundaryOffset = fanOffset-2;
+    // Top
+    drawLine(ctx, leftX+boundaryOffset, topY+boundaryOffset, rightX-boundaryOffset, topY+boundaryOffset);
+    // Left
+    //drawLine(ctx, leftX+boundaryOffset, topY+boundaryOffset, leftX+boundaryOffset, bottomY-boundaryOffset);
+    // Right
+    drawLine(ctx, rightX-boundaryOffset, topY+boundaryOffset, rightX-boundaryOffset, bottomY-boundaryOffset);
+    // Bottom
+    drawLine(ctx, leftX+boundaryOffset, bottomY-boundaryOffset, rightX-boundaryOffset, bottomY-boundaryOffset);
+  }
+};
+var rightfan = {
+  label: "rightfan",
+  update : function(world, tick, posX, posY) {
+  
+    var canBlow = true;
+    if (posX-1 >= 0) {
+        if (world.data[posX-1][posY] == circle) {
+            canBlow = false;
+        }
+    }
+    if (canBlow) {
+        
+        for (var x = posX+1; x < worldWidth; x++) {
+            var item = world.data[x][posY];
+            if (isMovable(item)) {
+                world.nextPos[x][posY].x += 1;
+            } else if (isSolid(item)) {
+                break;
+            }
+        }
+    }
+  },
+  draw : function(ctx, tick, leftX, topY, rightX, bottomY) {
+    var xMid = (leftX + rightX)/2.0;
+    var yMid = (topY + bottomY)/2.0;
+    
+    var canBlow = true;
+    var worldPos = mouseCoordsToWorldCoords((leftX+rightX)/2, (topY+bottomY)/2);
+    if (worldPosIsInWorld(worldPos)) {
+        if (worldPos.x-1 >= 0) {
+            if (worldGlobal.data[worldPos.x-1][worldPos.y] == circle) {
+                canBlow = false;
+            }
+        }
+    }
+    var rotateRadians = (tick % Math.round(animTicks/2))/(0.0+animTicks/2)*2*Math.PI;
+    if (!canBlow){
+        rotateRadians = 0;
+    }
+    var center = {x: xMid, y: yMid};
+    var fanOffset = 5;
+    var topFanPoint = rotatePoint({x: xMid, y: topY+fanOffset}, center, rotateRadians);
+    var leftFanPoint = rotatePoint({x: leftX+fanOffset, y: yMid}, center, rotateRadians);
+    var bottomFanPoint = rotatePoint({x: xMid, y: bottomY-fanOffset}, center, rotateRadians);
+    var rightFanPoint = rotatePoint({x: rightX-fanOffset, y: yMid}, center, rotateRadians);
+    //console.log(pts(topFanPoint) + " " + pts(leftFanPoint) + " " + pts(bottomFanPoint) + " " + pts(rightFanPoint));
+    ctx.lineWidth = 3;
+    drawLine(ctx, topFanPoint.x, topFanPoint.y, bottomFanPoint.x, bottomFanPoint.y);
+    drawLine(ctx, leftFanPoint.x, leftFanPoint.y, rightFanPoint.x, rightFanPoint.y);
+    
+    ctx.lineWidth = 1;
+    
+    var boundaryOffset = fanOffset-2;
+    // Top
+    drawLine(ctx, leftX+boundaryOffset, topY+boundaryOffset, rightX-boundaryOffset, topY+boundaryOffset);
+    // Left
+    drawLine(ctx, leftX+boundaryOffset, topY+boundaryOffset, leftX+boundaryOffset, bottomY-boundaryOffset);
+    // Right
+    //drawLine(ctx, rightX-boundaryOffset, topY+boundaryOffset, rightX-boundaryOffset, bottomY-boundaryOffset);
+    // Bottom
+    drawLine(ctx, leftX+boundaryOffset, bottomY-boundaryOffset, rightX-boundaryOffset, bottomY-boundaryOffset);
+  }
+};
+var downfan = {
+  label: "downfan",
+  update : function(world, tick, posX, posY) {
+  
+  
+    var canBlow = true;
+    if (posY-1 >= 0) {
+        if (world.data[posX][posY-1] == circle) {
+            canBlow = false;
+        }
+    }
+    if (canBlow)
+    {
+        for (var y = posY+1; y < worldHeight; y++) {
+            var item = world.data[posX][y];
+            if (isMovable(item)) {
+                world.nextPos[posX][y].y += 1;
+            } else if (isSolid(item)) {
+                break;
+            }
+        }
+    }
+  },
+  draw : function(ctx, tick, leftX, topY, rightX, bottomY) {
+    var xMid = (leftX + rightX)/2.0;
+    var yMid = (topY + bottomY)/2.0;
+    
+    var canBlow = true;
+    var worldPos = mouseCoordsToWorldCoords((leftX+rightX)/2, (topY+bottomY)/2);
+    if (worldPosIsInWorld(worldPos)) {
+        if (worldPos.y-1 >= 0) {
+            if (worldGlobal.data[worldPos.x][worldPos.y-1] == circle) {
+                canBlow = false;
+            }
+        }
+    }
+    var rotateRadians = (tick % Math.round(animTicks/2))/(0.0+animTicks/2)*2*Math.PI;
+    if (!canBlow) {
+        rotateRadians = 0;
+    }
+    var center = {x: xMid, y: yMid};
+    var fanOffset = 5;
+    var topFanPoint = rotatePoint({x: xMid, y: topY+fanOffset}, center, rotateRadians);
+    var leftFanPoint = rotatePoint({x: leftX+fanOffset, y: yMid}, center, rotateRadians);
+    var bottomFanPoint = rotatePoint({x: xMid, y: bottomY-fanOffset}, center, rotateRadians);
+    var rightFanPoint = rotatePoint({x: rightX-fanOffset, y: yMid}, center, rotateRadians);
+    //console.log(pts(topFanPoint) + " " + pts(leftFanPoint) + " " + pts(bottomFanPoint) + " " + pts(rightFanPoint));
+    ctx.lineWidth = 3;
+    drawLine(ctx, topFanPoint.x, topFanPoint.y, bottomFanPoint.x, bottomFanPoint.y);
+    drawLine(ctx, leftFanPoint.x, leftFanPoint.y, rightFanPoint.x, rightFanPoint.y);
+    
+    ctx.lineWidth = 1;
+    
+    var boundaryOffset = fanOffset-2;
+    // Top
+    drawLine(ctx, leftX+boundaryOffset, topY+boundaryOffset, rightX-boundaryOffset, topY+boundaryOffset);
+    // Left
+    drawLine(ctx, leftX+boundaryOffset, topY+boundaryOffset, leftX+boundaryOffset, bottomY-boundaryOffset);
+    // Right
+    drawLine(ctx, rightX-boundaryOffset, topY+boundaryOffset, rightX-boundaryOffset, bottomY-boundaryOffset);
+    // Bottom
+    //drawLine(ctx, leftX+boundaryOffset, bottomY-boundaryOffset, rightX-boundaryOffset, bottomY-boundaryOffset);
+  }
+};
+var empty = {
+  label: "empty",
+  update : function(world, tick, posX, posY) {
+  },
+  draw : function(ctx, tick, leftX, topY, rightX, bottomY) {
+  },
+  drawPreview : function(ctx, tick, leftX, topY, rightx, bottomY){
+  
+  }
+};
+
+
+var solid = {
+  label: "solid",
+  update : function(world, tick, posX, posY) {
+    if (posX > 0) {
+        
+    }
+  },
+  draw : function(ctx, tick, leftX, topY, rightX, bottomY) {
+    ctx.fillRect(leftX+outlineWidth,topY+outlineWidth,rightX-leftX-outlineWidth*2+1, bottomY-topY-outlineWidth*2+1); // x y width height
+  }
+};
+
+var drawLine = function(ctx, startX, startY, endX, endY) {
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+};
+
+var circle = {
+  label: "circle",
+  update : function(world, tick, posX, posY) {
+    
+  },
+  draw : function(ctx, tick, leftX, topY, rightX, bottomY) {
+    ctx.beginPath();
+    ctx.arc((leftX+rightX)/2, (topY+bottomY)/2, (rightX-leftX+1)/2-4, 0, 2 * Math.PI);
+    ctx.stroke();
+  }
+};
+
+var filledCircle = {
+  label: "filledCircle",
+  update : function(world, tick, posX, posY) {
+    
+  },
+  draw : function(ctx, tick, leftX, topY, rightX, bottomY) {
+    ctx.beginPath();
+    ctx.arc((leftX+rightX)/2, (topY+bottomY)/2, (rightX-leftX+1)/2-4, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+};
+
+
+var items = [
+    fan,
+    upfan,
+    leftfan,
+    rightfan,
+    downfan,
+    //empty,
+    //solid,
+    circle,
+    filledCircle
+];
+
+var allItems = [
+    fan,
+    upfan,
+    leftfan,
+    rightfan,
+    downfan,
+    empty,
+    solid,
+    circle,
+    filledCircle
+];
+
+
+console.log(JSON.stringify(fan));
+
+
+var sideMenuWidth, sideMenuHeight, sideOffset, upOffset, canvasWidth, canvasHeight, sideMenuLeftX, sideMenuTopY, worldLeftX, worldTopY;
+
+var computeParams = function(ctx, ticks) {
+    var menuSizes = drawMenu(ctx, ticks);
+    sideMenuWidth = menuSizes.rightX-menuSizes.leftX+1;
+    sideMenuHeight = menuSizes.bottomY-menuSizes.topY+1;
+
+    sideOffset = paddingX+sideMenuPaddingX+sideMenuWidth+sideMenuPaddingX;
+    upOffset = paddingY;
+
+    canvasWidth = paddingX+sideMenuPaddingX+sideMenuWidth+sideMenuPaddingX+pixelsPerWidth*worldWidth+paddingX;
+    canvasHeight = Math.max(
+        paddingY+pixelsPerHeight*worldHeight+paddingY,// height of world
+        paddingY+sideMenuPaddingY+sideMenuHeight+sideMenuPaddingY+paddingY // height of side menu
+    )
+
+    sideMenuLeftX = paddingX+sideMenuPaddingX;
+    sideMenuTopY = paddingY+sideMenuPaddingY;
+
+    worldLeftX = sideOffset;
+    worldTopY = upOffset;
+};
+
+var mouseCoordsToWorldCoords = function(x, y) {
+      var worldX = Math.floor((x-worldLeftX)/pixelsPerWidth);
+      var worldY = Math.floor((y-worldTopY)/pixelsPerHeight);
+      return {x: worldX, y: worldY}
+};
+
+var worldPosIsInWorld = function(worldPos) {
+    return worldPos.x >= 0 && worldPos.x < worldWidth && worldPos.y >= 0 && worldPos.y < worldHeight;
+};
+
+var createCopyItemFromData = function(copyData) {
+
+    var copyItem = {
+      label: "copyItem",
+      data: copyData,
+      update : function(world, tick, posX, posY) {
+        
+      },
+      draw : function(ctx, tick, leftX, topY, rightX, bottomY) {
+        for (var x = 0; x < this.data.length; x++) {
+            for (var y = 0; y < this.data[0].length; y++) {
+                var xOffset = x*pixelsPerWidth;
+                var yOffset = y*pixelsPerHeight;
+                this.data[x][y].draw(ctx, tick, leftX+xOffset, topY+yOffset, rightX+xOffset, bottomY+yOffset);
+            }
+        }
+      },
+      canPlace : function(world, posX, posY) {
+        for (var x = 0; x < this.data.length; x++) {
+            for (var y = 0; y < this.data[0].length; y++){
+                var localWorldPos = {x: x+posX, y: y+posY};
+                if (worldPosIsInWorld(localWorldPos)){
+                    var worldObject = world.data[localWorldPos.x][localWorldPos.y];
+                    var copyObject = this.data[x][y];
+                    // if either is empty, we match
+                    // otherwise, make sure we match
+                    if (worldObject != empty && copyObject != empty && 
+                        worldObject != copyObject) {
+                        return false;
+                    }
+                }
+                else
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
+      }
+    };
+    
+    return copyItem;
+};
+
+// For converting copy item to a form we can store in local storage
+// only saves labels in the array so then we can make sure to use up to date item code
+var copyItemToLabelData = function(copyItem) {
+    var labelData = [];
+    for (var x = 0; x < copyItem.data.length; x++) {
+        var row = [];
+        for (var y = 0; y < copyItem.data[x].length; y++) {
+            row.push(copyItem.data[x][y].label);
+        }
+        labelData.push(row);
+    }
+    return labelData;
+}
+
+// From stuff saved in local storage
+var createCopyItemFromLabelData = function(data) {
+    var copyData = [];
+    for (var x = 0; x < data.length; x++) {
+        var row = [];
+        for (var y = 0; y < data[x].length; y++) {
+            var found = false;
+            for (var i = 0; i < allItems.length; i++) {
+                if (allItems[i].label == data[x][y]){
+                    row.push(allItems[i]);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                row.push(empty);
+                console.log("could not find copy data with label: " + data[x][y]);
+            }
+        }
+        copyData.push(row);
+    }
+    
+    return createCopyItemFromData(copyData);
+};
+
+var createCopyItem = function(world, startX, startY, endX, endY){
+    var nonEmptyMinX = endX;
+    var nonEmptyMaxX = startX;
+    var nonEmptyMinY = endY;
+    var nonEmptyMaxY = startY;
+    
+    // shrink down to just the non-empty stuff
+    var hadAtLeastOneNonEmpty = false;
+    for (var x = startX; x <= endX; x++) {
+        for (var y = startY; y <= endY; y++) {
+            if (world.data[x][y] != empty) {
+                hadAtLeastOneNonEmpty = true;
+                nonEmptyMinX = Math.min(nonEmptyMinX, x);
+                nonEmptyMaxX = Math.max(nonEmptyMaxX, x);
+                nonEmptyMinY = Math.min(nonEmptyMinY, y);
+                nonEmptyMaxY = Math.max(nonEmptyMaxY, y);
+            }
+        }
+    }
+    // return null, it's empty
+    if (!hadAtLeastOneNonEmpty) {
+        return null;
+    }
+    // make only contain items
+    else {
+        startX = nonEmptyMinX;
+        startY = nonEmptyMinY;
+        endX = nonEmptyMaxX;
+        endY = nonEmptyMaxY;
+    }
+    
+    
+    var copyData = [];
+    for (var x = startX; x <= endX; x++) {
+        var row = [];
+        for (var y = startY; y <= endY; y++) {
+            row.push(world.data[x][y]);
+        }
+        copyData.push(row);
+    }
+    
+    return createCopyItemFromData(copyData);
+};
+
+var drawGrid = function(ctx, leftX, topY, cellWidth, cellHeight, nCellsX, nCellsY) {
+    var rightX = leftX+nCellsX*cellWidth;
+    var bottomY = topY+nCellsY*cellHeight;
+    
+    var grayColor = '#444444';
+    ctx.strokeStyle = grayColor;
+    ctx.fillStyle = grayColor;
+    ctx.lineWidth = 1;
+    // Horizontal lines (need +1 because have one at top of every cell, then an additional line at the bottom of the last row)
+    for (var y = 0; y < nCellsY+1; y++) {
+        var yPos = topY+y*cellHeight;
+        drawLine(ctx, leftX-outlineWidth, yPos, rightX+outlineWidth, yPos); // - and + outline width is so the corners line up
+    }
+    // Vertical lines (need +1 because have one at left of every cell, then an additional line at the right of the last column)
+    for (var x = 0; x < nCellsX+1; x++) {
+        var xPos = leftX+x*cellWidth;
+        drawLine(ctx, xPos, topY-outlineWidth, xPos, bottomY+outlineWidth);
+    }
+};
+
+var copyItems = [];
+try {
+    copyItems = JSON.parse(window.localStorage.getItem("copyItems"));
+} catch(e) {
+    console.log("failed to parse saved copy items, resetting");
+    copyItems = [];
+}
+
+var updateCopyItems = function() {
+    if (copyItems != null && Array.isArray(copyItems)) {
+        for (var i = 0; i < copyItems.length; i++){ 
+            items.push(createCopyItemFromLabelData(copyItems[i]));
+        }
+    }
+    else {
+        copyItems = [];
+        window.localStorage.setItem("copyItems", JSON.stringify(copyItems));
+    }
+};
+
+updateCopyItems();
+
+
+var drop = function(e) {
+    ignoreDrag(e);
+    var dt = e.originalEvent.dataTransfer;
+      var files = dt.files;
+
+      if(dt.files.length > 0){
+        var file = dt.files[0];
+        const reader = new FileReader();
+        reader.onload = function(fileLoadedEvent){
+          var textFromFileLoaded = fileLoadedEvent.target.result;
+          var resultJson = JSON.parse(textFromFileLoaded);
+          console.log(JSON.stringify(resultJson));
+          for (var i = 0; i < resultJson.length; i++) {
+            items.push(createCopyItemFromLabelData(resultJson[i]));
+            copyItems.push(resultJson[i]);
+          }
+            window.localStorage.setItem("copyItems", JSON.stringify(copyItems));
+        };
+        console.log(file);
+        reader.readAsText(file);
+      }
+      
+    //var data = event.originalEvent.dataTransfer.getData("text/plain");
+    ////console.log(data);
+    //copyItems = JSON.parse(data);
+    //updateCopyItems();
+    return false;
+};
+
+// From https://stackoverflow.com/a/12325686/2924421
+function ignoreDrag(e) {
+  e.originalEvent.stopPropagation();
+  e.originalEvent.preventDefault();
+}
+
+var drawMenu = function(ctx, ticks) {
+    
+    menuColliders = [];
+    var currentItemY = sideMenuTopY;
+    var nextRowX = sideMenuLeftX;
+    var curRowX = sideMenuLeftX;
+    var bottomMenuY = sideMenuTopY;
+    var rightMenuX = sideMenuLeftX;
+    for (var i = 0; i < items.length; i++){
+        ctx.strokeStyle = "black";
+        ctx.fillStyle = "black";
+        ctx.lineWidth = 1;
+        var leftX = curRowX;
+        var topY = currentItemY;
+        var rightX = leftX+pixelsPerWidth-1;
+        var bottomY = topY+pixelsPerHeight-1;
+        items[i].draw(ctx, ticks, leftX, topY, rightX, bottomY);
+        ctx.strokeStyle = "gray";
+        ctx.fillStyle = "gray";
+        ctx.lineWidth = outlineWidth*2;
+        ctx.beginPath();
+        var boxWidth = rightX -leftX+1;
+        var boxHeight = bottomY-topY+1;
+        if (items[i].data != null) {
+            boxWidth = boxWidth*items[i].data.length;
+            boxHeight = boxHeight*items[i].data[0].length;
+        }
+        
+        bottomMenuY = Math.max(topY+boxHeight, bottomMenuY);
+        rightMenuX = Math.max(leftX+boxWidth, rightMenuX);
+        menuColliders.push({leftX:leftX, topY:topY, rightX:leftX+boxWidth, bottomY:topY+boxHeight, item:items[i]}); 
+        nextRowX = Math.max(nextRowX, curRowX+boxWidth+pixelsPerWidth);
+        currentItemY += boxHeight+pixelsPerHeight;
+        if (currentItemY > worldHeight*pixelsPerHeight+worldTopY) {
+            currentItemY = sideMenuTopY;
+            curRowX = nextRowX;
+        }
+        ctx.rect(leftX, topY, boxWidth, boxHeight);
+        ctx.stroke();
+    }
+    return {leftX: sideMenuLeftX, topY: sideMenuTopY, rightX: rightMenuX, bottomY: bottomMenuY}
+    
+}
+
+var copyData = function(data) {
+    var copy = [];
+    for (var x = 0; x < data.length; x++) {
+        var row = []
+        for (var y = 0; y < data[x].length; y++){
+            row.push(data[x][y]);
+        }
+        copy.push(row);
+    }
+    return copy;
+};
+
+var redoBuffer = [];
+
+
+$(document).ready ( function(){
+
+
+
+    var setAtPos = function(x, y, value) {
+        world.data[x][y] = value;
+        world.nextData[x][y] = value;
+        updateWorld(0, false);
+    };
+    
+    var world = {
+        data: [],
+        getData : function(x, y) {
+            if (x < 0 || x >= worldWidth || y < 0 || y >= worldHeight) {
+                return solid;
+            }
+            else {
+                return world.data[x][y];
+            }
+        }
+    };
+    worldGlobal = world;
+    
+    world.nextPos = [];
+    world.paused = false;
+    world.readyToUpdate = false;
+    
+    for (var i = 0; i < worldWidth; i++){
+        
+        var curRow = [];
+        var nextPosRow = [];
+        for (var j = 0; j < worldHeight; j++) {
+            curRow.push(empty);
+            nextPosRow.push({x: 0, y: 0});
+        }
+        world.data.push(curRow);
+        world.nextPos.push(nextPosRow);
+    }
+    
+    worldHistory.push(copyData(world.data));
+    
+    var undo = function(){
+        if (worldHistory.length > 1) {
+            // Thing at very top is current world, so we need to go back two
+            world.data = copyData(worldHistory[worldHistory.length-2]);
+            redoBuffer.push(worldHistory[worldHistory.length-1]);
+            worldHistory.splice(-1, 1);
+            console.log("history len:" + worldHistory.length);
+            updateWorld(0, false);
+        }
+    };
+    
+    var redo = function() {
+        if (redoBuffer.length > 0) {
+            world.data = copyData(redoBuffer[redoBuffer.length-1]);
+            worldHistory.push(copyData(world.data));
+            redoBuffer.splice(-1, 1);
+            updateWorld(0, false);
+        }
+    };
+    
+   
+    var c = $("#world");
+    var ctx = c[0].getContext('2d');
+    
+    
+    var objectDragging = null;
+    
+    var mouseX = 0;
+    var mouseY = 0;
+    
+    var CKEY = 67;
+    var DKEY = 68;
+    var DELKEY = 46;
+    var WHITEKEY = 87;
+    var BLACKKEY = 66;
+    var UNDOKEY = 85;
+    var REDOKEY = 82;
+    var PAUSEKEY = 80;
+    var STEPKEY = 83;
+    var FANKEY = 70;
+    var UPKEY = 38;
+    var DOWNKEY = 40;
+    var RIGHTKEY = 39;
+    var LEFTKEY = 37;
+    
+    var pressingC = false;
+    var copying = false;
+    var startCopyX = 0, startCopyY = 0;
+    
+    document.addEventListener('keydown', e => {
+        if (e.keyCode == CKEY) {
+            pressingC = true;
+        }
+        console.log("key code: " + e.keyCode);
+        if (e.keyCode == UNDOKEY) {
+            undo();
+        }
+        
+        if (e.keyCode == REDOKEY) {
+            redo();
+        }
+        
+        if (e.keyCode == PAUSEKEY) {
+            world.paused = !world.paused;
+        }
+        
+        if (e.keyCode == STEPKEY) {
+                updateWorld(0, true);
+        }
+        
+        if (e.keyCode == DELKEY || e.keyCode == DKEY) {
+            var worldPos = mouseCoordsToWorldCoords(mouseX, mouseY);
+            if (worldPosIsInWorld(worldPos)) {
+                setAtPos(worldPos.x, worldPos.y, empty);
+            }
+            
+            for (var i = 0; i < menuColliders.length; i++){
+                var col = menuColliders[i];
+                if (mouseX >= col.leftX && mouseX <= col.rightX && mouseY >= col.topY && mouseY <= col.bottomY){
+                    items.splice(items.indexOf(col.item), 1);
+                    // Rebuild copy items
+                    copyItems = [];
+                    for (var j = 0; j < items.length; j++){
+                        if (items[j].label === "copyItem") {
+                            copyItems.push(copyItemToLabelData(items[j]));
+                        }
+                    }
+                    window.localStorage.setItem("copyItems", JSON.stringify(copyItems));
+                    break;
+                }
+            }
+        }
+        
+        if (e.keyCode == FANKEY) {
+            var worldPos = mouseCoordsToWorldCoords(mouseX, mouseY);
+            if (worldPosIsInWorld(worldPos)) {
+                setAtPos(worldPos.x, worldPos.y, fan);
+            }
+        }
+        
+        if (e.keyCode == UPKEY) {
+            var worldPos = mouseCoordsToWorldCoords(mouseX, mouseY);
+            if (worldPosIsInWorld(worldPos)) {
+                setAtPos(worldPos.x, worldPos.y, upfan);
+                e.preventDefault();// prevent scrolling
+            }
+        }
+        
+        if (e.keyCode == DOWNKEY) {
+            var worldPos = mouseCoordsToWorldCoords(mouseX, mouseY);
+            if (worldPosIsInWorld(worldPos)) {
+                setAtPos(worldPos.x, worldPos.y, downfan);
+                e.preventDefault();// prevent scrolling
+            }
+        }
+        
+        if (e.keyCode == LEFTKEY) {
+            var worldPos = mouseCoordsToWorldCoords(mouseX, mouseY);
+            if (worldPosIsInWorld(worldPos)) {
+                setAtPos(worldPos.x, worldPos.y, leftfan);
+                e.preventDefault(); // prevent scrolling
+            }
+        }
+        
+        if (e.keyCode == RIGHTKEY) {
+            var worldPos = mouseCoordsToWorldCoords(mouseX, mouseY);
+            if (worldPosIsInWorld(worldPos)) {
+                setAtPos(worldPos.x, worldPos.y, rightfan);
+                e.preventDefault();// prevent scrolling
+            }
+        }
+        
+        if (e.keyCode == WHITEKEY) {
+            var worldPos = mouseCoordsToWorldCoords(mouseX, mouseY);
+            if (worldPosIsInWorld(worldPos)) {
+                setAtPos(worldPos.x, worldPos.y, circle);
+            }
+        }
+        
+        if (e.keyCode == BLACKKEY) {
+            var worldPos = mouseCoordsToWorldCoords(mouseX, mouseY);
+            if (worldPosIsInWorld(worldPos)) {
+                setAtPos(worldPos.x, worldPos.y, filledCircle);
+            }
+        }
+    });
+    document.addEventListener('keyup', e => {
+        if (e.keyCode == CKEY) {
+            pressingC = false;
+            copying = false;
+        }
+    });
+    
+    document.getElementById("world").addEventListener('mousemove', e => {
+      mouseX = e.offsetX;
+      mouseY = e.offsetY;
+    });
+    document.getElementById("world").addEventListener('mousedown', e => {
+      var x = e.offsetX;
+      var y = e.offsetY;
+      
+      var worldPos = mouseCoordsToWorldCoords(x, y);
+      if (pressingC) {
+        startCopyX = Math.max(Math.min(worldPos.x, worldWidth-1), 0);
+        startCopyY = Math.max(Math.min(worldPos.y, worldHeight-1), 0);
+        copying = true;
+        return;
+      }
+      
+      for (var i = 0; i < menuColliders.length; i++){
+        var col = menuColliders[i];
+        if (x >= col.leftX && x <= col.rightX && y >= col.topY && y <= col.bottomY){
+            objectDragging = col.item;
+        }
+      }
+      // Also try grabbing objects on the field
+      if (objectDragging == null) {
+        if (worldPosIsInWorld(worldPos)) {
+          var itemAtPos = world.data[worldPos.x][worldPos.y];
+          if (itemAtPos != empty) {
+            // grab object
+            objectDragging = itemAtPos;
+            // set object there to empty
+            setAtPos(worldPos.x, worldPos.y, empty);
+          }
+        }
+      }
+    });
+
+    document.getElementById("world").addEventListener('mouseup', e => {
+      var x = e.offsetX;
+      var y = e.offsetY;
+      
+      var worldPos = mouseCoordsToWorldCoords(x, y);
+      if (pressingC) {
+        var endCopyX = Math.max(Math.min(worldPos.x, worldWidth-1), 0);
+        var endCopyY = Math.max(Math.min(worldPos.y, worldHeight-1), 0);
+        var curStartCopyX = startCopyX;
+        var curStartCopyY = startCopyY;
+        
+        // Sort so start is top left corner
+        if (endCopyX < curStartCopyX) {
+            var tmp = endCopyX;
+            endCopyX = curStartCopyX;
+            curStartCopyX = tmp;
+        }
+        if (endCopyY < curStartCopyY) {
+            var tmp = endCopyY;
+            endCopyY = curStartCopyY;
+            curStartCopyY = tmp;
+        }
+        var copyItem = createCopyItem(world, curStartCopyX, curStartCopyY, endCopyX, endCopyY);
+        if (copyItem != null) { // will be null if empty
+            items.push(copyItem);
+            copyItems.push(copyItemToLabelData(copyItem));
+            window.localStorage.setItem("copyItems", JSON.stringify(copyItems));
+        }
+        copying = false;
+        return;
+      }
+      
+      if (worldPosIsInWorld(worldPos)) {
+        // Drag and drop item
+        if (objectDragging != null) {
+          if (objectDragging.data != null){
+            var canPlace = objectDragging.canPlace(world, worldPos.x, worldPos.y);
+            
+            if (canPlace) {
+                for (var x = 0; x < objectDragging.data.length; x++) {
+                    for (var y = 0; y < objectDragging.data[0].length; y++){
+                        var copyObject = objectDragging.data[x][y];
+                        if (copyObject != empty) { // empty doesn't override
+                            setAtPos(x+worldPos.x, y+worldPos.y, copyObject);
+                        }
+                    }
+                }
+            }
+            else {
+                //console.log("can't place, conflict");
+            }
+          }
+          else{
+            setAtPos(worldPos.x, worldPos.y, objectDragging);
+          }
+        }
+      }
+      // Reset drag and drop item
+      objectDragging = null;
+    });
+
+    
+    
+    var getItemsNumRows = function() {
+        
+    };
+    
+    
+    
+    var updateWorld = function(ticks, updateFromLast) {
+        
+        if (world.readyToUpdate && updateFromLast){
+            world.data = world.nextData;
+            world.readyToUpdate = false;
+        }
+        
+        
+        // Reset next pos
+        for (var x = 0; x < worldWidth; x++){
+            for (var y = 0; y < worldHeight; y++){
+                world.nextPos[x][y].x = 0;
+                world.nextPos[x][y].y = 0;
+                world.nextPos[x][y].whoWantsToGoHere = [];
+                world.nextPos[x][y].winnerGoesHere = null;
+                world.nextPos[x][y].whereImGoing = null;
+                world.nextPos[x][y].placesCanMaybeStillGoTo = [];
+            }
+        }
+        
+        // Run update on all cells
+        for (var x = 0; x < worldWidth; x++){
+            for (var y = 0; y < worldHeight; y++){
+                world.data[x][y].update(world, ticks, x, y);
+            }
+        }
+        
+        // Set want to go to locations
+        
+        // Step 1
+        // Start with things staying put, they get priority
+        for (var x = 0; x < worldWidth; x++){
+            for (var y = 0; y < worldHeight; y++){
+                var offsetX = world.nextPos[x][y].x;
+                var offsetY = world.nextPos[x][y].y;
+                if (offsetX == 0 && offsetY == 0 && world.data[x][y] != empty){ // empty doesn't count as being stuck
+                    world.nextPos[x][y].winnerGoesHere = {x: x, y: y};
+                    world.nextPos[x][y].whereImGoing = {x: x, y: y};
+                    //console.log("stuck " + x + "," + y);
+                }
+            }
+        }
+        
+        // Step 2
+        // Let places know that we want to move there
+        // Or mark as stuck if the place we want to go is staying put from step 1
+        for (var x = 0; x < worldWidth; x++){
+            for (var y = 0; y < worldHeight; y++){
+                var offsetX = world.nextPos[x][y].x;
+                var offsetY = world.nextPos[x][y].y;
+                var thingMoving = world.data[x][y];
+                // No need to move empty, so only move non empty things that are moving
+                if (thingMoving != empty && (offsetX != 0 || offsetY != 0)){
+                    var wantToGoX = x+offsetX;
+                    var wantToGoY = y+offsetY;
+                    var tryingToMove = false;
+                    if (worldPosIsInWorld({x: wantToGoX, y: wantToGoY}) &&
+                        world.nextPos[wantToGoX][wantToGoY].winnerGoesHere == null) { // Make sure it isn't claimed by stationary
+                        //console.log("I am " + x + "," + y + " and I want to go to " + wantToGoX + "," + wantToGoY);
+                        var curPriority = 2;
+                        if (offsetX == 0) { // vertical
+                            curPriority = 1;
+                        }
+                        if (offsetY == 0) { // horizontal
+                            curPriority = 0;
+                        }
+                        
+                        world.nextPos[wantToGoX][wantToGoY].whoWantsToGoHere.push({fromX: x, fromY: y, toX: wantToGoX, toY: wantToGoY, priority: curPriority});
+                        world.nextPos[x][y].placesCanMaybeStillGoTo.push({x: wantToGoX, y: wantToGoY, priority: curPriority});
+                        tryingToMove = true;
+                    }
+                    // If diagnoal, also try horizontal
+                    if (wantToGoX != x && wantToGoY != y) {
+                        // If we are moving diagonally, also try moving horizontally
+                        if (worldPosIsInWorld({x: x, y: wantToGoY}) &&
+                            world.nextPos[x][wantToGoY].winnerGoesHere == null) { // Make sure it isn't claimed by stationary
+                            //console.log("I am " + x + "," + y + " and I want to go to " + wantToGoX + "," + wantToGoY);
+                            // vertical
+                            world.nextPos[x][wantToGoY].whoWantsToGoHere.push({fromX: x, fromY: y, toX: x, toY: wantToGoY, priority: 1});
+                            world.nextPos[x][y].placesCanMaybeStillGoTo.push({x: x, y: wantToGoY, priority: 1});
+                            tryingToMove = true;
+                        }
+                        if (worldPosIsInWorld({x: wantToGoX, y: y}) &&
+                            world.nextPos[wantToGoX][y].winnerGoesHere == null) { // Make sure it isn't claimed by stationary
+                            //console.log("I am " + x + "," + y + " and I want to go to " + wantToGoX + "," + wantToGoY);
+                            // horizontal
+                            world.nextPos[wantToGoX][y].whoWantsToGoHere.push({fromX: x, fromY: y, toX: wantToGoX, toY: y, priority: 0});
+                            world.nextPos[x][y].placesCanMaybeStillGoTo.push({x: wantToGoX, y: y, priority: 0});
+                            tryingToMove = true;
+                        }
+                    }
+                    
+                    // We failed to move, stay put
+                    if (!tryingToMove) {
+                        world.nextPos[x][y].winnerGoesHere = {x: x, y: y};
+                        world.nextPos[x][y].whereImGoing = {x: x, y: y};
+                    }
+                }
+            }
+        }
+        
+        var removeMoveToOption = function(moveOption) {
+            var options = world.nextPos[moveOption.fromX][moveOption.fromY].placesCanMaybeStillGoTo;
+            var index = -1;
+            for (var i = 0; i < options.length; i++) {
+                if (options[i].x == moveOption.toX && options[i].y == moveOption.toY) {
+                    index = i;
+                    break;
+                }
+            }
+            if (index == -1) {
+                // This is okay, and can happen if we try to trickle stuck, remove a position, but there's an alternate position still available
+                // Then later when we trickle stuck again, we will try and remove it again (but it's already removed), however now there is no more alternate positions
+                // So stuck will actually be correctly trickled
+            }
+            else {
+                // remove that option
+                options.splice(index, 1);
+            }
+        };
+        
+        var isHighestPriorityOption = function(moveOption){
+            var options = world.nextPos[moveOption.fromX][moveOption.fromY].placesCanMaybeStillGoTo;
+            for (var i = 0; i < options.length; i++) {
+                if (options[i].priority > moveOption.priority) {
+                    return false;
+                }
+            }
+            return true;
+        };
+            
+        
+        // Recursively send stuck upstream
+        // Everyone keeps track of the number of places they want to go to, so once those reach zero they are stuck
+        var trickleStuck = function(positionsToTrickle) {
+            if (positionsToTrickle.length == 0) {
+                return;
+            }
+            // Do it recursively upstream
+            var peopleToProcess = [];
+            for (var i = 0; i < positionsToTrickle.length; i++) {
+                peopleToProcess.push(positionsToTrickle[i]);
+            }
+            while (peopleToProcess.length > 0) {
+                var top = peopleToProcess.pop();
+                // if it doesn't know that it is stuck, tell it it's stuck and append those that want to go there to the processed list
+                if (world.nextPos[top.fromX][top.fromY].winnerGoesHere == null) {
+                    // We lose (top.toX, top.toY) as a place we can go
+                    removeMoveToOption(top);
+                    // We we are out of places we can go to, trickle stuck to those coming into us as well
+                    if (world.nextPos[top.fromX][top.fromY].placesCanMaybeStillGoTo.length == 0) {
+                        world.nextPos[top.fromX][top.fromY].winnerGoesHere = {x: top.fromX, y: top.fromY};
+                        world.nextPos[top.fromX][top.fromY].whereImGoing = {x: top.fromX, y: top.fromY};
+                        for (var i = 0; i < world.nextPos[top.fromX][top.fromY].whoWantsToGoHere.length; i++) {
+                            peopleToProcess.push(world.nextPos[top.fromX][top.fromY].whoWantsToGoHere[i]);
+                        }
+                        world.nextPos[top.fromX][top.fromY].whoWantsToGoHere = [];
+                    }
+                }
+            }
+        };
+        
+        // Recursively send "you can move here" upstream
+        var trickleCanMove = function(positionsToTrickle) {
+            var changed = false;
+            if (positionsToTrickle.length == 0) {
+                return changed;
+            }
+            // Do it recursively upstream
+            var peopleToProcess = [];
+            for (var i = 0; i < positionsToTrickle.length; i++) {
+                peopleToProcess.push(positionsToTrickle[i]);
+            }
+            while (peopleToProcess.length > 0) {
+                var top = peopleToProcess.pop();
+                //console.log("trickle can move " + top.x + "," + top.y);
+                var curWhoWantsToGoHere = world.nextPos[top.x][top.y].whoWantsToGoHere;
+                //console.log("processing " + top.x + "," + top.y + " with who want to go here of len " + curWhoWantsToGoHere.length);
+                // If we haven't told it that things can move here and there are people that want to go here
+                if (world.nextPos[top.x][top.y].winnerGoesHere == null && curWhoWantsToGoHere.length > 0) {
+                    // TODO: Better precedence choosing
+                    var highestPriority = -1000000;
+                    var highestItem = null;
+                    var highestIndex = 0;
+                    for (var i = 0; i < curWhoWantsToGoHere.length; i++) {
+                        if (world.nextPos[curWhoWantsToGoHere[i].fromX][curWhoWantsToGoHere[i].fromY].whereImGoing == null && // If that doesn't have an assigned place to go yet
+                            isHighestPriorityOption(curWhoWantsToGoHere[i]) && // Only consider it if it's highest priority of the places that thing can go
+                            curWhoWantsToGoHere[i].priority > highestPriority) { // Move the one with the highest priority
+                            highestItem = curWhoWantsToGoHere[i];
+                            highestPriority = highestItem.priority;
+                            highestIndex = i;
+                        }
+                    }
+                    //console.log("curWhoWantsToGoHere:" + JSON.stringify(curWhoWantsToGoHere));
+                    var chosenOne = highestItem;
+                    // If someone can move here, select them
+                    if (chosenOne != null) {
+                    
+                        //console.log("trickle chosen one of " + JSON.stringify(world.nextPos[chosenOne.fromX][chosenOne.fromY]) + " when processing top of " + JSON.stringify(world.nextPos[top.x][top.y]));
+                        
+                        //console.log("trickle can move " + top.x + "," + top.y + " found chosen " + chosenOne.fromX + "," + chosenOne.fromY + "  " + chosenOne.toX + "," + chosenOne.toY);
+                        curWhoWantsToGoHere.splice(highestIndex, 1);
+                        //console.log("allowing " + chosenOne.x + "," + chosenOne.y + " to flow into " + top.x + "," + top.y);
+                        world.nextPos[top.x][top.y].winnerGoesHere = {x: chosenOne.fromX, y: chosenOne.fromY};
+                        world.nextPos[chosenOne.fromX][chosenOne.fromY].whereImGoing = {x: top.x, y: top.y};
+                        
+                        // append the thing that moved here into the list to trickle "you can move here" to that position
+                        peopleToProcess.push({x: chosenOne.fromX, y: chosenOne.fromY});
+                        
+                        if (curWhoWantsToGoHere.length > 0){
+                            //console.log("len " + curWhoWantsToGoHere.length);
+                        }
+                        // clear the list now that it is processed (we need to do this before the below line in case they recurse back to us)
+                        world.nextPos[top.x][top.y].whoWantsToGoHere = [];
+                        if (curWhoWantsToGoHere.length > 0){
+                            //console.log("len after " + curWhoWantsToGoHere.length);
+                        }
+                        //console.log("top:" + top.x + "," + top.y + " " + highestPriority);
+                        //console.log("trickle stuck:" + JSON.stringify(curWhoWantsToGoHere));
+                        // Everyone that doesn't have alternate ways to go
+                        trickleStuck(curWhoWantsToGoHere);
+                        changed = true;
+                    }
+                    else
+                    {
+                        //console.log("trickle no chosen one " + JSON.stringify(world.nextPos[top.x][top.y]) + ", will wait for later");
+                    }
+                }
+            }
+            return changed;
+        };
+        
+        var changed = true;
+        var iters = 0;
+        // we need to do step 3 multiple times because of priority 
+        while (changed) {
+            changed = false;
+            // Step 3: 
+            // Trickle "stuck" and "can move" upstream
+            for (var x = 0; x < worldWidth; x++){
+                for (var y = 0; y < worldHeight; y++){
+                    var curWhoWantsToGoHere = world.nextPos[x][y].whoWantsToGoHere;
+                    // if we are stuck and people want to go here, tell them no
+                    if (world.nextPos[x][y].winnerGoesHere != null && curWhoWantsToGoHere.length > 0 && 
+                        world.nextPos[x][y].winnerGoesHere.x == x && world.nextPos[x][y].winnerGoesHere.y == y) {
+                        trickleStuck(curWhoWantsToGoHere);
+                        // Clear array since we've processed them
+                        world.nextPos[x][y].whoWantsToGoHere = [];
+                        changed = true;
+                    }
+                    // If people want to go here and we are empty, they can come, trickle the okay up to them
+                    else if(world.nextPos[x][y].winnerGoesHere == null && 
+                        (world.data[x][y] == empty || world.nextPos[x][y].whereImGoing != null) && // empty (so people can go in here), or moving away already
+                        curWhoWantsToGoHere.length > 0) { // previously had "can move" trickled to you, but had other alternatives to consider so waiting
+                        //console.log("want to trickle in at position " + x + "," + y);
+                        // sometimes it looks like it can move, but it needs to wait for other higher priority options to be considered first
+                        // this returns true if it actually made a change
+                        if(trickleCanMove([{x: x, y: y}])) { 
+                            changed = true;
+                        }
+                    }
+                    
+                    // Otherwise, either:
+                    //   no one wants to come here (we are fine, need no update)
+                    //   people want to come here but we aren't empty, we need to wait for an okay by downstream to trickle to us
+                }
+            }
+            iters += 1;
+            if (iters > 2) {
+                //console.log("completed iter " + iters);
+            }
+        }
+        
+        // Step 4: You can have cycles where everyone wants to go into someone else that also wants to move
+        // Those cycles will not be in either case in the above
+        
+        // Step 5:
+        // Actually move everyone
+        var newWorldData = [];
+        for (var x = 0; x < worldWidth; x++){
+            var row = [];
+            for (var y = 0; y < worldHeight; y++){
+                var curWinnerPos = world.nextPos[x][y].winnerGoesHere;
+                if (world.nextPos[x][y].whereImGoing == null && world.data[x][y] != empty) {
+                    world.nextPos[x][y].whereImGoing = {x: x, y: y};
+                    row.push(world.data[x][y]);
+                    console.log("stuck gui " + JSON.stringify(world.nextPos[x][y]));
+                    for (var i = 0; i < world.nextPos[x][y].placesCanMaybeStillGoTo.length; i++) {
+                        var place = world.nextPos[x][y].placesCanMaybeStillGoTo[i];
+                        console.log(i + " " + place.x + "," + place.y + " " + JSON.stringify(world.nextPos[place.x][place.y]));
+                    }
+                }
+                else if (curWinnerPos == null) {
+                    row.push(empty);
+                }
+                else {
+                    row.push(world.data[curWinnerPos.x][curWinnerPos.y]);
+                }
+            }
+            newWorldData.push(row);
+        }
+        world.nextData = newWorldData;
+        world.readyToUpdate = true;
+    };
+    
+    var draw = function(ticks, ticksUpdate){
+        
+        var prevWorld = worldHistory[worldHistory.length-1];
+        var worldChanged = false;
+        for (var x = 0; x < worldWidth; x++){
+            for (var y = 0; y < worldHeight; y++){
+                if (prevWorld[x][y] != world.data[x][y]) {
+                    worldChanged = true;
+                }
+            }
+        }
+        if (worldChanged) {
+            //console.log("world changed");
+            worldHistory.push(copyData(world.data));
+            redoBuffer = [];
+        }
+        
+        computeParams(ctx, ticks);
+        // set width and height
+        ctx.canvas.height = canvasHeight;
+        ctx.canvas.width = canvasWidth;
+        
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0,0,canvasWidth, canvasHeight);
+        var t0 = performance.now();
+        
+        //// Side Menu ////
+        drawMenu(ctx, ticks);
+        /*
+        ctx.strokeStyle = "gray";
+        ctx.fillStyle = "gray";
+        ctx.lineWidth = outlineWidth*2; // we do *2 because this actually covers outlines of two cells
+        drawGrid(ctx, sideMenuLeftX, sideMenuTopY, pixelsPerWidth, pixelsPerHeight, 1, items.length);
+        */
+        
+        
+        /*
+        ctx.fillStyle = "gray";
+        ctx.strokeStyle = "gray";
+        // Side menu vertical cell outlines
+        for (var i = 0; i < 1; i++){
+            var leftX = i*pixelsPerWidth+sideMenuOutlineWidth;
+            var rightX = leftX+pixelsPerWidth-1;
+            var topY = upOffset+pixelsPerHeight;
+            var bottomY = topY+(items.length)*pixelsPerHeight;
+            drawLine(ctx, leftX, topY, leftX, bottomY+1);
+            drawLine(ctx, rightX, topY, rightX, bottomY+1);
+        }
+        // Side menu horizontal cell outlines
+        for (var j = 0; j < items.length; j++){
+            var topY = (j+1)*pixelsPerHeight+upOffset;
+            var bottomY = topY+pixelsPerHeight-1;
+            drawLine(ctx, sideMenuOutlineWidth, topY, sideMenuOutlineWidth+sideMenuSize-1, topY);
+            drawLine(ctx, sideMenuOutlineWidth, bottomY, sideMenuOutlineWidth+sideMenuSize-1, bottomY);
+        }
+        */
+        
+        
+        
+        //// Outline ////
+        ctx.strokeStyle = "black";
+        ctx.fillStyle = "black";
+        ctx.lineWidth = outlineWidth*2;
+        
+        drawGrid(ctx, worldLeftX, worldTopY, pixelsPerWidth, pixelsPerHeight, worldWidth, worldHeight);
+        
+        /*
+        // Top outline
+        drawLine(ctx, outlineLeftX, outlineTopY, outlineRightX, outlineTopY)
+        // Left outline
+        drawLine(ctx, outlineLeftX, outlineTopY, outlineLeftX, outlineBottomY);
+        // Right outline
+        drawLine(ctx, outlineRightX, outlineTopY, outlineRightX, outlineBottomY)
+        // Bottom outline
+        drawLine(ctx, outlineLeftX, outlineBottomY, outlineRightX, outlineBottomY)
+        
+        // Draw cell outlines as long lines (this makes them cleanly line up, if you do boxes around individual cells it adds dots in the corners where they don't entirely overlap and it makes them look a little wiggly when you zoom in and out)
+        // Vertical cell outlines
+        for (var i = 0; i < worldWidth; i++){
+            var leftX = i*pixelsPerWidth+sideOffset;
+            var rightX = leftX+pixelsPerWidth-1;
+            drawLine(ctx, leftX, 0, leftX, canvasHeight-1);
+            drawLine(ctx, rightX, 0, rightX, canvasHeight-1);
+        }
+        // Horizontal cell outlines
+        for (var j = 0; j < worldHeight; j++){
+            var topY = j*pixelsPerHeight+outlineWidth;
+            var bottomY = topY+pixelsPerHeight-1;
+            drawLine(ctx, sideOffset, topY, canvasWidth-1, topY);
+            drawLine(ctx, sideOffset, bottomY, canvasWidth-1, bottomY);
+        }
+        */
+        
+        ctx.strokeStyle = "black";
+        ctx.fillStyle = "black";
+        ctx.lineWidth = 1;
+        
+        //// Draw cells ////
+        for (var i = 0; i < worldWidth; i++){
+            for (var j = 0; j < worldHeight; j++){
+                var leftX = i*pixelsPerWidth+worldLeftX;
+                var topY = j*pixelsPerHeight+worldTopY;
+                ctx.lineWidth = 1;
+                var curWhereImGoing = world.nextPos[i][j].whereImGoing;
+                if (curWhereImGoing != null && 
+                    (curWhereImGoing.x != i || curWhereImGoing.y != j)) {
+                    if (world.paused) {
+                        for (var k = 0; k < updateTicks; k++) {
+                            var interpolateLeftX = curWhereImGoing.x*pixelsPerWidth+worldLeftX;
+                            var interpolateTopY = curWhereImGoing.y*pixelsPerHeight+worldTopY;
+                            
+                            var amountInterpolate = k/updateTicks; // should be animTicks-1 if we want 0 to 1 but we actually want it to be smooth and finish on start frame so this is right
+                            leftX = leftX*(1-amountInterpolate) + interpolateLeftX*amountInterpolate;
+                            topY = topY*(1-amountInterpolate) + interpolateTopY*amountInterpolate;
+                            var rightX = leftX+pixelsPerWidth-1;
+                            var bottomY = topY+pixelsPerHeight-1;
+                            world.data[i][j].draw(ctx, ticks, leftX, topY, rightX, bottomY);
+                        }
+                    }
+                    else {
+                        var interpolateLeftX = curWhereImGoing.x*pixelsPerWidth+worldLeftX;
+                        var interpolateTopY = curWhereImGoing.y*pixelsPerHeight+worldTopY;
+                        
+                        var amountInterpolate = ticksUpdate/updateTicks; // should be animTicks-1 if we want 0 to 1 but we actually want it to be smooth and finish on start frame so this is right
+                        leftX = leftX*(1-amountInterpolate) + interpolateLeftX*amountInterpolate;
+                        topY = topY*(1-amountInterpolate) + interpolateTopY*amountInterpolate;
+                        var rightX = leftX+pixelsPerWidth-1;
+                        var bottomY = topY+pixelsPerHeight-1;
+                        world.data[i][j].draw(ctx, ticks, leftX, topY, rightX, bottomY);
+                    }
+                }
+                else 
+                {
+                    var rightX = leftX+pixelsPerWidth-1;
+                    var bottomY = topY+pixelsPerHeight-1;
+                    world.data[i][j].draw(ctx, ticks, leftX, topY, rightX, bottomY);
+                }
+            }
+        }
+        
+        //// Object Dragging ////
+        if (objectDragging != null) {
+            var worldPos = mouseCoordsToWorldCoords(mouseX, mouseY);
+            
+            if (worldPosIsInWorld(worldPos)) {
+                var canShowPreview = true;
+                if (objectDragging.data != null){
+                    canShowPreview = objectDragging.canPlace(world, worldPos.x, worldPos.y);
+                }
+                if (canShowPreview) {
+                    var leftX = worldPos.x*pixelsPerWidth+worldLeftX;
+                    var topY = worldPos.y*pixelsPerHeight+worldTopY;
+                    var rightX = leftX+pixelsPerWidth-1;
+                    var bottomY = topY+pixelsPerHeight-1;
+                    // Draw preview of putting it there
+                    // First, clear the cell
+                    if (objectDragging.data == null) { // don't clear cell for copy object
+                        ctx.fillStyle = "white";
+                        ctx.strokeStyle = "white";
+                        ctx.fillRect(leftX+outlineWidth, topY+outlineWidth, rightX-leftX-outlineWidth*2+1, bottomY-topY-outlineWidth*2+1);
+                    }
+                    // Then draw object, but grayed out
+                    ctx.fillStyle = "gray";
+                    ctx.strokeStyle = "gray";
+                    ctx.lineWidth = 1;
+                    objectDragging.draw(ctx, ticks, leftX, topY, rightX, bottomY);
+                }
+            }
+        
+            ctx.strokeStyle = "black";
+            ctx.fillStyle = "black";
+            ctx.lineWidth = 1;
+        
+            var leftX = mouseX - pixelsPerWidth/2;
+            var topY = mouseY - pixelsPerWidth/2;
+            var rightX = leftX+pixelsPerWidth-1;
+            var bottomY = topY+pixelsPerHeight-1;
+            objectDragging.draw(ctx, ticks, leftX, topY, rightX, bottomY);
+        }
+        
+        
+        //// Copying
+        if (copying) {
+            var worldPos = mouseCoordsToWorldCoords(mouseX, mouseY);
+            var endCopyX = Math.max(Math.min(worldPos.x, worldWidth-1), 0);
+            var endCopyY = Math.max(Math.min(worldPos.y, worldHeight-1), 0);
+            var curStartCopyX = startCopyX;
+            var curStartCopyY = startCopyY;
+            
+            // Sort so start is top left corner
+            if (endCopyX < curStartCopyX) {
+                var tmp = endCopyX;
+                endCopyX = curStartCopyX;
+                curStartCopyX = tmp;
+            }
+            if (endCopyY < curStartCopyY) {
+                var tmp = endCopyY;
+                endCopyY = curStartCopyY;
+                curStartCopyY = tmp;
+            }
+            
+            var leftX = curStartCopyX*pixelsPerWidth+worldLeftX;
+            var topY = curStartCopyY*pixelsPerHeight+worldTopY;
+            ctx.strokeStyle = "black";
+            ctx.fillStyle = "black";
+            ctx.lineWidth = 1;
+            //ctx.lineWidth = outlineWidth*2+3;
+            drawGrid(ctx, leftX, topY, pixelsPerWidth, pixelsPerHeight, endCopyX-curStartCopyX+1, endCopyY-curStartCopyY+1);
+            /*
+            for (var x = startCopyX; x <= endCopyX; x++){
+                for (var y = startCopyY; y <= endCopyY; y++) {
+                    
+                    drawGrid(ctx, worldLeftX, worldTopY, pixelsPerWidth, pixelsPerHeight, worldWidth, worldHeight);
+                }
+            }
+            */
+            
+        }
+        
+        
+        var t1 = performance.now();
+        //console.log("took:" + (t1 - t0) + " millis ");
+    };
+
+    $(function(){
+        $("a#downloadbutton").click(function() {
+            console.log("trying to download");
+            this.href = "data:text/plain;charset=UTF-8," + encodeURIComponent(JSON.stringify(copyItems));
+        });
+        
+        $('#world')
+        .bind('dragenter', ignoreDrag)
+        .bind('dragover', ignoreDrag)
+        .bind('drop', drop); 
+    
+        var firstTimeGoing = true;
+        var ticksAnim = 0;
+        var ticksUpdate = 0;
+        var toggleTicks = 0;
+        setInterval(function() {
+            
+            if (firstTimeGoing)
+            {
+                firstTimeGoing = false;
+                // Call this once initially to make sure stuff is setup
+                updateWorld(0, true);
+            }
+            ticksAnim = (ticksAnim + 1) % animTicks;
+            ticksUpdate = (ticksUpdate + 1) % updateTicks;
+            if (ticksUpdate % updateTicks == 0) {
+                if (!world.paused) {
+                    updateWorld(0, true);
+                }
+            }
+            if (ticksUpdate == 0) {
+                toggleTicks = (toggleTicks + 1) % 3;
+
+            }
+            if (world.paused) {
+                draw(ticksAnim, ticksUpdate);
+            }
+            else {
+                draw(ticksAnim, ticksUpdate);
+            }
+        }, 10);
+    });
+})
+
+
+</script>
+</head>
+<body>
+<canvas id="world"></canvas>
+<br/><br/>
+<a id='downloadbutton' href="" download="copyItems.txt">Download copy items</a>
+</body>
+<script>
+
+</script>
+</html>
