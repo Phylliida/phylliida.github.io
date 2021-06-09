@@ -6,8 +6,8 @@
 
 // one way wall that lets things through vertically (or horizontally) but not other way around
 
-var worldWidth = 128;
-var worldHeight = 128;
+var worldWidth = 64;
+var worldHeight = 64;
 var pixelsPerWidth = 20;
 var pixelsPerHeight = 20;
 var outlineWidth = 0.5;
@@ -1628,7 +1628,21 @@ $(document).ready ( function(){
 <body>
 <canvas id="world"></canvas>
 <br/><br/>
-<a id='downloadbutton' href="" download="copyItems.txt">Download copy items</a>
+<a id='downloadbutton' href="" download="copyItems.txt">Download copy items</a><br>
+(Drag and drop downloaded file onto canvas to restore)<br>
+<br> Controls:<br>
+Drag things around with the mouse<br>
+Hold c, click and drag, then release click - copy<br>
+u - undo<br>
+r - redo<br>
+p - pause/unpause<br>
+s - step (while paused)<br>
+<br>
+Object shortcuts:<br>
+w - white piece, can be pushed by fans<br>
+b - black piece, solid wall<br>
+f - fan
+arrow keys - directional fans, airflow can be blocked<br>
 </body>
 <script>
 
