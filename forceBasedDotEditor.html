@@ -364,7 +364,7 @@ function colourNameToHex(colour)
 function parseDotFile(file, callback) {
     reader = new FileReader();
     reader.onload = function(event) {
-        require(['/js/dotparser'], function(dotparser){
+        require(['dotparser'], function(dotparser){
             var text = event.target.result;
             var nodes = dotparser.parse(text);
             //console.log(JSON.stringify(nodes));
