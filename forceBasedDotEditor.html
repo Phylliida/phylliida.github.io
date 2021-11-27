@@ -1,0 +1,488 @@
+  <!DOCTYPE html>
+  <meta charset="utf-8">
+  <style>
+
+  .links path {
+    fill: none;
+    stroke: #666;
+    stroke-width: 1.5px;
+  }
+
+  .nodes circle {
+    fill: #ccc;
+    stroke: #fff;
+    stroke-width: 1.5px;
+  }
+
+  .nodes text {
+    fill: #000;
+    font: 10px sans-serif;
+    pointer-events: none;
+  }
+  
+  #drop_zone {
+  border: 5px solid blue;
+  width:  200px;
+  height: 100px;
+}
+
+  </style>
+
+<div id="drop_zone" ondrop="dropHandler(event);" ondragover="dragOverHandler(event);">
+  <p>Upload a dot file by dragging it into here.</p>
+</div><br>
+Press p to pause and unpause simulation
+  <svg width="3000" height="3000"></svg>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="/js/dotparser.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js"></script>
+Credit:<br>Parsing dot files done with <a href="https://github.com/anvaka/dotparser">dotparser</a>
+<br>
+Force directed graph modified from <a href="https://observablehq.com/@d3/force-directed-graph">Observablehq</a>
+
+<script>
+function dropHandler(ev) {
+  // Prevent default behavior (Prevent file from being opened)
+  ev.preventDefault();
+
+  if (ev.dataTransfer.items) {
+    // Use DataTransferItemList interface to access the file(s)
+    for (var i = 0; i < ev.dataTransfer.items.length; i++) {
+      // If dropped items aren't files, reject them
+      if (ev.dataTransfer.items[i].kind === 'file') {
+        var file = ev.dataTransfer.items[i].getAsFile();
+        
+          parseDotFile(file, function(graph) {
+          
+            ForceGraph(graph);
+          });
+        console.log('... file[' + i + '].name = ' + file.name);
+      }
+    }
+  } else {
+    // Use DataTransfer interface to access the file(s)
+    for (var i = 0; i < ev.dataTransfer.files.length; i++) {
+      console.log('... file[' + i + '].name = ' + ev.dataTransfer.files[i].name);
+    }
+  }
+}
+
+function dragOverHandler(ev) {
+  // Prevent default behavior (Prevent file from being opened)
+  ev.preventDefault();
+}
+</script>
+
+<script>
+// Copyright 2021 Observable, Inc.
+// Released under the ISC license.
+// https://observablehq.com/@d3/force-directed-graph
+
+  var div = d3.select("body").append("div")
+     .attr("class", "tooltip-donut")
+     .style("opacity", 0);
+     
+var nodeStrength;
+var linkStrength;
+
+var running = true;
+
+document.addEventListener('keypress', logKey);
+
+function logKey(e) {
+  if(e.code + "" === "KeyP")
+  {
+    running = !running;
+    if (!running) {
+        nodeStrength = forceNode.strength();
+        linkStrength = forceLink.strength();
+        forceNode.strength(0)
+        forceLink.strength(0)
+    }
+    else {
+        forceNode.strength(nodeStrength);
+        forceLink.strength(linkStrength);
+        simulation.alphaTarget(0).restart();
+    }
+  }
+}
+
+var forceNode;
+var forceLink;
+
+
+var simulation;
+
+function ForceGraph({
+  nodes, // an iterable of node objects (typically [{id}, …])
+  links // an iterable of link objects (typically [{source, target}, …])
+}, {
+  nodeId = d => d.id, // given d in nodes, returns a unique identifier (string)
+  nodeGroup = d => d.color, // given d in nodes, returns an (ordinal) value for color
+  nodeGroups, // an array of ordinal values representing the node groups
+  nodeTitle, // given d in nodes, a title string
+  nodeFill = "currentColor", // node stroke fill (if not using a group color encoding)
+  nodeStroke = "#fff", // node stroke color
+  nodeStrokeWidth = 1.5, // node stroke width, in pixels
+  nodeStrokeOpacity = 1, // node stroke opacity
+  nodeRadius =  10, // node radius, in pixels
+  linkSource = ({source}) => source, // given d in links, returns a node identifier string
+  linkTarget = ({target}) => target, // given d in links, returns a node identifier string
+  linkStroke = "#999", // link stroke color
+  linkStrokeOpacity = 0.6, // link stroke opacity
+  linkStrokeWidth = 2, // given d in links, returns a stroke width in pixels
+  linkStrokeLinecap = "round", // link stroke linecap
+  colors = d3.schemeTableau10, // an array of color strings, for the node groups
+  invalidation // when this promise resolves, stop the simulation
+} = {}) {
+    console.log(JSON.stringify(nodes));
+  // Compute values.
+  const N = d3.map(nodes, nodeId).map(intern);
+  const COLORMAP = d3.map(nodes, d => d.color).map(intern);
+  const LABELMAP = d3.map(nodes, d => d.label).map(intern);
+  const LABELLINKMAP = d3.map(links, d => d.label).map(intern);
+  const LS = d3.map(links, linkSource).map(intern);
+  const LT = d3.map(links, linkTarget).map(intern);
+  const FONTSIZE = d3.map(links, linkTarget).map(intern);
+  const LINKCOLOR = d3.map(links, l => l.color).map(intern);
+  if (nodeTitle === undefined) nodeTitle = (_, i) => N[i];
+  const T = nodeTitle == null ? null : d3.map(nodes, nodeTitle);
+  const G = nodeGroup == null ? null : d3.map(nodes, nodeGroup).map(intern);
+  const W = typeof linkStrokeWidth !== "function" ? null : d3.map(links, linkStrokeWidth);
+  
+  const EDGECOLOR = typeof linkStrokeWidth !== "function" ? null : d3.map(links, l => l.color);
+
+  // Replace the input nodes and links with mutable objects for the simulation.
+  nodes = d3.map(nodes, (_, i) => ({id: N[i], color: N}));
+  links = d3.map(links, (_, i) => ({source: LS[i], target: LT[i], color: LINKCOLOR[i], label: LABELLINKMAP[i]}));
+
+  // Compute default domains.
+  if (G && nodeGroups === undefined) nodeGroups = d3.sort(G);
+
+  // Construct the scales.
+  const color = nodeGroup == null ? null : d3.scaleOrdinal(nodeGroups, colors);
+    
+  
+  
+  // Construct the forces.
+  forceNode = d3.forceManyBody();
+  forceLink = d3.forceLink(links).id(({index: i}) => N[i]);
+  //if (nodeStrength !== undefined) forceNode.strength(nodeStrength);
+  //if (linkStrength !== undefined) forceLink.strength(linkStrength);
+
+  simulation = d3.forceSimulation(nodes)
+      .force("link", forceLink)
+      .force("charge", forceNode)
+      .force("center",  d3.forceCenter())
+      .on("tick", ticked);
+  const svg = d3.select("svg"),
+      width = +svg.attr("width"),
+      height = +svg.attr("height");
+      
+  svg.attr("viewBox", [-width / 2, -height / 2, width, height])
+      .attr("style", "max-width: 100%; height: auto; height: intrinsic;");
+
+  const link = svg.append("g")
+      .attr("stroke", linkStroke)
+      .attr("stroke-opacity", linkStrokeOpacity)
+      .attr("stroke-width", typeof linkStrokeWidth !== "function" ? linkStrokeWidth : null)
+      .attr("stroke-linecap", linkStrokeLinecap)
+    .selectAll("line")
+    .data(links)
+    .join("line");
+    
+    
+  var textLink = svg.selectAll("textlink")
+                            .data(links)
+                            .enter()
+                           .append("text");
+
+    var textLinks = textLink
+      .attr("x", function(d) { return (d.source.x+d.target.x)/2.0; })
+      .attr("y", function(d) { return (d.source.y+d.target.y)/2.0; })
+      .text( ({index: i}) => LABELLINKMAP[i])
+      .attr("font-family", "sans-serif")
+      .attr("font-size", "15px")
+      .attr("text-anchor", "middle")
+      .attr("fill", "black");
+
+  var node = svg.append("g")
+    .attr("class", "node")
+      .attr("fill", nodeFill)
+      .attr("stroke", nodeStroke)
+      .attr("stroke-opacity", nodeStrokeOpacity)
+      .attr("stroke-width", nodeStrokeWidth)
+    .selectAll("circle")
+    .data(nodes)
+  .enter().append("circle")
+      .attr("r", nodeRadius).call(drag(simulation));
+  
+  var text = svg.selectAll("textnode")
+                            .data(nodes)
+                            .enter()
+                           .append("text");
+
+    var textLabels = text
+      .attr("x", function(d) { return d.x; })
+      .attr("y", function(d) { return d.y; })
+      .text( ({index: i}) => LABELMAP[i])
+      .attr("font-family", "sans-serif")
+      .attr("font-size", "15px")
+      .attr("text-anchor", "middle")
+      .attr("fill", "black");
+  
+   /*
+    node
+    .join("text")
+        .attr("text-anchor", "middle")
+        .attr("dy", ".3em").text("Node Name To Display")
+        .text(({index: i}) => {console.log(LABELMAP[i]); return "games"; return LABELMAP[i];});
+    */
+    
+  link.attr("stroke", l => {return l.color;} );
+  if (W) link.attr("stroke-width", ({index: i}) => W[i]);
+  if (G) node.attr("fill", ({index: i}) => COLORMAP[i]);
+  if (T) node.append("title").text(({index: i}) => T[i]);
+  if (invalidation != null) invalidation.then(() => simulation.stop());
+
+  function intern(value) {
+    return value !== null && typeof value === "object" ? value.valueOf() : value;
+  }
+
+  function ticked() {
+    link
+      .attr("x1", d => d.source.x)
+      .attr("y1", d => d.source.y)
+      .attr("x2", d => d.target.x)
+      .attr("y2", d => d.target.y);
+
+    node
+      .attr("cx", d => d.x)
+      .attr("cy", d => d.y);
+      
+      textLabels
+      .attr("x", function(d) { return d.x; })
+      .attr("y", function(d) { return d.y-15; });
+      
+      textLinks
+      .attr("x", function(d) { return getLabelPosition(d.source, d.target).x; })
+      .attr("y", function(d) { return getLabelPosition(d.source, d.target).y; });
+  }
+  
+  function getLabelPosition(source, target){
+    var avgX = (source.x+target.x)/2.0;
+    var avgY = (source.y+target.y)/2.0;
+    var dx = source.x-target.x;
+    var dy = source.y-target.y;
+    var mag = Math.sqrt(dx*dx+dy*dy);
+    if (mag == 0) {
+        mag = 1.0;
+    }
+    var normX = dx/mag;
+    var normY = dy/mag;
+    // rotate vector 90 degrees
+    var shiftAmount = 10;
+    var shiftX = normY*shiftAmount;
+    var shiftY = -normX*shiftAmount;
+    var extraShift = 5;
+    // account for weird text going too high or too low
+    if (normX < 0) {
+        shiftY -= extraShift*normX;
+    }
+    else {
+        shiftY += extraShift*normX;
+    }
+    return {x: avgX+shiftX, y: avgY+shiftY};
+    
+  }
+
+  function drag(simulation) {    
+    function dragstarted(event) {
+      if (!event.active) simulation.alphaTarget(0.3).restart();
+      event.subject.fx = event.subject.x;
+      event.subject.fy = event.subject.y;
+      
+    }
+    
+    function dragged(event) {
+      event.subject.fx = event.x;
+      event.subject.fy = event.y;
+    }
+    
+    function dragended(event) {
+      if (!event.active) simulation.alphaTarget(0);
+      event.subject.fx = null;
+      event.subject.fy = null;
+    }
+    
+    return d3.drag()
+      .on("start", dragstarted)
+      .on("drag", dragged)
+      .on("end", dragended);
+  }
+
+  return Object.assign(svg.node(), {scales: {color}});
+}
+</script>
+<script>
+
+// From https://stackoverflow.com/a/1573141/2924421
+function colourNameToHex(colour)
+{
+    var colours = {"aliceblue":"#f0f8ff","antiquewhite":"#faebd7","aqua":"#00ffff","aquamarine":"#7fffd4","azure":"#f0ffff",
+    "beige":"#f5f5dc","bisque":"#ffe4c4","black":"#000000","blanchedalmond":"#ffebcd","blue":"#0000ff","blueviolet":"#8a2be2","brown":"#a52a2a","burlywood":"#deb887",
+    "cadetblue":"#5f9ea0","chartreuse":"#7fff00","chocolate":"#d2691e","coral":"#ff7f50","cornflowerblue":"#6495ed","cornsilk":"#fff8dc","crimson":"#dc143c","cyan":"#00ffff",
+    "darkblue":"#00008b","darkcyan":"#008b8b","darkgoldenrod":"#b8860b","darkgray":"#a9a9a9","darkgreen":"#006400","darkkhaki":"#bdb76b","darkmagenta":"#8b008b","darkolivegreen":"#556b2f",
+    "darkorange":"#ff8c00","darkorchid":"#9932cc","darkred":"#8b0000","darksalmon":"#e9967a","darkseagreen":"#8fbc8f","darkslateblue":"#483d8b","darkslategray":"#2f4f4f","darkturquoise":"#00ced1",
+    "darkviolet":"#9400d3","deeppink":"#ff1493","deepskyblue":"#00bfff","dimgray":"#696969","dodgerblue":"#1e90ff",
+    "firebrick":"#b22222","floralwhite":"#fffaf0","forestgreen":"#228b22","fuchsia":"#ff00ff",
+    "gainsboro":"#dcdcdc","ghostwhite":"#f8f8ff","gold":"#ffd700","goldenrod":"#daa520","gray":"#808080","green":"#008000","greenyellow":"#adff2f",
+    "honeydew":"#f0fff0","hotpink":"#ff69b4",
+    "indianred ":"#cd5c5c","indigo":"#4b0082","ivory":"#fffff0","khaki":"#f0e68c",
+    "lavender":"#e6e6fa","lavenderblush":"#fff0f5","lawngreen":"#7cfc00","lemonchiffon":"#fffacd","lightblue":"#add8e6","lightcoral":"#f08080","lightcyan":"#e0ffff","lightgoldenrodyellow":"#fafad2",
+    "lightgrey":"#d3d3d3","lightgreen":"#90ee90","lightpink":"#ffb6c1","lightsalmon":"#ffa07a","lightseagreen":"#20b2aa","lightskyblue":"#87cefa","lightslategray":"#778899","lightsteelblue":"#b0c4de",
+    "lightyellow":"#ffffe0","lime":"#00ff00","limegreen":"#32cd32","linen":"#faf0e6",
+    "magenta":"#ff00ff","maroon":"#800000","mediumaquamarine":"#66cdaa","mediumblue":"#0000cd","mediumorchid":"#ba55d3","mediumpurple":"#9370d8","mediumseagreen":"#3cb371","mediumslateblue":"#7b68ee",
+    "mediumspringgreen":"#00fa9a","mediumturquoise":"#48d1cc","mediumvioletred":"#c71585","midnightblue":"#191970","mintcream":"#f5fffa","mistyrose":"#ffe4e1","moccasin":"#ffe4b5",
+    "navajowhite":"#ffdead","navy":"#000080",
+    "oldlace":"#fdf5e6","olive":"#808000","olivedrab":"#6b8e23","orange":"#ffa500","orangered":"#ff4500","orchid":"#da70d6",
+    "palegoldenrod":"#eee8aa","palegreen":"#98fb98","paleturquoise":"#afeeee","palevioletred":"#d87093","papayawhip":"#ffefd5","peachpuff":"#ffdab9","peru":"#cd853f","pink":"#ffc0cb","plum":"#dda0dd","powderblue":"#b0e0e6","purple":"#800080",
+    "rebeccapurple":"#663399","red":"#ff0000","rosybrown":"#bc8f8f","royalblue":"#4169e1",
+    "saddlebrown":"#8b4513","salmon":"#fa8072","sandybrown":"#f4a460","seagreen":"#2e8b57","seashell":"#fff5ee","sienna":"#a0522d","silver":"#c0c0c0","skyblue":"#87ceeb","slateblue":"#6a5acd","slategray":"#708090","snow":"#fffafa","springgreen":"#00ff7f","steelblue":"#4682b4",
+    "tan":"#d2b48c","teal":"#008080","thistle":"#d8bfd8","tomato":"#ff6347","turquoise":"#40e0d0",
+    "violet":"#ee82ee",
+    "wheat":"#f5deb3","white":"#ffffff","whitesmoke":"#f5f5f5",
+    "yellow":"#ffff00","yellowgreen":"#9acd32"};
+
+    if (typeof colours[colour.toLowerCase()] != 'undefined')
+        return colours[colour.toLowerCase()];
+
+    return colour;
+}
+
+
+function parseDotFile(file, callback) {
+    reader = new FileReader();
+    reader.onload = function(event) {
+        require(['dotparser'], function(dotparser){
+            var text = event.target.result;
+            var nodes = dotparser.parse(text);
+            //console.log(JSON.stringify(nodes));
+            var actualNodes = nodes[0]['children'];
+            //console.log(actualNodes.length);
+            var outputNodes = [];
+            var nodeLookup = {};
+            var edges = [];
+            for (var i = 0; i < actualNodes.length; i++) {
+                var node = actualNodes[i];
+                if (node['type'] == 'edge_stmt') {
+                    console.log(JSON.stringify(node));
+                    var edgeNodes = node['edge_list'];
+                    if (edgeNodes.length == 2) {
+                        var node1Id = edgeNodes[0]['id'];
+                        var node2Id = edgeNodes[1]['id'];
+                        var edgeData = {"source": node1Id, "target": node2Id, 'color': 'black'};
+                        if (!nodeLookup.hasOwnProperty(node1Id)) {
+                            var node1Data = {"id": node1Id};
+                            nodeLookup[node1Id] = node1Data;
+                            outputNodes.push(node1Data);
+                        }
+                        if (!nodeLookup.hasOwnProperty(node2Id)) {
+                            var node2Data = {"id": node2Id};
+                            nodeLookup[node2Id] = node2Data;
+                            outputNodes.push(node2Data);
+                        }
+                            
+                        
+                        if (node['attr_list']){
+                            var edgeAttrs = node['attr_list'];
+                            for (var j = 0; j < edgeAttrs.length; j++) {
+                                var edgeAttr = edgeAttrs[j];
+                                edgeData[edgeAttr['id']] = edgeAttr['eq'];
+                                if (edgeAttr['id'] === 'color') {
+                                    edgeData[edgeAttr['id']] = colourNameToHex("" + edgeAttr['eq']);
+                                }
+                                console.log("edge data:" + edgeAttr['id'] + " " + edgeAttr['eq']);
+                            }
+                        }
+                        edges.push(edgeData);
+                    }
+                }
+                else if(node['type'] == 'node_stmt'){
+                    var nodeId = node['node_id']['id'];
+                    console.log("node id: " + nodeId);
+                    if (!nodeLookup.hasOwnProperty(nodeId)) {
+                        console.log("Added");
+                        var nodeData = {"id": nodeId, 'color': 'black'};
+                        nodeLookup[nodeId] = nodeData;
+                        outputNodes.push(nodeData);
+                    }
+                        
+                    if (node['attr_list']){
+                        var nodeAttrs = node['attr_list'];
+                        for (var j = 0; j < nodeAttrs.length; j++) {
+                            var nodeAttr = nodeAttrs[j];
+                            var nodeData = nodeLookup[nodeId];
+                            console.log(JSON.stringify(nodeData));
+                            nodeData[nodeAttr['id']] = nodeAttr['eq'];
+                            if (nodeAttr['id'] === 'color') {
+                                nodeData[nodeAttr['id']] = colourNameToHex("" + nodeAttr['eq']);
+                            }
+                            console.log(nodeAttr['id'] + " " + nodeData[nodeAttr['id']]);
+                        }
+                    }
+                    
+                    console.log(JSON.stringify(node));
+                }
+                else {
+                        console.log(JSON.stringify(node));
+                }
+            }
+            callback({"nodes": outputNodes, "links": edges});
+        });
+    };
+    reader.readAsText(file);
+
+}
+  
+  
+  function mouseover(d) {
+     d3.select(this).transition()
+               .duration('50')
+               .attr('opacity', '.85');
+          div.transition()
+               .duration(50)
+               .style("opacity", 1);
+          let num = d.id + '%';
+          div.html(num)
+               .style("left", (d.pageX + 10) + "px")
+               .style("top", (d.pageY - 15) + "px");
+  }
+  
+  function mouseout(d) {
+  d3.select(this).transition()
+               .duration('50')
+               .attr('opacity', '1');
+          div.transition()
+               .duration('50')
+               .style("opacity", 0);
+  }
+  
+  function dragstarted(d) {
+    if (!d3.event.active) simulation.alphaTarget(0.3).restart();
+    d.fx = d.x;
+    d.fy = d.y;
+  }
+
+  function dragged(d) {
+    d.fx = d3.event.x;
+    d.fy = d3.event.y;
+  }
+
+  function dragended(d) {
+    if (!d3.event.active) simulation.alphaTarget(0);
+    d.fx = null;
+    d.fy = null;
+  }
+</script>
+</html>
