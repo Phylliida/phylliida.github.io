@@ -31,7 +31,9 @@
 <div id="drop_zone" ondrop="dropHandler(event);" ondragover="dragOverHandler(event);">
   <p>Upload a dot file by dragging it into here.</p>
 </div><br>
-Press p to pause and unpause simulation
+Press p to pause and unpause simulation<br>
+Hold d and drag to remove node<br>
+(you may need to scroll down to see the graph)
   <svg width="3000" height="3000"></svg>
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script src="/js/dotparser.js"></script>
@@ -82,12 +84,34 @@ function dragOverHandler(ev) {
      .attr("class", "tooltip-donut")
      .style("opacity", 0);
      
+     
+     
+var deleteKeyDown = false;
+
+
+
+     
 var nodeStrength;
 var linkStrength;
 
 var running = true;
 
+function keyupHandle(e) {
+  if(e.code + "" == "KeyD") {
+    deleteKeyDown = false;
+  }
+}
+function keydownHandle(e) {
+  if(e.code + "" == "KeyD") {
+    deleteKeyDown = true;
+  }
+}
+
 document.addEventListener('keypress', logKey);
+document.addEventListener('keydown', keydownHandle);
+document.addEventListener('keyup', keyupHandle);
+
+
 
 function logKey(e) {
   if(e.code + "" === "KeyP")
@@ -141,6 +165,7 @@ function ForceGraph({
   const COLORMAP = d3.map(nodes, d => d.color).map(intern);
   const LABELMAP = d3.map(nodes, d => d.label).map(intern);
   const LABELLINKMAP = d3.map(links, d => d.label).map(intern);
+  const IDMAP = d3.map(links, d => d.id).map(intern);
   const LS = d3.map(links, linkSource).map(intern);
   const LT = d3.map(links, linkTarget).map(intern);
   const FONTSIZE = d3.map(links, linkTarget).map(intern);
@@ -301,6 +326,41 @@ function ForceGraph({
       if (!event.active) simulation.alphaTarget(0.3).restart();
       event.subject.fx = event.subject.x;
       event.subject.fy = event.subject.y;
+      
+
+      if (deleteKeyDown) {
+          var id = event.subject.id;
+          
+          //d3.select(this).remove();
+          
+          var simNodes = simulation.nodes();
+          var index = -1;
+          for (var i = 0; i < simNodes.length; i++){
+            if (simNodes[i].id == id) {
+                index = i;
+                break;
+                simNodes[i].remove();
+            }
+          }
+          
+          
+          links = links.filter(function(d) { return d.source.id != id && d.target.id != id;});
+          forceLink = d3.forceLink(links).id(({index: i}) => N[i]);
+          simulation.force("link", forceLink);
+          
+          simulation.nodes().splice(index, 1);
+          
+          d3.selectAll("line").filter(function(d) { return d.source.id === id || d.target.id === id;}).remove();
+          
+          d3.select(this).remove();
+          
+           d3.selectAll("text").filter(function(d) { 
+                return d.id == id || // node label
+                ((d.source) && d.source.id == id) || // edge label
+                ((d.target) && d.target.id == id);
+           }).remove();
+          
+      }
       
     }
     
@@ -472,6 +532,7 @@ function parseDotFile(file, callback) {
     if (!d3.event.active) simulation.alphaTarget(0.3).restart();
     d.fx = d.x;
     d.fy = d.y;
+    
   }
 
   function dragged(d) {
