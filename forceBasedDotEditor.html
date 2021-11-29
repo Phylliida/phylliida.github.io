@@ -111,12 +111,7 @@ document.addEventListener('keypress', logKey);
 document.addEventListener('keydown', keydownHandle);
 document.addEventListener('keyup', keyupHandle);
 
-
-
-function logKey(e) {
-  if(e.code + "" === "KeyP")
-  {
-    running = !running;
+function pauseOrUnpause() {
     if (!running) {
         nodeStrength = forceNode.strength();
         linkStrength = forceLink.strength();
@@ -128,6 +123,13 @@ function logKey(e) {
         forceLink.strength(linkStrength);
         simulation.alphaTarget(0).restart();
     }
+}
+
+function logKey(e) {
+  if(e.code + "" === "KeyP")
+  {
+    running = !running;
+    pauseOrUnpause();
   }
 }
 
@@ -359,6 +361,10 @@ function ForceGraph({
                 ((d.source) && d.source.id == id) || // edge label
                 ((d.target) && d.target.id == id);
            }).remove();
+            if (!running) {
+                linkStrength = forceLink.strength();
+                forceLink.strength(0);
+            }
           
       }
       
