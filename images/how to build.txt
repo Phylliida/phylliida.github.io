@@ -1,0 +1,4 @@
+I just used
+https://github.com/humphd/browser-vm
+modifying the config to include ffmpeg
+
