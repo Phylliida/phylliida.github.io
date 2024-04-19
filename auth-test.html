@@ -180,7 +180,12 @@
             document.getElementById('events').innerHTML = new Date().toLocaleString() + "\t" + event + "\n" + e;
         }
     
-        var keycloak = Keycloak();
+        const keycloakConfig = {
+            url: 'https://render-keycloak.onrender.com/auth/',
+            realm: 'users',
+            clientId: 'js-test-2',
+        };
+        const keycloak = new Keycloak(keycloakConfig);
     
         keycloak.onAuthSuccess = function () {
             event('Auth Success');
