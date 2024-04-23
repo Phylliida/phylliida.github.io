@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html><head>
+    <title>Fire Simulation</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <link rel="stylesheet" href="/css/gol.css">
+    <script src="/js/igloo-0.1.0.js"></script>
+    <script src="/js/jquery-2.1.1.min.js"></script>
+    <script src="/js/URI.min.js"></script>
+    <script src="/js/fire.js"></script>
+  </head>
+  <body>
+    <h1>Fire Simulation</h1>
+    <!-- Canvas dimensions must be powers of two. -->
+    <center><canvas id="life" width="512" height="512"></canvas></center>
+    <div class="description">
+      <p>
+        Inspired from <a href="https://www.youtube.com/watch?v=SqhXQUzVMlQ">here</a>. Left click to place trail, right click to place fire (try squiggling lots to get a loop started).
+        Much of this code is adapted from <a href="https://nullprogram.com/webgl-game-of-life/">here</a>.
+      </p>
+      <button onclick="resetSimulation();">Reset simulation</button><br>
+    <div class="fps">259 FPS</div>
+  
+
+<style></style></body></html>
