@@ -216,11 +216,16 @@ GOL.prototype.draw = function() {
  * @param {boolean} state True/false for live/dead
  * @returns {GOL} this
  */
-GOL.prototype.poke = function(x, y, state) {
+GOL.prototype.poke = function(x, y, state, shiftDown) {
     var gl = this.igloo.gl;
     
     if (state) {
-        this.textures.front.subset([255*0.51, 255*0.51, 255*0.51, 255], x, y, 1, 1);
+        if (shiftDown) {
+            this.textures.front.subset([0, 0, 0, 255], x, y, 1, 1);
+        }
+        else{ 
+            this.textures.front.subset([255*0.51, 255*0.51, 255*0.51, 255], x, y, 1, 1);
+        }
     }
     else {
         var gl = this.igloo.gl, w = this.statesize[0], h = this.statesize[1];
@@ -355,7 +360,7 @@ function Controller(gol) {
                 var y = y0;
                 for (var x = x0; x <= x1; x++){
                     
-                    gol.poke(x, y, _this.drag == 1);
+                    gol.poke(x, y, _this.drag == 1, _this.shiftKey);
                     if (D > 0)
                     {
                         y = y + yi;
@@ -381,7 +386,7 @@ function Controller(gol) {
 
                 for (var y = y0; y <= y1; y++)
                 {
-                    gol.poke(x, y, _this.drag == 1);
+                    gol.poke(x, y, _this.drag == 1, _this.shiftKey);
                     if (D > 0)
                     {
                         x = x + xi;
