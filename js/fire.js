@@ -360,7 +360,7 @@ function Controller(gol) {
                 var y = y0;
                 for (var x = x0; x <= x1; x++){
                     
-                    gol.poke(x, y, _this.drag == 1, _this.shiftKey);
+                    gol.poke(x, y, _this.drag == 1, event.shiftKey);
                     if (D > 0)
                     {
                         y = y + yi;
@@ -386,7 +386,7 @@ function Controller(gol) {
 
                 for (var y = y0; y <= y1; y++)
                 {
-                    gol.poke(x, y, _this.drag == 1, _this.shiftKey);
+                    gol.poke(x, y, _this.drag == 1, event.shiftKey);
                     if (D > 0)
                     {
                         x = x + xi;
