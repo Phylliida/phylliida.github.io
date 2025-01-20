@@ -58,14 +58,26 @@
     height: 100%;
   }
 
+/* Add these rules to your existing CSS */
+html {
+    height: 100%;
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    -webkit-overflow-scrolling: touch;
+}
 
-  body {
+body {
     background: #111;
+    height: 100%;
     margin: 0;
     padding: 0;
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
     font-family: Arial, sans-serif;
-    overflow: hidden; /* Prevents scrollbars */
-  }
+    -webkit-overflow-scrolling: touch;
+}
  .defaultButton {
     padding: 0.8em 2em;
     font-size: 16px;
