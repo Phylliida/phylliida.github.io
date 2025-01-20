@@ -26,6 +26,13 @@
   height: 100px;
 }
 
+ text {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    pointer-events: none;
+  }
 
 .container {
     display: flex;
@@ -69,7 +76,6 @@
     cursor: pointer;
     position: relative;
     transition: all 0.3s;
-    text-transform: uppercase;
     letter-spacing: 2px;
 }
 
@@ -86,7 +92,6 @@
     box-shadow: 0 0 3px rgba(255, 255, 255, 0.8),
                 0 0 10px rgba(255, 255, 255, 0.2);
     text-shadow: 0 0 1px rgba(255, 255, 255, 0.8);
-    text-transform: uppercase;
     letter-spacing: 2px;
 }
 
@@ -96,17 +101,19 @@
 
 <div class="container">
   <div class="button-container">
-<button id="mutateButton" class="defaultButton" onclick="setModifyingState(MUTATE_STATE);">Mutate Vertex (m)</button>
+<button id="mutateButton" class="defaultButton" onclick="setModifyingState(MUTATE_STATE);">MUTATE VERTEX (M)</button>
 <br />
-<button id="translateButton" class="defaultButton" onclick="setModifyingState(TRANSLATE_STATE);">Translate Vertex (t)</button>
+<button id="translateButton" class="defaultButton" onclick="setModifyingState(TRANSLATE_STATE);">TRANSLATE VERTEX (T)</button>
 <br />
-<button id="createVertexButton" class="defaultButton" onclick="setModifyingState(CREATE_VERTEX_STATE);">Create Vertex (v)</button>
+<button id="renameVertexButton" class="defaultButton" onclick="setModifyingState(RENAME_VERTEX_STATE);">RENAME VERTEX (R)</button>
+<input type="text" id="renameVertexLabel" value="0" onchange="CURRENT_VERTEX_LABEL=this.value;" class="defaultButton" />
 <br />
-<button id="createEdgeButton" class="defaultButton" onclick="setModifyingState(CREATE_EDGE_STATE);">Create Edge (e)</button>
+<button id="createVertexButton" class="defaultButton" onclick="setModifyingState(CREATE_VERTEX_STATE);">CREATE VERTEX (V)</button>
 <br />
-<button id="deleteVertexButton" class="defaultButton" onclick="setModifyingState(DELETE_VERTEX_STATE);">Delete Vertex (d)</button>
+<button id="createEdgeButton" class="defaultButton" onclick="setModifyingState(CREATE_EDGE_STATE);">CREATE EDGE (E)</button>
+<input type="text" id="createEdgeLabel" value="1" onchange="CURRENT_LINK_LABEL=this.value;" class="defaultButton" />
 <br />
-<button id="deleteEdgeButton" class="defaultButton" onclick="setModifyingState(DELETE_EDGE_STATE);">Delete Edge (c)</button>
+<button id="deleteVertexButton" class="defaultButton" onclick="setModifyingState(DELETE_VERTEX_STATE);">DELETE VERTEX (D)</button>
 <br />
  </div>
   
@@ -181,6 +188,7 @@ var running = true;
 
 var MUTATE_STATE = "Mutate";
 var TRANSLATE_STATE = "Translate";
+var RENAME_VERTEX_STATE = "Rename";
 var CREATE_VERTEX_STATE = "Create vertex";
 var CREATE_EDGE_STATE = "Create edge";
 var DELETE_VERTEX_STATE = "Delete vertex";
@@ -191,10 +199,12 @@ var modifyingState = MUTATE_STATE;
 function UpdateState() {
     document.getElementById("mutateButton").className = (modifyingState == MUTATE_STATE) ? "selectedButton" : "defaultButton";
     document.getElementById("translateButton").className = (modifyingState == TRANSLATE_STATE) ? "selectedButton" : "defaultButton";
+    document.getElementById("renameVertexButton").className = (modifyingState == RENAME_VERTEX_STATE) ? "selectedButton" : "defaultButton";
+    document.getElementById("renameVertexLabel").className = (modifyingState == RENAME_VERTEX_STATE) ? "selectedButton" : "defaultButton";
     document.getElementById("createVertexButton").className = (modifyingState == CREATE_VERTEX_STATE) ? "selectedButton" : "defaultButton";
     document.getElementById("createEdgeButton").className = (modifyingState == CREATE_EDGE_STATE) ? "selectedButton" : "defaultButton";
+    document.getElementById("createEdgeLabel").className = (modifyingState == CREATE_EDGE_STATE) ? "selectedButton" : "defaultButton";
     document.getElementById("deleteVertexButton").className = (modifyingState == DELETE_VERTEX_STATE) ? "selectedButton" : "defaultButton";
-    document.getElementById("deleteEdgeButton").className = (modifyingState == DELETE_EDGE_STATE) ? "selectedButton" : "defaultButton";
 }
 
 function setModifyingState(state) {
@@ -213,6 +223,9 @@ function setModifyingState(state) {
 });
 
 function keyupHandle(e) {
+    if (document.activeElement.tagName === 'INPUT') {
+            return; // Exit the function if we're editing an input
+    }
     if (e.code + "" == "KeyM") {
         modifyingState = MUTATE_STATE;
     }
@@ -221,6 +234,9 @@ function keyupHandle(e) {
     }
     if (e.code + "" == "KeyV") {
         modifyingState = CREATE_VERTEX_STATE;
+    }
+    if (e.code + "" == "KeyR") {
+        modifyingState = RENAME_VERTEX_STATE;
     }
     if (e.code + "" == "KeyE") {
         modifyingState = CREATE_EDGE_STATE;
@@ -239,7 +255,8 @@ function keydownHandle() {
 
 }
 
-var CURRENT_LINK_LABEL = "0";
+var CURRENT_VERTEX_LABEL = "0";
+var CURRENT_LINK_LABEL = "1";
 
 var svg;
 var simulation;
@@ -695,6 +712,15 @@ svg.on("click", function(event) {
   }
 
   var startId;
+  
+  const dragLineGroup = svg.append("g");
+  const dragLine = dragLineGroup
+    .append("line")
+    .attr("class", "drag-line")
+    .attr("stroke", "rgba(255,255,255,0.3)")
+    .attr("stroke-width", 2)
+    .attr("stroke-dasharray", "5,5")
+    .style("display", "none");
 
   function drag(simulation) {    
     function dragstarted(event) {
@@ -705,99 +731,64 @@ svg.on("click", function(event) {
         event.subject.fy = event.subject.y;
       }
       if (modifyingState == CREATE_EDGE_STATE) {
+        var sourceNode = event.subject;
         startId = event.subject.id;
+         dragLine
+          .style("display", null)
+          .attr("x1", sourceNode.x)
+          .attr("y1", sourceNode.y)
+          .attr("x2", sourceNode.x)
+          .attr("y2", sourceNode.y);
       }
-
-      if (modifyingState == DELETE_VERTEX_STATE) {
-          var id = event.subject.id;
-          
-          //d3.select(this).remove();
-          
-          var simNodes = simulation.nodes();
-          var index = -1;
-          for (var i = 0; i < simNodes.length; i++){
-            if (simNodes[i].id == id) {
-                index = i;
-                break;
-                simNodes[i].remove();
-            }
-          }
-          
-          
-          links = links.filter(function(d) { return d.source.id != id && d.target.id != id;});
-          forceLink = d3.forceLink(links).id(({index: i}) => N[i]).distance(200);
-          simulation.force("link", forceLink);
-          
-          simulation.nodes().splice(index, 1);
-          
-          d3.selectAll("line").filter(function(d) { return d.source.id === id || d.target.id === id;}).remove();
-          
-          d3.select(this).remove();
-          
-           d3.selectAll("text").filter(function(d) { 
-                return d.id == id || // node label
-                ((d.source) && d.source.id == id) || // edge label
-                ((d.target) && d.target.id == id);
-           }).remove();
-            if (!running) {
-                linkStrength = forceLink.strength();
-                forceLink.strength(0);
-            }
-          
-      }
-      
-    }
-    
-    function dragged(event) {
-      if (modifyingState == TRANSLATE_STATE) {
-      
-        event.subject.fx = event.x;
-        event.subject.fy = event.y;
-      }
-    }
-
-    function dragended(event) {
-      if (!event.active) simulation.alphaTarget(0);
-      var endId = event.subject.id;
-      if (modifyingState == CREATE_EDGE_STATE && startId !== undefined && endId !== undefined) {
-            setTimeout(() => {
-                const currentNodes = simulation.nodes().map(node => ({
-                  id: node.id,
-                  color: node.color,
-                  x: node.x,
-                  y: node.y,
-                  label: node.label
-              }));
-                
-                
-              var present = false;
-              var newLinks = [];
-              for (var i = 0; i < nodeLinks.length; i++) {
-                var link = nodeLinks[i];
-                var newLink = {
-                  source: link.source.id,
-                  target: link.target.id,
-                  color: link.color,
-                  label: link.label
-                };
-                if ((link.source.id == startId && link.target.id == endId) ||
-                    (link.source.id == endId && link.target.id == startId)) {
-                    newLink.label = CURRENT_LINK_LABEL;
-                    present = true;
-                    newLink.source = startId;
-                    newLink.target = endId;
+      if (modifyingState == MUTATE_STATE) {
+        
+           var mutateId = event.subject.id;
+           // get bmat
+           var ncols = nodes.length;
+           var bMat = makeArr(ncols, i => makeArr(ncols, j => BigInt(0)));
+           var idToI = {};
+           var iToId = {};
+           for (var i = 0; i < nodes.length; i++) {
+             idToI[nodes[i].id] = i;
+             iToId[i] = nodes[i].id;
+           }
+           
+           nodeLinks.map(link => {
+                var i = idToI[link.source.id];
+                var j = idToI[link.target.id];
+                bMat[i][j] = BigInt(link.label);
+                bMat[j][i] = -BigInt(link.label);
+           });
+           
+           var q = new Quiver(bMatrixToWeights(bMat));
+           q.mutate(idToI[mutateId], true);
+           
+           var newLinks = [];
+           for (var i = 0; i < q.b_matrix.length; i++) {
+              for (var j = 0; j < q.b_matrix[i].length; j++) {
+                var value = q.b_matrix[i][j];
+                if (value > BigInt(0)) {
+                    newLinks.push({
+                        source: iToId[i],
+                        target: iToId[j],
+                        color: "white",
+                        label: "" + value
+                    });
                 }
-                newLinks.push(newLink);
               }
-              if (!present) {
-                newLinks.push( {
-                    source: startId,
-                    target: endId,
-                    color: "white",
-                    label: CURRENT_LINK_LABEL
-                });
-              }
-
+           }
+           
+           
+           
+        
+            const currentNodes = simulation.nodes().map(node => ({
+              id: node.id,
+              color: node.color,
+              x: node.x,
+              y: node.y,
+              label: node.label
+            }));
+            setTimeout(() => {            
               // Clear existing SVG
               svg.selectAll("*").remove();
 
@@ -805,8 +796,190 @@ svg.on("click", function(event) {
               ForceGraph({
                   nodes: currentNodes,
                   links: newLinks
-              });
-          }, 1);
+              });        
+            }, 1);
+
+      }
+      if (modifyingState == RENAME_VERTEX_STATE) {
+            CURRENT_VERTEX_LABEL = document.getElementById("renameVertexLabel").value;
+            console.log("Renaming to: " + CURRENT_VERTEX_LABEL);
+            var resultNodes = [];
+            for (var i = 0; i < simulation.nodes().length; i++) {
+                var node = simulation.nodes()[i];
+                var newNode = {
+                      id: node.id,
+                      color: node.color,
+                      x: node.x,
+                      y: node.y,
+                      label: node.label
+                };
+                if (node.id == event.subject.id) {
+                    newNode.label = CURRENT_VERTEX_LABEL;
+                }
+                resultNodes.push(newNode);
+            }
+
+              // Get current links
+              const currentLinks = nodeLinks.map(link => ({
+                  source: link.source.id,
+                  target: link.target.id,
+                  color: link.color,
+                  label: link.label
+              }));
+                
+              setTimeout(() => {
+                  // Clear existing SVG
+                  svg.selectAll("*").remove();
+
+                  // Create new force graph with updated data
+                  ForceGraph({
+                      nodes: resultNodes,
+                      links: currentLinks
+                  });    
+              
+              }, 1);
+      }
+      if (modifyingState == DELETE_VERTEX_STATE) {
+          var id = event.subject.id;
+          
+          var resultNodes = []
+          
+          for(var i = 0; i < simulation.nodes().length; i++){
+            var node = simulation.nodes()[i];
+            if (node.id != id) {            
+                resultNodes.push({
+                  id: node.id,
+                  color: node.color,
+                  x: node.x,
+                  y: node.y,
+                  label: node.label
+                });
+            }
+          }
+
+            
+            var resultLinks = [];
+            
+            // Get current links
+            for(var i = 0; i < nodeLinks.length; i++) {
+                var link = nodeLinks[i];
+                if (link.source.id != id && link.target.id != id) {
+                    resultLinks.push({
+                      source: link.source.id,
+                      target: link.target.id,
+                      color: link.color,
+                      label: link.label
+                    });
+                }
+            }
+
+            setTimeout(() => {            
+              // Clear existing SVG
+              svg.selectAll("*").remove();
+
+              // Create new force graph with updated data
+              ForceGraph({
+                  nodes: resultNodes,
+                  links: resultLinks
+              });        
+            }, 1);
+          
+      }
+      
+    }
+    
+    
+    
+    
+    function dragged(event) {
+      if (modifyingState == TRANSLATE_STATE) {
+      
+        event.subject.fx = event.x;
+        event.subject.fy = event.y;
+      }
+      if (modifyingState == CREATE_EDGE_STATE) {
+        dragLine
+          .attr("x2", event.x)
+          .attr("y2", event.y);
+      }
+    }
+
+    function dragended(event) {
+      if (!event.active) simulation.alphaTarget(0);
+      
+       
+      if (modifyingState == CREATE_EDGE_STATE && startId !== undefined) {
+            CURRENT_LINK_LABEL = document.getElementById("createEdgeLabel").value;
+            // Update the drag line
+            //dragLine
+            //  .attr("x2", event.x)
+            //  .attr("y2", event.y);
+
+            // Find if we're hovering over a potential target node
+            const [mx, my] = [event.x, event.y];
+            targetNode = null;
+            
+            node.each(function(d) {
+              const dx = mx - d.x;
+              const dy = my - d.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              console.log("dist: " + dist + " to id " + d.id);
+              if (dist < nodeRadius*2 && d.id !== startId) {
+                targetNode = d;
+              }
+            });
+            if (targetNode !== null) {
+                var endId = targetNode.id;
+                setTimeout(() => {
+                    const currentNodes = simulation.nodes().map(node => ({
+                      id: node.id,
+                      color: node.color,
+                      x: node.x,
+                      y: node.y,
+                      label: node.label
+                  }));
+                    
+                  console.log(startId + " start id and " + endId + " endId");
+                  var present = false;
+                  var newLinks = [];
+                  for (var i = 0; i < nodeLinks.length; i++) {
+                    var link = nodeLinks[i];
+                    var newLink = {
+                      source: link.source.id,
+                      target: link.target.id,
+                      color: link.color,
+                      label: link.label
+                    };
+                    if ((link.source.id == startId && link.target.id == endId) ||
+                        (link.source.id == endId && link.target.id == startId)) {
+                        newLink.label = CURRENT_LINK_LABEL;
+                        present = true;
+                        newLink.source = startId;
+                        newLink.target = endId;
+                    }
+                    if (newLink.label !== "0") {
+                        newLinks.push(newLink);
+                    }
+                  }
+                  if (!present && CURRENT_LINK_LABEL !== "0") {
+                    newLinks.push( {
+                        source: startId,
+                        target: endId,
+                        color: "white",
+                        label: CURRENT_LINK_LABEL
+                    });
+                  }
+
+                  // Clear existing SVG
+                  svg.selectAll("*").remove();
+
+                  // Create new force graph with updated data
+                  ForceGraph({
+                      nodes: currentNodes,
+                      links: newLinks
+                  });
+              }, 1);
+          }
       }
     }
     forceNode.strength(0);
@@ -983,5 +1156,145 @@ function parseDotFile(file, callback) {
     d.fx = null;
     d.fy = null;
   }
+  
+  
+  function makeArr(arrLen, func) {
+  return [...Array(arrLen).keys()].map(func);
+}
+
+function matMul(A, B) {
+    var n = A.length;
+    var m = A[0].length;
+    var l = B[0].length;
+    var res = makeArr(n, i => makeArr(l, j => BigInt(0)));
+    for(var i = 0; i < n; i++){
+        for (var j = 0; j < l; j++){
+            var val = [];
+            // dot A[i][k] with B[k][j]
+            for (var k = 0; k < m; k++){
+                var multVal = A[i][k]*B[k][j];
+                if (multVal != 0) {
+                    val.push(multVal)
+                }
+            }
+            var valSum = val.reduce((partialSum, a) => partialSum + a, BigInt(0));
+            res[i][j] = BigInt(valSum);
+        }
+    }
+    return res;
+}
+
+// n + (n-1) + (n-2) + ... + 2 + 1
+function additiveFactorial(n) {
+    return (n*n+n)/2;
+}
+
+function dimToNWeights(dim) {
+    return additiveFactorial(dim-1);
+}
+
+// inverse of additive factorial, also with a shift
+function nWeightsToDim(nWeights) {
+    return Math.round(Math.sqrt(8*nWeights+1)/2-1.0/2.0)+1;
+}
+
+function bMatrixToWeights(b_matrix) {
+    var weights = []
+    var dim = b_matrix.length;
+    for (var offset = 1; offset < dim; offset++) {
+        for (var i = 0; i < dim-offset; i++) {
+            weights.push(b_matrix[i][i+offset]);
+        }
+    }
+    return weights;
+}
+
+function weightsToBMatrix(weights) {
+    var dim = nWeightsToDim(weights.length);
+    var b_matrix = makeArr(dim, i => makeArr(dim, j => BigInt(0)));
+    // [0, 1]
+    // [1, 2]
+    // [2, 3] 
+    // ...
+    // [dim-2,dim-2+1]
+    // then
+    // [0, 2]
+    // [1, 3]
+    // ...
+    // [dim-3, dim-3+2]
+    // ...
+    // [0, dim-1]
+    var j = 0;
+    for (var offset = 1; offset < dim; offset++) {
+        for (var i = 0; i < dim-offset; i++) {
+            b_matrix[i][i+offset] = BigInt(weights[j]);
+            b_matrix[i+offset][i] = -BigInt(weights[j]); // at transpose position, put negative value
+            j += 1;
+        }
+    }
+    return b_matrix;
+}
+
+function BigIntMax(a, b) {
+    if (a >= b) { return a; }
+    else { return b; }
+}
+
+var Quiver;
+Quiver = function(weights){
+  this.b_matrix = weightsToBMatrix(weights);
+  var myQ = this;
+  
+  this.getWeights = function() {
+    return bMatrixToWeights(myQ.b_matrix);
+  };
+  
+  this.mutate = function(index, inplace) {
+    var quiv = myQ.b_matrix;
+    var ncols = quiv.length;
+    var incomingEdges = [];
+    // see https://arxiv.org/pdf/1608.05735.pdf on bottom of page 33
+    // we can use that formula
+    var k = index;
+    // J matrix is all 1s on diagonal except -1 at (mutateI, mutateI)
+    var JMat = makeArr(ncols, i => makeArr(ncols, j => BigInt(0)));
+    for (var i = 0; i < ncols; i++){
+        if (i == k) {
+            JMat[i][i] = BigInt(-1);
+        }
+        else {
+            JMat[i][i] = BigInt(1);
+        }
+    }
+
+    var EMat = makeArr(ncols, i => makeArr(ncols, j => BigInt(0)));
+    for (var i = 0; i < ncols; i++) {
+        EMat[i][k] = BigIntMax(BigInt(0), -quiv[i][k]);
+    }
+
+    var FMat = makeArr(ncols, i => makeArr(ncols, j => BigInt(0)));
+    for (var j = 0; j < ncols; j++) {
+        FMat[k][j] = BigIntMax(BigInt(0), quiv[k][j]);
+    }
+
+    var lhsMat = makeArr(ncols, i => makeArr(ncols, j => BigInt(0)));
+    var rhsMat = makeArr(ncols, i => makeArr(ncols, j => BigInt(0)));
+    for (var i = 0; i < ncols; i++) {
+        for (var j = 0; j < ncols; j++) {
+            lhsMat[i][j] = JMat[i][j] + EMat[i][j];
+            rhsMat[i][j] = JMat[i][j] + FMat[i][j];
+        }
+    }
+    var res = matMul(matMul(lhsMat, quiv), rhsMat);
+    if (inplace) {
+        myQ.b_matrix = res;
+    }
+    else {
+        return new Quiver(bMatrixToWeights(res));
+    }
+  };
+};
+
+  
 </script>
 </html>
