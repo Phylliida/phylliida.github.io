@@ -1,0 +1,924 @@
+  <!DOCTYPE html>
+  <meta charset="utf-8">
+  <style>
+
+  .links path {
+    fill: none;
+    stroke: #666;
+    stroke-width: 1.5px;
+  }
+
+  .nodes circle {
+    fill: #ccc;
+    stroke: #fff;
+    stroke-width: 1.5px;
+  }
+
+  .nodes text {
+    fill: #000;
+    font: 10px sans-serif;
+    pointer-events: none;
+  }
+  
+  #drop_zone {
+  border: 5px solid blue;
+  width:  200px;
+  height: 100px;
+}
+
+
+.container {
+    display: flex;
+    gap: 2rem;
+    width: 100vw;
+    height: 100vh;
+  }
+  
+  .button-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+    min-width: 200px;
+  }
+  
+  .graph-container {
+    flex-grow: 1;
+    height: 100vh;
+  }
+  svg {
+    width: 100%;
+    height: 100%;
+  }
+
+
+  body {
+    background: #111;
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    overflow: hidden; /* Prevents scrollbars */
+  }
+ .defaultButton {
+    padding: 0.8em 2em;
+    font-size: 16px;
+    background: transparent;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.4);
+    border-radius: 4px;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.3s;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.selectedButton {
+    padding: 0.8em 2em;
+    font-size: 16px;
+    background: transparent;
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    color: rgba(255, 255, 255, 0.9);
+    border-radius: 4px;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.3s;
+    box-shadow: 0 0 3px rgba(255, 255, 255, 0.8),
+                0 0 10px rgba(255, 255, 255, 0.2);
+    text-shadow: 0 0 1px rgba(255, 255, 255, 0.8);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+
+  </style>
+
+
+<div class="container">
+  <div class="button-container">
+<button id="mutateButton" class="defaultButton" onclick="setModifyingState(MUTATE_STATE);">Mutate Vertex (m)</button>
+<br />
+<button id="translateButton" class="defaultButton" onclick="setModifyingState(TRANSLATE_STATE);">Translate Vertex (t)</button>
+<br />
+<button id="createVertexButton" class="defaultButton" onclick="setModifyingState(CREATE_VERTEX_STATE);">Create Vertex (v)</button>
+<br />
+<button id="createEdgeButton" class="defaultButton" onclick="setModifyingState(CREATE_EDGE_STATE);">Create Edge (e)</button>
+<br />
+<button id="deleteVertexButton" class="defaultButton" onclick="setModifyingState(DELETE_VERTEX_STATE);">Delete Vertex (d)</button>
+<br />
+<button id="deleteEdgeButton" class="defaultButton" onclick="setModifyingState(DELETE_EDGE_STATE);">Delete Edge (c)</button>
+<br />
+ </div>
+  
+  <div class="graph-container">
+      <svg width="3000" height="3000"></svg>
+  </div>
+  </div>
+Press p to pause and unpause simulation<br>
+Hold d and drag to remove node<br>
+(you may need to scroll down to see the graph)
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="/js/dotparser.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js"></script>
+Credit:<br>Parsing dot files done with <a href="https://github.com/anvaka/dotparser">dotparser</a>
+<br>
+Force directed graph modified from <a href="https://observablehq.com/@d3/force-directed-graph">Observablehq</a>
+
+<script>
+function dropHandler(ev) {
+  // Prevent default behavior (Prevent file from being opened)
+  ev.preventDefault();
+
+  if (ev.dataTransfer.items) {
+    // Use DataTransferItemList interface to access the file(s)
+    for (var i = 0; i < ev.dataTransfer.items.length; i++) {
+      // If dropped items aren't files, reject them
+      if (ev.dataTransfer.items[i].kind === 'file') {
+        var file = ev.dataTransfer.items[i].getAsFile();
+        
+          parseDotFile(file, function(graph) {
+          
+            ForceGraph(graph);
+          });
+        console.log('... file[' + i + '].name = ' + file.name);
+      }
+    }
+  } else {
+    // Use DataTransfer interface to access the file(s)
+    for (var i = 0; i < ev.dataTransfer.files.length; i++) {
+      console.log('... file[' + i + '].name = ' + ev.dataTransfer.files[i].name);
+    }
+  }
+}
+
+function dragOverHandler(ev) {
+  // Prevent default behavior (Prevent file from being opened)
+  ev.preventDefault();
+}
+</script>
+
+<script>
+// Copyright 2021 Observable, Inc.
+// Released under the ISC license.
+// https://observablehq.com/@d3/force-directed-graph
+
+  var div = d3.select("body").append("div")
+     .attr("class", "tooltip-donut")
+     .style("opacity", 0);
+     
+     
+     
+var deleteKeyDown = false;
+
+
+
+     
+var nodeStrength;
+var linkStrength;
+
+var running = true;
+
+var MUTATE_STATE = "Mutate";
+var TRANSLATE_STATE = "Translate";
+var CREATE_VERTEX_STATE = "Create vertex";
+var CREATE_EDGE_STATE = "Create edge";
+var DELETE_VERTEX_STATE = "Delete vertex";
+var DELETE_EDGE_STATE = "Delete edge";
+
+var modifyingState = MUTATE_STATE;
+
+function UpdateState() {
+    document.getElementById("mutateButton").className = (modifyingState == MUTATE_STATE) ? "selectedButton" : "defaultButton";
+    document.getElementById("translateButton").className = (modifyingState == TRANSLATE_STATE) ? "selectedButton" : "defaultButton";
+    document.getElementById("createVertexButton").className = (modifyingState == CREATE_VERTEX_STATE) ? "selectedButton" : "defaultButton";
+    document.getElementById("createEdgeButton").className = (modifyingState == CREATE_EDGE_STATE) ? "selectedButton" : "defaultButton";
+    document.getElementById("deleteVertexButton").className = (modifyingState == DELETE_VERTEX_STATE) ? "selectedButton" : "defaultButton";
+    document.getElementById("deleteEdgeButton").className = (modifyingState == DELETE_EDGE_STATE) ? "selectedButton" : "defaultButton";
+}
+
+function setModifyingState(state) {
+    modifyingState = state;
+    UpdateState();
+}
+ document.addEventListener("DOMContentLoaded", function(event) {
+    setModifyingState(MUTATE_STATE);
+    ForceGraph({"nodes": [
+        {"id": "0", "color": "white", "label": "0"},
+        {"id": "1", "color": "white", "label": "1"},
+        {"id": "2", "color": "white", "label": "2"},
+    ], "links": [
+         {"source": "0", "target": "1", 'color': 'white'},
+         {"source": "1", "target": "2", 'color': 'white'},
+         {"source": "2", "target": "0", 'color': 'white'},
+    ]});
+});
+
+function keyupHandle(e) {
+    if (e.code + "" == "KeyM") {
+        modifyingState = MUTATE_STATE;
+    }
+    if (e.code + "" == "KeyT") {
+        modifyingState = TRANSLATE_STATE;
+    }
+    if (e.code + "" == "KeyV") {
+        modifyingState = CREATE_VERTEX_STATE;
+    }
+    if (e.code + "" == "KeyE") {
+        modifyingState = CREATE_EDGE_STATE;
+    }
+    if (e.code + "" == "KeyD") {
+        modifyingState = DELETE_VERTEX_STATE;
+    }
+    if (e.code + "" == "KeyC") {
+        modifyingState = DELETE_EDGE_STATE;
+    }
+    
+    UpdateState();
+}
+
+function keydownHandle() {
+
+}
+
+var svg;
+var simulation;
+var nodeLinks;
+
+window.addEventListener('resize', () => {
+  const newWidth = window.innerWidth - 250;
+  const newHeight = window.innerHeight;
+  
+  svg
+    .attr("width", newWidth)
+    .attr("height", newHeight)
+    .attr("viewBox", [-newWidth / 2, -newHeight / 2, newWidth, newHeight]);
+    const currentNodes = simulation.nodes().map(node => ({
+          id: node.id,
+          color: node.color,
+          x: node.x,
+          y: node.y,
+          label: node.label
+      }));
+
+      // Get current links
+      const currentLinks = nodeLinks.map(link => ({
+          source: link.source.id,
+          target: link.target.id,
+          color: link.color,
+          label: link.label
+      }));
+
+      // Clear existing SVG
+      svg.selectAll("*").remove();
+
+      // Create new force graph with updated data
+      ForceGraph({
+          nodes: currentNodes,
+          links: currentLinks
+      });    
+});
+
+document.addEventListener('keypress', logKey);
+document.addEventListener('keydown', keydownHandle);
+document.addEventListener('keyup', keyupHandle);
+
+function pauseOrUnpause() {
+    if (!running) {
+        nodeStrength = forceNode.strength();
+        linkStrength = forceLink.strength();
+        forceNode.strength(0)
+        forceLink.strength(0)
+    }
+    else {
+        forceNode.strength(nodeStrength);
+        forceLink.strength(linkStrength);
+        simulation.alphaTarget(0).restart();
+    }
+}
+
+function logKey(e) {
+  if(e.code + "" === "KeyP")
+  {
+    running = !running;
+    pauseOrUnpause();
+  }
+}
+
+var forceNode;
+var forceLink;
+
+
+var simulation;
+
+function ForceGraph({
+  nodes, // an iterable of node objects (typically [{id}, …])
+  links // an iterable of link objects (typically [{source, target}, …])
+}, {
+  nodeId = d => d.id, // given d in nodes, returns a unique identifier (string)
+  nodeGroup = d => d.color, // given d in nodes, returns an (ordinal) value for color
+  nodeGroups, // an array of ordinal values representing the node groups
+  nodeTitle, // given d in nodes, a title string
+  nodeFill = "none", // node stroke fill (if not using a group color encoding)
+  nodeStroke = "#fff", // node stroke color
+  nodeStrokeWidth = 1.5, // node stroke width, in pixels
+  nodeStrokeOpacity = 1, // node stroke opacity
+  nodeRadius =  50, // node radius, in pixels
+  linkSource = ({source}) => source, // given d in links, returns a node identifier string
+  linkTarget = ({target}) => target, // given d in links, returns a node identifier string
+  linkStroke = "#999", // link stroke color
+  linkStrokeOpacity = 0.6, // link stroke opacity
+  linkStrokeWidth = 2, // given d in links, returns a stroke width in pixels
+  linkStrokeLinecap = "round", // link stroke linecap
+  colors = d3.schemeTableau10, // an array of color strings, for the node groups
+  invalidation // when this promise resolves, stop the simulation
+} = {}) {
+    nodeLinks = links;
+    console.log(JSON.stringify(nodes));
+  // Compute values.
+  const N = d3.map(nodes, nodeId).map(intern);
+  const COLORMAP = d3.map(nodes, d => d.color).map(intern);
+  const LABELMAP = d3.map(nodes, d => d.label).map(intern);
+  const LABELLINKMAP = d3.map(links, d => d.label).map(intern);
+  const IDMAP = d3.map(links, d => d.id).map(intern);
+  const LS = d3.map(links, linkSource).map(intern);
+  const LT = d3.map(links, linkTarget).map(intern);
+  const FONTSIZE = d3.map(links, linkTarget).map(intern);
+  const LINKCOLOR = d3.map(links, l => l.color).map(intern);
+  if (nodeTitle === undefined) nodeTitle = (_, i) => N[i];
+  const T = nodeTitle == null ? null : d3.map(nodes, nodeTitle);
+  const G = nodeGroup == null ? null : d3.map(nodes, nodeGroup).map(intern);
+  const W = typeof linkStrokeWidth !== "function" ? null : d3.map(links, linkStrokeWidth);
+  
+  const EDGECOLOR = typeof linkStrokeWidth !== "function" ? null : d3.map(links, l => l.color);
+
+  // Replace the input nodes and links with mutable objects for the simulation.
+  nodes = d3.map(nodes, (node, i) => ({
+        id: N[i],
+        color: node.color,
+        // Initialize position if provided, otherwise undefined (simulation will assign random position)
+        x: node.x !== undefined ? node.x : undefined,
+        y: node.y !== undefined ? node.y : undefined,
+        // Also preserve fx/fy if provided (for fixed positions)
+        fx: node.fx !== undefined ? node.fx : undefined,
+        fy: node.fy !== undefined ? node.fy : undefined,
+        label: node.label !== undefined ? node.label : undefined,
+  }));
+  links = d3.map(links, (_, i) => ({source: LS[i], target: LT[i], color: LINKCOLOR[i], label: LABELLINKMAP[i]}));
+  nodeLinks = links;
+  // Compute default domains.
+  if (G && nodeGroups === undefined) nodeGroups = d3.sort(G);
+
+  // Construct the scales.
+  const color = nodeGroup == null ? null : d3.scaleOrdinal(nodeGroups, colors);
+    
+  
+  
+  // Construct the forces.
+  forceNode = d3.forceManyBody();
+  forceLink = d3.forceLink(links).id(({index: i}) => N[i]).distance(200);
+  //if (nodeStrength !== undefined) forceNode.strength(nodeStrength);
+  //if (linkStrength !== undefined) forceLink.strength(linkStrength);
+svg = d3.select("svg");
+const width = window.innerWidth - 250; // Subtract button container width + gap
+const height = window.innerHeight;
+
+  // Add boundary force
+  const boundaryForce = () => {
+    const padding = nodeRadius + 10; // Buffer space from edges
+    
+    for (let node of nodes) {
+      // Left boundary
+      if (node.x < -width/2 + padding) {
+        node.x = -width/2 + padding;
+        node.vx = Math.abs(node.vx) * 0.5; // Bounce with reduced velocity
+      }
+      // Right boundary
+      if (node.x > width/2 - padding) {
+        node.x = width/2 - padding;
+        node.vx = -Math.abs(node.vx) * 0.5;
+      }
+      // Top boundary
+      if (node.y < -height/2 + padding) {
+        node.y = -height/2 + padding;
+        node.vy = Math.abs(node.vy) * 0.5;
+      }
+      // Bottom boundary
+      if (node.y > height/2 - padding) {
+        node.y = height/2 - padding;
+        node.vy = -Math.abs(node.vy) * 0.5;
+      }
+    }
+  }
+
+  simulation = d3.forceSimulation(nodes)
+      .force("link", forceLink)
+      .force("charge", forceNode)
+      .force("center", d3.forceCenter())
+      .force("boundary", boundaryForce) // Add boundary force
+      .on("tick", ticked);
+
+  // Optional: Visualize the boundaries
+  svg.append("rect")
+    .attr("x", -width/2)
+    .attr("y", -height/2)
+    .attr("width", width)
+    .attr("height", height)
+    .attr("fill", "none")
+    .attr("stroke", "rgba(255,255,255,0.2)")
+    .attr("stroke-width", 1);
+  
+svg
+  .attr("width", width)
+  .attr("height", height)
+  .attr("viewBox", [-width / 2, -height / 2, width, height]);
+  
+svg.on("click", function(event) {
+   if (modifyingState === CREATE_VERTEX_STATE) {
+      const [x, y] = d3.pointer(event);
+      
+      // Get current node positions and data
+      const currentNodes = simulation.nodes().map(node => ({
+          id: node.id,
+          color: node.color,
+          x: node.x,
+          y: node.y,
+          label: node.label
+      }));
+
+      // Generate new node ID (find max ID and increment)
+      const maxId = Math.max(...currentNodes.map(node => 
+          parseInt(node.id.replace(/[^0-9]/g, '')) || 0
+      ));
+      const newNodeId = (maxId + 1).toString();
+
+      // Add new node
+      const newNode = {
+          id: newNodeId,
+          color: "white",
+          x: x,
+          y: y,
+          label: newNodeId
+      };
+
+      // Create new nodes array with existing nodes and new node
+      const newNodes = [...currentNodes, newNode];
+
+      // Get current links
+      const currentLinks = links.map(link => ({
+          source: link.source.id,
+          target: link.target.id,
+          color: link.color,
+          label: link.label
+      }));
+
+      // Clear existing SVG
+      svg.selectAll("*").remove();
+
+      // Create new force graph with updated data
+      ForceGraph({
+          nodes: newNodes,
+          links: currentLinks
+      }, {
+          // ... any other options you want to pass
+      });
+   }
+});     // .attr("style", "max-width: 100%; height: auto; height: intrinsic;");
+  
+  svg.append("defs").selectAll("marker")
+    .data(["end"])
+    .enter().append("marker")
+    .attr("id", String)
+    .attr("viewBox", "0 -5 10 10")
+    .attr("refX", 10)
+    .attr("refY", 0)
+    .attr("markerWidth", 8)
+    .attr("markerHeight", 8)
+    .attr("orient", "auto")
+    .append("path")
+    .attr("fill", "none")           // Remove fill
+    .attr("stroke", "white")        // Add stroke
+    .attr("stroke-width", "1")      // Add stroke width
+    .attr("d", "M0,-5L10,0L0,5");   // Simple V shape
+  const link = svg.append("g")
+    .attr("stroke", linkStroke)
+    .attr("stroke-opacity", linkStrokeOpacity)
+    .attr("stroke-width", typeof linkStrokeWidth !== "function" ? linkStrokeWidth : null)
+    .attr("stroke-linecap", linkStrokeLinecap)
+    .selectAll("line")
+    .data(links)
+    .join("line")
+    .attr("marker-end", "url(#end)");  // Add this line to enable the arrow
+    
+    
+  var textLink = svg.selectAll("textlink")
+                            .data(links)
+                            .enter()
+                           .append("text");
+
+    var textLinks = textLink
+      .attr("x", function(d) { return (d.source.x+d.target.x)/2.0; })
+      .attr("y", function(d) { return (d.source.y+d.target.y)/2.0; })
+      .text( ({index: i}) => LABELLINKMAP[i])
+      .attr("font-family", "sans-serif")
+      .attr("font-size", "15px")
+      .attr("text-anchor", "middle")
+      .attr("fill", "white");
+
+  var node = svg.append("g")
+    .attr("class", "node")
+      .attr("fill", "none")  // Make the fill transparent
+      .attr("stroke", "white")  // Set the outline color to white
+      .attr("stroke-opacity", 1)
+      .attr("stroke-width", 2)  // Make the outline a bit thicker
+    .selectAll("circle")
+    .data(nodes)
+  .enter().append("circle")
+      .attr("r", nodeRadius)
+      .call(drag(simulation));
+      
+
+  
+  var text = svg.selectAll("textnode")
+                            .data(nodes)
+                            .enter()
+                           .append("text");
+
+    var textLabels = text
+      .attr("x", function(d) { return d.x; })
+      .attr("y", function(d) { return d.y; })
+      .text( ({index: i}) => LABELMAP[i])
+      .attr("font-family", "sans-serif")
+      .attr("font-size", "15px")
+      .attr("text-anchor", "middle")
+      .attr("fill", "white");
+  
+   /*
+    node
+    .join("text")
+        .attr("text-anchor", "middle")
+        .attr("dy", ".3em").text("Node Name To Display")
+        .text(({index: i}) => {console.log(LABELMAP[i]); return "games"; return LABELMAP[i];});
+    */
+    
+  link.attr("stroke", l => {return l.color;} );
+  if (W) link.attr("stroke-width", ({index: i}) => W[i]);
+  if (G) node.attr("stroke", ({index: i}) => COLORMAP[i]);  // Apply color to stroke instead of fill
+  if (G) node.attr("fill", ({index: i}) => "black");  // Apply color to stroke instead of fill
+  if (T) node.append("title").text(({index: i}) => T[i]);
+  if (invalidation != null) invalidation.then(() => simulation.stop());
+
+  function intern(value) {
+    return value !== null && typeof value === "object" ? value.valueOf() : value;
+  }
+
+  function ticked() {
+  
+    function getIntersectionPoint(x1, y1, x2, y2, cx, cy, r) {
+        // Vector from center to end point
+        const dx = x2 - cx;
+        const dy = y2 - cy;
+        // Length of this vector
+        const length = Math.sqrt(dx * dx + dy * dy);
+        
+        if (length === 0) return { x: cx, y: cy };
+        
+        // Unit vector
+        const udx = dx / length;
+        const udy = dy / length;
+        
+        // Point on circle, moved back by 10 pixels to accommodate arrow
+        return {
+            x: cx + udx * (r),  // Subtract 10 pixels to make room for arrow
+            y: cy + udy * (r)
+        };
+    }
+
+    link
+        .attr("x1", d => {
+            const sourcePoint = getIntersectionPoint(
+                d.source.x, d.source.y,
+                d.target.x, d.target.y,
+                d.source.x, d.source.y,
+                nodeRadius
+            );
+            return sourcePoint.x;
+        })
+        .attr("y1", d => {
+            const sourcePoint = getIntersectionPoint(
+                d.source.x, d.source.y,
+                d.target.x, d.target.y,
+                d.source.x, d.source.y,
+                nodeRadius
+            );
+            return sourcePoint.y;
+        })
+        .attr("x2", d => {
+            const targetPoint = getIntersectionPoint(
+                d.target.x, d.target.y,
+                d.source.x, d.source.y,
+                d.target.x, d.target.y,
+                nodeRadius
+            );
+            return targetPoint.x;
+        })
+        .attr("y2", d => {
+            const targetPoint = getIntersectionPoint(
+                d.target.x, d.target.y,
+                d.source.x, d.source.y,
+                d.target.x, d.target.y,
+                nodeRadius
+            );
+            return targetPoint.y;
+        });
+
+    node
+        .attr("cx", d => d.x)
+        .attr("cy", d => d.y);
+        
+    textLabels
+        .attr("x", function(d) { return d.x; })
+        .attr("y", function(d) { return d.y-15; });
+        
+    textLinks
+        .attr("x", function(d) { return getLabelPosition(d.source, d.target).x; })
+        .attr("y", function(d) { return getLabelPosition(d.source, d.target).y; });
+}
+  /*
+  
+    link
+      .attr("x1", d => d.source.x)
+      .attr("y1", d => d.source.y)
+      .attr("x2", d => d.target.x)
+      .attr("y2", d => d.target.y);
+
+    node
+      .attr("cx", d => d.x)
+      .attr("cy", d => d.y);
+      
+      textLabels
+      .attr("x", function(d) { return d.x; })
+      .attr("y", function(d) { return d.y-15; });
+      
+      textLinks
+      .attr("x", function(d) { return getLabelPosition(d.source, d.target).x; })
+      .attr("y", function(d) { return getLabelPosition(d.source, d.target).y; });
+  }
+  */
+  
+  function getLabelPosition(source, target){
+    var avgX = (source.x+target.x)/2.0;
+    var avgY = (source.y+target.y)/2.0;
+    var dx = source.x-target.x;
+    var dy = source.y-target.y;
+    var mag = Math.sqrt(dx*dx+dy*dy);
+    if (mag == 0) {
+        mag = 1.0;
+    }
+    var normX = dx/mag;
+    var normY = dy/mag;
+    // rotate vector 90 degrees
+    var shiftAmount = 10;
+    var shiftX = normY*shiftAmount;
+    var shiftY = -normX*shiftAmount;
+    var extraShift = 5;
+    // account for weird text going too high or too low
+    if (normX < 0) {
+        shiftY -= extraShift*normX;
+    }
+    else {
+        shiftY += extraShift*normX;
+    }
+    return {x: avgX+shiftX, y: avgY+shiftY};
+    
+  }
+
+  function drag(simulation) {    
+    function dragstarted(event) {
+      if (!event.active) simulation.alphaTarget(0.3).restart();
+      event.subject.fx = event.subject.x;
+      event.subject.fy = event.subject.y;
+      
+
+      if (modifyingState == DELETE_VERTEX_STATE) {
+          var id = event.subject.id;
+          
+          //d3.select(this).remove();
+          
+          var simNodes = simulation.nodes();
+          var index = -1;
+          for (var i = 0; i < simNodes.length; i++){
+            if (simNodes[i].id == id) {
+                index = i;
+                break;
+                simNodes[i].remove();
+            }
+          }
+          
+          
+          links = links.filter(function(d) { return d.source.id != id && d.target.id != id;});
+          forceLink = d3.forceLink(links).id(({index: i}) => N[i]).distance(200);
+          simulation.force("link", forceLink);
+          
+          simulation.nodes().splice(index, 1);
+          
+          d3.selectAll("line").filter(function(d) { return d.source.id === id || d.target.id === id;}).remove();
+          
+          d3.select(this).remove();
+          
+           d3.selectAll("text").filter(function(d) { 
+                return d.id == id || // node label
+                ((d.source) && d.source.id == id) || // edge label
+                ((d.target) && d.target.id == id);
+           }).remove();
+            if (!running) {
+                linkStrength = forceLink.strength();
+                forceLink.strength(0);
+            }
+          
+      }
+      
+    }
+    
+    function dragged(event) {
+      event.subject.fx = event.x;
+      event.subject.fy = event.y;
+    }
+
+    function dragended(event) {
+      if (!event.active) simulation.alphaTarget(0);
+    }
+    
+    return d3.drag()
+      .on("start", dragstarted)
+      .on("drag", dragged)
+      .on("end", dragended);
+  }
+  
+
+  return Object.assign(svg.node(), {scales: {color}});
+}
+</script>
+<script>
+
+// From https://stackoverflow.com/a/1573141/2924421
+function colourNameToHex(colour)
+{
+    var colours = {"aliceblue":"#f0f8ff","antiquewhite":"#faebd7","aqua":"#00ffff","aquamarine":"#7fffd4","azure":"#f0ffff",
+    "beige":"#f5f5dc","bisque":"#ffe4c4","black":"#000000","blanchedalmond":"#ffebcd","blue":"#0000ff","blueviolet":"#8a2be2","brown":"#a52a2a","burlywood":"#deb887",
+    "cadetblue":"#5f9ea0","chartreuse":"#7fff00","chocolate":"#d2691e","coral":"#ff7f50","cornflowerblue":"#6495ed","cornsilk":"#fff8dc","crimson":"#dc143c","cyan":"#00ffff",
+    "darkblue":"#00008b","darkcyan":"#008b8b","darkgoldenrod":"#b8860b","darkgray":"#a9a9a9","darkgreen":"#006400","darkkhaki":"#bdb76b","darkmagenta":"#8b008b","darkolivegreen":"#556b2f",
+    "darkorange":"#ff8c00","darkorchid":"#9932cc","darkred":"#8b0000","darksalmon":"#e9967a","darkseagreen":"#8fbc8f","darkslateblue":"#483d8b","darkslategray":"#2f4f4f","darkturquoise":"#00ced1",
+    "darkviolet":"#9400d3","deeppink":"#ff1493","deepskyblue":"#00bfff","dimgray":"#696969","dodgerblue":"#1e90ff",
+    "firebrick":"#b22222","floralwhite":"#fffaf0","forestgreen":"#228b22","fuchsia":"#ff00ff",
+    "gainsboro":"#dcdcdc","ghostwhite":"#f8f8ff","gold":"#ffd700","goldenrod":"#daa520","gray":"#808080","green":"#008000","greenyellow":"#adff2f",
+    "honeydew":"#f0fff0","hotpink":"#ff69b4",
+    "indianred ":"#cd5c5c","indigo":"#4b0082","ivory":"#fffff0","khaki":"#f0e68c",
+    "lavender":"#e6e6fa","lavenderblush":"#fff0f5","lawngreen":"#7cfc00","lemonchiffon":"#fffacd","lightblue":"#add8e6","lightcoral":"#f08080","lightcyan":"#e0ffff","lightgoldenrodyellow":"#fafad2",
+    "lightgrey":"#d3d3d3","lightgreen":"#90ee90","lightpink":"#ffb6c1","lightsalmon":"#ffa07a","lightseagreen":"#20b2aa","lightskyblue":"#87cefa","lightslategray":"#778899","lightsteelblue":"#b0c4de",
+    "lightyellow":"#ffffe0","lime":"#00ff00","limegreen":"#32cd32","linen":"#faf0e6",
+    "magenta":"#ff00ff","maroon":"#800000","mediumaquamarine":"#66cdaa","mediumblue":"#0000cd","mediumorchid":"#ba55d3","mediumpurple":"#9370d8","mediumseagreen":"#3cb371","mediumslateblue":"#7b68ee",
+    "mediumspringgreen":"#00fa9a","mediumturquoise":"#48d1cc","mediumvioletred":"#c71585","midnightblue":"#191970","mintcream":"#f5fffa","mistyrose":"#ffe4e1","moccasin":"#ffe4b5",
+    "navajowhite":"#ffdead","navy":"#000080",
+    "oldlace":"#fdf5e6","olive":"#808000","olivedrab":"#6b8e23","orange":"#ffa500","orangered":"#ff4500","orchid":"#da70d6",
+    "palegoldenrod":"#eee8aa","palegreen":"#98fb98","paleturquoise":"#afeeee","palevioletred":"#d87093","papayawhip":"#ffefd5","peachpuff":"#ffdab9","peru":"#cd853f","pink":"#ffc0cb","plum":"#dda0dd","powderblue":"#b0e0e6","purple":"#800080",
+    "rebeccapurple":"#663399","red":"#ff0000","rosybrown":"#bc8f8f","royalblue":"#4169e1",
+    "saddlebrown":"#8b4513","salmon":"#fa8072","sandybrown":"#f4a460","seagreen":"#2e8b57","seashell":"#fff5ee","sienna":"#a0522d","silver":"#c0c0c0","skyblue":"#87ceeb","slateblue":"#6a5acd","slategray":"#708090","snow":"#fffafa","springgreen":"#00ff7f","steelblue":"#4682b4",
+    "tan":"#d2b48c","teal":"#008080","thistle":"#d8bfd8","tomato":"#ff6347","turquoise":"#40e0d0",
+    "violet":"#ee82ee",
+    "wheat":"#f5deb3","white":"#ffffff","whitesmoke":"#f5f5f5",
+    "yellow":"#ffff00","yellowgreen":"#9acd32"};
+
+    if (typeof colours[colour.toLowerCase()] != 'undefined')
+        return colours[colour.toLowerCase()];
+
+    return colour;
+}
+
+
+function parseDotFile(file, callback) {
+    reader = new FileReader();
+    reader.onload = function(event) {
+        require(['dotparser'], function(dotparser){
+            var text = event.target.result;
+            var nodes = dotparser.parse(text);
+            //console.log(JSON.stringify(nodes));
+            var actualNodes = nodes[0]['children'];
+            //console.log(actualNodes.length);
+            var outputNodes = [];
+            var nodeLookup = {};
+            var edges = [];
+            for (var i = 0; i < actualNodes.length; i++) {
+                var node = actualNodes[i];
+                if (node['type'] == 'edge_stmt') {
+                    console.log(JSON.stringify(node));
+                    var edgeNodes = node['edge_list'];
+                    if (edgeNodes.length == 2) {
+                        var node1Id = edgeNodes[0]['id'];
+                        var node2Id = edgeNodes[1]['id'];
+                        var edgeData = {"source": node1Id, "target": node2Id, 'color': 'black'};
+                        if (!nodeLookup.hasOwnProperty(node1Id)) {
+                            var node1Data = {"id": node1Id};
+                            nodeLookup[node1Id] = node1Data;
+                            outputNodes.push(node1Data);
+                        }
+                        if (!nodeLookup.hasOwnProperty(node2Id)) {
+                            var node2Data = {"id": node2Id};
+                            nodeLookup[node2Id] = node2Data;
+                            outputNodes.push(node2Data);
+                        }
+                            
+                        
+                        if (node['attr_list']){
+                            var edgeAttrs = node['attr_list'];
+                            for (var j = 0; j < edgeAttrs.length; j++) {
+                                var edgeAttr = edgeAttrs[j];
+                                edgeData[edgeAttr['id']] = edgeAttr['eq'];
+                                if (edgeAttr['id'] === 'color') {
+                                    edgeData[edgeAttr['id']] = colourNameToHex("" + edgeAttr['eq']);
+                                }
+                                console.log("edge data:" + edgeAttr['id'] + " " + edgeAttr['eq']);
+                            }
+                        }
+                        edges.push(edgeData);
+                    }
+                }
+                else if(node['type'] == 'node_stmt'){
+                    var nodeId = node['node_id']['id'];
+                    console.log("node id: " + nodeId);
+                    if (!nodeLookup.hasOwnProperty(nodeId)) {
+                        console.log("Added");
+                        var nodeData = {"id": nodeId, 'color': 'black'};
+                        nodeLookup[nodeId] = nodeData;
+                        outputNodes.push(nodeData);
+                    }
+                        
+                    if (node['attr_list']){
+                        var nodeAttrs = node['attr_list'];
+                        for (var j = 0; j < nodeAttrs.length; j++) {
+                            var nodeAttr = nodeAttrs[j];
+                            var nodeData = nodeLookup[nodeId];
+                            console.log(JSON.stringify(nodeData));
+                            nodeData[nodeAttr['id']] = nodeAttr['eq'];
+                            if (nodeAttr['id'] === 'color') {
+                                nodeData[nodeAttr['id']] = colourNameToHex("" + nodeAttr['eq']);
+                            }
+                            console.log(nodeAttr['id'] + " " + nodeData[nodeAttr['id']]);
+                        }
+                    }
+                    
+                    console.log(JSON.stringify(node));
+                }
+                else {
+                        console.log(JSON.stringify(node));
+                }
+            }
+            callback({"nodes": outputNodes, "links": edges});
+        });
+    };
+    reader.readAsText(file);
+
+}
+  
+  
+  function mouseover(d) {
+     d3.select(this).transition()
+               .duration('50')
+               .attr('opacity', '.85');
+          div.transition()
+               .duration(50)
+               .style("opacity", 1);
+          let num = d.id + '%';
+          div.html(num)
+               .style("left", (d.pageX + 10) + "px")
+               .style("top", (d.pageY - 15) + "px");
+  }
+  
+  function mouseout(d) {
+  d3.select(this).transition()
+               .duration('50')
+               .attr('opacity', '1');
+          div.transition()
+               .duration('50')
+               .style("opacity", 0);
+  }
+  
+  function dragstarted(d) {
+    if (!d3.event.active) simulation.alphaTarget(0.3).restart();
+    d.fx = d.x;
+    d.fy = d.y;
+    
+  }
+
+  function dragged(d) {
+    d.fx = d3.event.x;
+    d.fy = d3.event.y;
+  }
+
+  function dragended(d) {
+    if (!d3.event.active) simulation.alphaTarget(0);
+    d.fx = null;
+    d.fy = null;
+  }
+</script>
+</html>
