@@ -1,5 +1,5 @@
   <!DOCTYPE html>
-  <meta charset="utf-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <style>
 
   .links path {
@@ -1350,7 +1350,12 @@ Quiver = function(weights){
   };
 };
 
-
+// disable zoom on edit input field
+document.addEventListener('touchstart', function(event) {
+            if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+                event.target.style.fontSize = '16px';
+            }
+        });
 function compressToBase64(str) {
     return new Promise((resolve) => {
         LZMA.compress(str, 9, (result) => {
