@@ -859,7 +859,7 @@ svg.on("click", function(event) {
           
           for(var i = 0; i < simulation.nodes().length; i++){
             var node = simulation.nodes()[i];
-            if (node.id != id) {            
+            if (node.id + "" !== id  + "") {            
                 resultNodes.push({
                   id: node.id,
                   color: node.color,
@@ -909,6 +909,24 @@ svg.on("click", function(event) {
       
         event.subject.fx = event.x;
         event.subject.fy = event.y;
+               // Update URL with new graph state after any changes
+        const currentNodes = simulation.nodes().map(node => ({
+            id: node.id,
+            color: node.color,
+            x: node.x,
+            y: node.y,
+            label: node.label
+        }));
+        
+        const currentLinks = nodeLinks.map(link => ({
+            source: link.source.id,
+            target: link.target.id,
+            color: link.color,
+            label: link.label
+        }));
+        
+        updateURL(currentNodes, currentLinks);
+ 
       }
       if (modifyingState == CREATE_EDGE_STATE) {
         dragLine
@@ -996,25 +1014,6 @@ svg.on("click", function(event) {
       }
       
       
-        // Update URL with new graph state after any changes
-        setTimeout(() => {
-            const currentNodes = simulation.nodes().map(node => ({
-                id: node.id,
-                color: node.color,
-                x: node.x,
-                y: node.y,
-                label: node.label
-            }));
-            
-            const currentLinks = nodeLinks.map(link => ({
-                source: link.source.id,
-                target: link.target.id,
-                color: link.color,
-                label: link.label
-            }));
-            
-            updateURL(currentNodes, currentLinks);
-        }, 100);
     }
     forceNode.strength(0);
     forceLink.strength(0);
