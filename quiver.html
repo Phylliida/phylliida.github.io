@@ -352,6 +352,10 @@ function ForceGraph({
   colors = d3.schemeTableau10, // an array of color strings, for the node groups
   invalidation // when this promise resolves, stop the simulation
 } = {}) {
+svg = d3.select("svg");
+
+// Clear existing SVG
+      svg.selectAll("*").remove();
     nodeLinks = links;
     console.log(JSON.stringify({"nodes": nodes, "links": links}));
   // Compute values.
@@ -398,7 +402,7 @@ function ForceGraph({
   forceLink = d3.forceLink(links).id(({index: i}) => N[i]).distance(200);
   //if (nodeStrength !== undefined) forceNode.strength(nodeStrength);
   //if (linkStrength !== undefined) forceLink.strength(linkStrength);
-svg = d3.select("svg");
+
 const width = window.innerWidth - 250; // Subtract button container width + gap
 const height = window.innerHeight;
 
@@ -466,10 +470,17 @@ svg.on("click", function(event) {
       }));
 
       // Generate new node ID (find max ID and increment)
-      const maxId = Math.max(...currentNodes.map(node => 
-          parseInt(node.id.replace(/[^0-9]/g, '')) || 0
-      ));
-      const newNodeId = (maxId + 1).toString();
+      
+      var newNodeId = "";
+      if (currentNodes.length == 0) {
+         newNodeId = "0";
+      }
+      else {
+          const maxId = Math.max(...currentNodes.map(node => 
+              parseInt((node.id + "").replace(/[^0-9]/g, '')) || 0
+          ));
+          var newNodeId = (maxId + 1).toString();
+      }
 
       // Add new node
       const newNode = {
@@ -1402,6 +1413,7 @@ function GetBMatrix(nodes, links) {
 
 }
 
+var curHash = "";
 function updateURL(nodes, links) {
     var names = nodes.map(n => n.label);
     var pos = nodes.map(n => [Math.round(n.x), Math.round(n.y)]);
@@ -1422,9 +1434,16 @@ function updateURL(nodes, links) {
     
     document.getElementById("bMatrixField").value = weightsStrs.join(",")
     
-    
-    window.location.hash = encodeURI(JSON.stringify(data));
+    curHash = encodeURI(JSON.stringify(data));
+    window.location.hash = curHash;
 }
+
+window.onhashchange =  function() {
+   if (window.location.hash !== curHash) {
+    console.log("loading from hash:" + window.location.hash);
+        loadGraphFromHash();
+   }
+};
 
 var tmpStrReplace = "__TMPCHARHERE";
 
