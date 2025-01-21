@@ -909,6 +909,20 @@ svg.on("click", function(event) {
       
         event.subject.fx = event.x;
         event.subject.fy = event.y;
+ 
+      }
+      if (modifyingState == CREATE_EDGE_STATE) {
+        dragLine
+          .attr("x2", event.x)
+          .attr("y2", event.y);
+      }
+    }
+
+    function dragended(event) {
+      if (!event.active) simulation.alphaTarget(0);
+      
+      if (modifyingState == TRANSLATE_STATE) {
+    
                // Update URL with new graph state after any changes
         const currentNodes = simulation.nodes().map(node => ({
             id: node.id,
@@ -926,19 +940,7 @@ svg.on("click", function(event) {
         }));
         
         updateURL(currentNodes, currentLinks);
- 
-      }
-      if (modifyingState == CREATE_EDGE_STATE) {
-        dragLine
-          .attr("x2", event.x)
-          .attr("y2", event.y);
-      }
-    }
-
-    function dragended(event) {
-      if (!event.active) simulation.alphaTarget(0);
-      
-       
+      }      
       if (modifyingState == CREATE_EDGE_STATE && startId !== undefined) {
             CURRENT_LINK_LABEL = document.getElementById("createEdgeLabel").value;
             // Update the drag line
