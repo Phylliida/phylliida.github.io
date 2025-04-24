@@ -709,7 +709,7 @@
         // Load models list
         async function loadModelsList() {
             try {
-                const response = await fetch('/modelwelfare/refusalvsbail/models.json');
+                const response = await fetch('/modelwelfare/refusalvsbailv2/models.json');
                 
                 if (!response.ok) {
                     throw new Error(`HTTP error! Status: ${response.status}`);
