@@ -766,6 +766,7 @@
                 // Load data for the selected model
                 await loadModelData(newModel);
                 
+                currentModel = newModel;
                 // Apply the previous filter if it exists
                 if (previousFilter) {
                     applyFilter(previousFilter, false);
@@ -773,6 +774,7 @@
                     document.getElementById(previousFilter)?.classList.add('active');
                 }
                 
+                currentModel = newModel;
                 // Update hash without reloading the page
                 updateHash();
             });
