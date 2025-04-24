@@ -617,7 +617,7 @@
         var currentModel = "";
         var currentMajorCategory = '';
         var currentCategoryIndex = 0;
-        var currentPromptIndex = 0;
+        var currentPromptId = null; // Use a stable identifier for prompts
         var currentFilter = null;
         
         // Function to parse URL hash
@@ -657,7 +657,7 @@
             }
             
             if (params.subcategory) {
-                // We need to find the index of this subcategory
+                // Find the subcategory index
                 const dataToUse = currentFilter ? filteredGroupedData : groupedData;
                 if (dataToUse[currentMajorCategory]) {
                     const index = dataToUse[currentMajorCategory].findIndex(
@@ -671,8 +671,9 @@
                 }
             }
             
-            if (params.currentPromptIndex && params.currentPromptIndex + "" !== currentPromptIndex + "") {
-                currentPromptIndex = parseInt(params.currentPromptIndex);
+            // Use promptId instead of index
+            if (params.promptId && params.promptId !== currentPromptId) {
+                currentPromptId = params.promptId;
                 stateChanged = true;
             }
             
@@ -685,6 +686,9 @@
             const currentCategory = getCurrentCategory(dataToUse);
             if (!currentCategory) return;
             
+            const currentPrompt = getCurrentPrompt();
+            if (!currentPrompt) return;
+            
             const hashParams = [
                 `model=${encodeURIComponent(currentModel)}`
             ];
@@ -695,7 +699,9 @@
             
             hashParams.push(`majorCategory=${encodeURIComponent(currentMajorCategory)}`);
             hashParams.push(`subcategory=${encodeURIComponent(currentCategory.subCategory)}`);
-            hashParams.push(`currentPromptIndex=${encodeURIComponent(currentPromptIndex + "")}`);
+            
+            // Store the prompt ID instead of index
+            hashParams.push(`promptId=${encodeURIComponent(currentPrompt.promptId)}`);
             
             window.location.hash = hashParams.join('&');
         }
@@ -765,16 +771,16 @@
                 
                 // Load data for the selected model
                 await loadModelData(newModel);
-                
                 currentModel = newModel;
+                
                 // Apply the previous filter if it exists
                 if (previousFilter) {
                     applyFilter(previousFilter, false);
                     // Highlight the active filter button
                     document.getElementById(previousFilter)?.classList.add('active');
                 }
-                
                 currentModel = newModel;
+                
                 // Update hash without reloading the page
                 updateHash();
             });
@@ -836,6 +842,10 @@
         
         // Apply filter to the data
         function applyFilter(filterType, updateHashFlag = true) {
+            // Save the current prompt ID for reference
+            const currentPrompt = getCurrentPrompt();
+            const savedPromptId = currentPrompt ? currentPrompt.promptId : null;
+            
             currentFilter = filterType;
             
             // Update active button
@@ -904,22 +914,44 @@
                 document.getElementById('majorCategoryNav').style.display = 'flex';
             }
             
-            // Reset category index if needed
-            let foundValidCategory = false;
+            // Try to find the same prompt in the filtered data
+            let foundPrompt = false;
+            if (savedPromptId) {
+                // Try to locate the prompt in filteredGroupedData
+                for (const majorCategory in filteredGroupedData) {
+                    for (let i = 0; i < filteredGroupedData[majorCategory].length; i++) {
+                        const subcategory = filteredGroupedData[majorCategory][i];
+                        const promptIndex = subcategory.data.findIndex(p => p.promptId === savedPromptId);
+                        
+                        if (promptIndex !== -1) {
+                            // Found the prompt, update state
+                            currentMajorCategory = majorCategory;
+                            currentCategoryIndex = i;
+                            currentPromptId = savedPromptId;
+                            foundPrompt = true;
+                            break;
+                        }
+                    }
+                    if (foundPrompt) break;
+                }
+            }
             
-            // First, check if current major category still exists in filtered data
-            if (filteredGroupedData[currentMajorCategory]) {
-                currentCategoryIndex = 0;
-                currentPromptIndex = 0;
-                foundValidCategory = true;
-            } else {
-                // Find the first major category
-                const firstMajorCategory = Object.keys(filteredGroupedData)[0];
-                if (firstMajorCategory) {
-                    currentMajorCategory = firstMajorCategory;
+            // If we didn't find the prompt, reset to the first available
+            if (!foundPrompt) {
+                // Reset category index if needed
+                if (filteredGroupedData[currentMajorCategory]) {
                     currentCategoryIndex = 0;
-                    currentPromptIndex = 0;
-                    foundValidCategory = true;
+                    const firstPrompt = filteredGroupedData[currentMajorCategory][0].data[0];
+                    currentPromptId = firstPrompt.promptId;
+                } else {
+                    // Find the first major category
+                    const firstMajorCategory = Object.keys(filteredGroupedData)[0];
+                    if (firstMajorCategory) {
+                        currentMajorCategory = firstMajorCategory;
+                        currentCategoryIndex = 0;
+                        const firstPrompt = filteredGroupedData[firstMajorCategory][0].data[0];
+                        currentPromptId = firstPrompt.promptId;
+                    }
                 }
             }
             
@@ -929,7 +961,7 @@
             setupSubcategoryNav();
             
             // Only continue if we have data
-            if (foundValidCategory) {
+            if (Object.keys(filteredGroupedData).length > 0) {
                 renderCategorySummary();
                 setupPromptSelector();
                 renderCurrentPrompt();
@@ -946,6 +978,10 @@
         
         // Reset filter
         function resetFilter(updateHashFlag = true) {
+            // Save the current prompt ID for reference
+            const currentPrompt = getCurrentPrompt();
+            const savedPromptId = currentPrompt ? currentPrompt.promptId : null;
+            
             currentFilter = null;
             
             // Reset filter buttons
@@ -958,9 +994,33 @@
             document.getElementById('empty-major-categories').classList.remove('active');
             document.getElementById('majorCategoryNav').style.display = 'flex';
             
-            // Reset to first subcategory if current is not available
-            if (!getCurrentCategory(groupedData)) {
+            // Try to find the same prompt in the unfiltered data
+            let foundPrompt = false;
+            if (savedPromptId) {
+                // Try to locate the prompt in the original data
+                for (const majorCategory in groupedData) {
+                    for (let i = 0; i < groupedData[majorCategory].length; i++) {
+                        const subcategory = groupedData[majorCategory][i];
+                        const promptIndex = subcategory.data.findIndex(p => p.promptId === savedPromptId);
+                        
+                        if (promptIndex !== -1) {
+                            // Found the prompt, update state
+                            currentMajorCategory = majorCategory;
+                            currentCategoryIndex = i;
+                            currentPromptId = savedPromptId;
+                            foundPrompt = true;
+                            break;
+                        }
+                    }
+                    if (foundPrompt) break;
+                }
+            }
+            
+            // If we didn't find the prompt, reset to the first available
+            if (!foundPrompt && Object.keys(groupedData).length > 0) {
+                currentMajorCategory = Object.keys(groupedData)[0];
                 currentCategoryIndex = 0;
+                currentPromptId = groupedData[currentMajorCategory][0].data[0].promptId;
             }
             
             // Update UI
@@ -1066,6 +1126,9 @@
             groupedData = {};
             originalGroupedData = {};
             
+            // Generate a unique ID for each prompt to track it across filters
+            let promptIdCounter = 0;
+            
             JSONDATA['results'].forEach(category => {
                 // Process emoji codes in bailPrs
                 processBailPrs(category.bailPrs);
@@ -1089,8 +1152,11 @@
                 // Add category data with processed subcategory name
                 const categoryData = {...category, subCategory: subCategory};
                 
-                // Process each prompt
+                // Process each prompt and assign a unique ID
                 categoryData.data.forEach(prompt => {
+                    // Assign a unique ID to each prompt
+                    prompt.promptId = `prompt_${promptIdCounter++}`;
+                    
                     processBailPrs(prompt.bailPrs);
                     ensureAllRefusalStatuses(prompt.refusalPrs);
                     
@@ -1132,11 +1198,23 @@
                 });
             });
             
-            // If we don't have a major category set from the hash, set to the first available
+            // Initialize current state if needed
             if (!currentMajorCategory || !groupedData[currentMajorCategory]) {
                 if (Object.keys(groupedData).length > 0) {
                     currentMajorCategory = Object.keys(groupedData)[0];
                     currentCategoryIndex = 0;
+                    if (groupedData[currentMajorCategory][0].data.length > 0) {
+                        currentPromptId = groupedData[currentMajorCategory][0].data[0].promptId;
+                    }
+                }
+            }
+            
+            // Check if current promptId is in the URL hash
+            if (currentPromptId === null) {
+                // Set to first prompt in the current category
+                const currentCategory = getCurrentCategory();
+                if (currentCategory && currentCategory.data.length > 0) {
+                    currentPromptId = currentCategory.data[0].promptId;
                 }
             }
         }
@@ -1208,7 +1286,12 @@
                 button.addEventListener('click', () => {
                     currentMajorCategory = majorCategory;
                     currentCategoryIndex = 0;
-                    currentPromptIndex = 0;
+                    
+                    // Set current prompt ID to the first prompt in the new subcategory
+                    if (dataToUse[majorCategory][0].data.length > 0) {
+                        currentPromptId = dataToUse[majorCategory][0].data[0].promptId;
+                    }
+                    
                     updateMajorCategoryButtons();
                     updateCurrentMajorCategoryDisplay();
                     setupSubcategoryNav();
@@ -1292,7 +1375,12 @@
                 
                 button.addEventListener('click', () => {
                     currentCategoryIndex = index;
-                    currentPromptIndex = 0;
+                    
+                    // Set current prompt ID to the first prompt in the new subcategory
+                    if (category.data.length > 0) {
+                        currentPromptId = category.data[0].promptId;
+                    }
+                    
                     updateSubcategoryButtons();
                     renderCategorySummary();
                     setupPromptSelector();
@@ -1320,6 +1408,33 @@
         function getCurrentCategory(dataObj = null) {
             const dataToUse = dataObj || (currentFilter ? filteredGroupedData : groupedData);
             return dataToUse[currentMajorCategory]?.[currentCategoryIndex];
+        }
+        
+        // Get current prompt object
+        function getCurrentPrompt() {
+            const currentCategory = getCurrentCategory();
+            if (!currentCategory) return null;
+            
+            // Find prompt by ID instead of index
+            const promptIndex = findPromptIndexById(currentCategory.data, currentPromptId);
+            
+            if (promptIndex !== -1) {
+                return currentCategory.data[promptIndex];
+            }
+            
+            // If not found and there are prompts, return the first one
+            if (currentCategory.data.length > 0) {
+                currentPromptId = currentCategory.data[0].promptId; // Update ID
+                return currentCategory.data[0];
+            }
+            
+            return null;
+        }
+        
+        // Find prompt index by its ID
+        function findPromptIndexById(promptArray, promptId) {
+            if (!promptArray || !promptId) return -1;
+            return promptArray.findIndex(p => p.promptId === promptId);
         }
         
         // Get original category data for comparison
@@ -1467,8 +1582,11 @@
             const currentCategory = getCurrentCategory();
             if (!currentCategory) return;
             
+            // Find current prompt index
+            const currentPromptIndex = findPromptIndexById(currentCategory.data, currentPromptId);
+            
             currentCategory.data.forEach((prompt, index) => {
-                // Calculate comparative ratios for refused vs. completed and leave vs. continue
+                // Calculate comparative ratios
                 var refusedToCompletedRatio = prompt.refusalPrs.Refused > prompt.refusalPrs.Completed > 0 
                     ? "🟥"
                     : "🟩";
@@ -1480,19 +1598,19 @@
                 const leavePercent = (prompt.bailPrs["🔄"] * 100).toFixed(1);
                 
                 const option = document.createElement('option');
-                option.value = index;
+                option.value = prompt.promptId; // Store prompt ID instead of index
                 option.text = `Prompt ${index + 1}: 🔄${leavePercent}% ${refusedToCompletedRatio} ${truncateText(prompt.prompt, 30)}`;
                 selectElement.appendChild(option);
             });
             
-            selectElement.value = currentPromptIndex;
+            // Set the current selected prompt
+            selectElement.value = currentPromptId;
             
             // Add event listener
             selectElement.addEventListener('change', function() {
-                currentPromptIndex = parseInt(this.value);
+                currentPromptId = this.value;
                 renderCurrentPrompt();
                 updateNavButtons();
-                currentPromptIndex = parseInt(this.value);
                 updateHash();
             });
         }
@@ -1508,18 +1626,28 @@
             const currentCategory = getCurrentCategory();
             if (!currentCategory) return;
             
+            // Find current prompt index
+            const currentPromptIndex = findPromptIndexById(currentCategory.data, currentPromptId);
+            
             const prevButton = document.getElementById('prevPrompt');
             const nextButton = document.getElementById('nextPrompt');
             
-            prevButton.disabled = currentPromptIndex === 0;
-            nextButton.disabled = currentPromptIndex === currentCategory.data.length - 1;
+            prevButton.disabled = currentPromptIndex <= 0;
+            nextButton.disabled = currentPromptIndex >= currentCategory.data.length - 1;
         }
         
         // Navigation event handlers
         document.getElementById('prevPrompt').addEventListener('click', function() {
+            const currentCategory = getCurrentCategory();
+            if (!currentCategory) return;
+            
+            // Find current prompt index
+            const currentPromptIndex = findPromptIndexById(currentCategory.data, currentPromptId);
+            
             if (currentPromptIndex > 0) {
-                currentPromptIndex--;
-                document.getElementById('promptSelect').value = currentPromptIndex;
+                // Move to previous prompt
+                currentPromptId = currentCategory.data[currentPromptIndex - 1].promptId;
+                document.getElementById('promptSelect').value = currentPromptId;
                 renderCurrentPrompt();
                 updateNavButtons();
                 updateHash();
@@ -1528,9 +1656,15 @@
         
         document.getElementById('nextPrompt').addEventListener('click', function() {
             const currentCategory = getCurrentCategory();
-            if (currentCategory && currentPromptIndex < currentCategory.data.length - 1) {
-                currentPromptIndex++;
-                document.getElementById('promptSelect').value = currentPromptIndex;
+            if (!currentCategory) return;
+            
+            // Find current prompt index
+            const currentPromptIndex = findPromptIndexById(currentCategory.data, currentPromptId);
+            
+            if (currentPromptIndex < currentCategory.data.length - 1) {
+                // Move to next prompt
+                currentPromptId = currentCategory.data[currentPromptIndex + 1].promptId;
+                document.getElementById('promptSelect').value = currentPromptId;
                 renderCurrentPrompt();
                 updateNavButtons();
                 updateHash();
@@ -1538,13 +1672,12 @@
         });
         
         function renderCurrentPrompt() {
-            const currentCategory = getCurrentCategory();
-            if (!currentCategory || !currentCategory.data[currentPromptIndex]) {
+            const prompt = getCurrentPrompt();
+            if (!prompt) {
                 console.error("No prompt data found");
                 return;
             }
             
-            const prompt = currentCategory.data[currentPromptIndex];
             renderPromptData(prompt);
             updateNavButtons();
         }
