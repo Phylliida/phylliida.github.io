@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Isomorphic Sound Canvas</title>
+
+<style>
+/* ---- STYLES (unchanged) ---- */
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;font-family:Arial,Helvetica,sans-serif}
+#soundPad{width:100%;height:100%;background:linear-gradient(135deg,#1e3c72,#2a5298);touch-action:none;position:relative}
+.note-marker,.playback-marker{position:absolute;transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;
+display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold}
+.note-marker{box-shadow:0 0 15px rgba(255,255,255,.6);color:#fff}
+.playback-marker{box-shadow:0 0 8px rgba(255,255,0,.8);border:2px solid rgba(255,255,0,.8);
+background:rgba(255,255,0,.3);color:rgba(255,255,0,.9)}
+#controls{position:fixed;bottom:0;left:0;right:0;display:flex;flex-wrap:wrap;justify-content:center;gap:10px;
+padding:10px;background:rgba(0,0,0,.5);backdrop-filter:blur(5px);z-index:100}
+.control-group{display:flex;align-items:center;background:rgba(0,0,0,.2);padding:5px 10px;border-radius:4px}
+button{padding:8px 12px;background:rgba(255,255,255,.2);border:none;border-radius:4px;color:#fff;font-weight:700;cursor:pointer;transition:.2s}
+button:hover{background:rgba(255,255,255,.3)}
+button.active{background:rgba(255,100,100,.5)}
+label,.control-value{color:#fff;margin:0 8px;font-size:14px}
+input[type=range]{width:100px}
+#metronomeLight{width:12px;height:12px;border-radius:50%;background:#333;margin:0 8px;transition:.1s}
+#metronomeLight.active{background:#ff5;box-shadow:0 0 10px #ff5}
+#barCounter{color:#fff;margin:0 8px;min-width:40px;text-align:center}
+#info{position:fixed;top:10px;left:10px;color:rgba(255,255,255,.7);font-size:14px;z-index:100;
+background:rgba(0,0,0,.2);padding:8px;border-radius:4px;pointer-events:none}
+#recordingsToggle{position:fixed;top:10px;right:10px;z-index:101;padding:5px 10px;background:rgba(0,0,0,.5);
+color:#fff;border-radius:4px;cursor:pointer;display:flex;align-items:center;gap:5px;font-size:14px}
+#recordingsPanel{position:fixed;top:45px;right:10px;width:180px;max-height:40vh;background:rgba(0,0,0,.7);
+backdrop-filter:blur(5px);z-index:100;padding:10px;border-radius:4px;overflow-y:auto;display:none;flex-direction:column;gap:5px;transition:.3s}
+#recordingsPanel.visible{display:flex}
+.recording-item{display:flex;align-items:center;padding:6px;background:rgba(255,255,255,.1);border-radius:4px;transition:.2s}
+.recording-item:hover{background:rgba(255,255,255,.15)}
+.recording-item.active{background:rgba(255,100,100,.3)}
+.recording-name{flex-grow:1;color:#fff;margin-right:4px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recording-controls{display:flex;gap:3px}
+.recording-controls button{padding:3px 6px;font-size:10px;min-width:20px}
+#recordingsPanelTitle{color:#fff;font-size:14px;margin-bottom:5px;text-align:center}
+.recording-badge{position:fixed;top:15px;right:60px;background:rgba(255,0,0,.5);color:#fff;border-radius:10px;font-size:12px;
+padding:1px 6px;display:none;z-index:101}
+.recording-badge.visible{display:block}
+.beat-indicator{position:fixed;bottom:70px;left:0;right:0;height:5px;background:rgba(0,0,0,.5);
+display:flex;align-items:center;justify-content:center;gap:5px;padding:8px;z-index:99}
+.beat-marker{width:15px;height:15px;background:rgba(255,255,255,.2);border-radius:50%;transition:.05s}
+.beat-marker.accent{width:20px;height:20px;background:rgba(255,255,255,.3)}
+.beat-marker.active{background:rgba(255,255,0,.8);box-shadow:0 0 10px rgba(255,255,0,.5)}
+</style>
+</head>
+<body>
+<!-- ---- CANVAS & PANELS ---- -->
+<div id="soundPad"></div>
+<div id="info">Horizontal: Perfect 5th (7 st)<br>Vertical: Major 3rd (4 st)<br>Slide to change pitch</div>
+<div id="recordingsToggle"><span>Recordings</span><span id="dropdownArrow">▼</span></div>
+<div id="recordingBadge" class="recording-badge">0</div>
+<div id="recordingsPanel"><div id="recordingsPanelTitle">Recordings</div><div id="recordingsList"></div></div>
+<div id="beatIndicator" class="beat-indicator"></div>
+
+<!-- ---- CONTROL STRIP ---- -->
+<div id="controls">
+  <div class="control-group"><button id="clearBtn">Clear All</button></div>
+  <div class="control-group"><label for="tempoSlider">Tempo:</label><input type="range" id="tempoSlider" min="40" max="200" value="120"><span id="tempoValue" class="control-value">120 BPM</span></div>
+  <div class="control-group"><button id="metronomeBtn">Metronome: Off</button><div id="metronomeLight"></div><span id="barCounter">1.1</span></div>
+  <div class="control-group"><button id="recordBtn">Record</button><button id="playAllBtn">Play All</button><button id="stopBtn">Stop</button></div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+
+/* === CONSTANTS === */
+const RELEASE=0.05, MARKER_FADE=50;
+const timeSig=4, barsPerLoop=8, beatsPerLoop=timeSig*barsPerLoop;
+
+/* === DOM SHORTCUT === */
+const $=id=>document.getElementById(id);
+const pad=$('soundPad'),tempoSlider=$('tempoSlider'),tempoValue=$('tempoValue'),
+      metBtn=$('metronomeBtn'),metLight=$('metronomeLight'),barCounter=$('barCounter'),
+      beatIndicator=$('beatIndicator'),recordBtn=$('recordBtn'),playBtn=$('playAllBtn'),
+      stopBtn=$('stopBtn'),clearBtn=$('clearBtn'),recToggle=$('recordingsToggle'),
+      arrow=$('dropdownArrow'),recordingsPanel=$('recordingsPanel'),
+      recordingsList=$('recordingsList'),badge=$('recordingBadge');
+
+/* === AUDIO === */
+let ctx;
+const audio=()=>{if(!ctx)ctx=new (window.AudioContext||webkitAudioContext)();if(ctx.state!=='running')ctx.resume();return ctx;};
+
+/* === NOTE MAPPING === */
+const BASE=130.81;
+const freq=(nx,ny)=>BASE*Math.pow(2,(((nx*5)*7)+((ny*5)*4))/12);
+const noteName=f=>{const N=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+  const s=Math.round(12*Math.log2(f/16.35));return N[(s%12+12)%12]+Math.floor(s/12);};
+
+/* === STATE === */
+const touches=new Map();let nextNoteId=1;
+let recordings=[],recSeq=1,curRec=null,isRec=false;
+let tempo=120;
+let metOn=false,metGen=0,beat=0,bar=0,nextBeatTime=0,tickTimer=null;
+let loopAnchor=null,lastCycleStart=0;              // anchor is immutable, lastCycleStart keeps most recent loop edge
+let isPlay=false,playTimers=[],cycleTimer=null,playOrigin,playNotes=new Map();
+
+/* === HELPERS === */
+const marker=(cls,x,y,color,text)=>{const d=document.createElement('div');d.className=cls;
+  Object.assign(d.style,{left:x+'px',top:y+'px',width:'35px',height:'35px',backgroundColor:color});
+  d.textContent=text;pad.appendChild(d);return d;};
+const flash=i=>[...beatIndicator.children].forEach((d,idx)=>d.classList.toggle('active',idx===i));
+const initDots=()=>{beatIndicator.innerHTML='';for(let i=0;i<beatsPerLoop;i++){
+  const dot=document.createElement('div');dot.className='beat-marker'+(i%timeSig===0?' accent':'');
+  beatIndicator.appendChild(dot);} };
+const updateBadge=()=>{const n=recordings.filter(r=>r.active).length;badge.textContent=n;badge.classList.toggle('visible',n>0);};
+const updateCounter=()=>barCounter.textContent=`${bar+1}.${beat+1}`;
+
+/* === HIGH-PRECISION METRONOME (anchored) === */
+function calcGrid() {return 60/tempo;}                       // beat duration
+function beatsSinceAnchor(t){return (t-loopAnchor)/calcGrid();}
+function scheduleNextBeat(myGen){
+  if(myGen!==metGen) return;
+  const c=audio();
+  const accent=(beat===0);
+
+  /* --- schedule click in audio thread --- */
+  const o=c.createOscillator(),g=c.createGain();
+  o.frequency.value=accent?1000:800;g.gain.value=accent?0.25:0.15;
+  o.connect(g);g.connect(c.destination);
+  o.start(nextBeatTime);o.stop(nextBeatTime+0.05);
+
+  /* --- UI just before beat --- */
+  const uiDelay=Math.max(0,(nextBeatTime-c.currentTime)*1000-5);
+  setTimeout(()=>{
+    metLight.classList.add('active');
+    setTimeout(()=>metLight.classList.remove('active'),80);
+    flash(bar*timeSig+beat);
+    updateCounter();
+  },uiDelay);
+
+  /* --- advance counters --- */
+  beat=(beat+1)%timeSig;
+  if(!beat){
+    bar=(bar+1)%barsPerLoop;
+    if(!bar) lastCycleStart=nextBeatTime;
+  }
+
+  nextBeatTime+=calcGrid();
+  const wait=(nextBeatTime-c.currentTime-0.005)*1000;
+  tickTimer=setTimeout(()=>scheduleNextBeat(myGen),Math.max(0,wait));
+}
+function startMet(){
+  if(!metOn)return;
+  const c=audio();
+  if(loopAnchor===null) loopAnchor=c.currentTime+0.02;   // stamp once
+  metGen++; const myGen=metGen;
+
+  /* align first beat to global grid */
+  const grid=calcGrid();
+  const startRequest=c.currentTime+0.02;
+  const beatsAhead=Math.ceil((startRequest-loopAnchor)/grid);
+  nextBeatTime=loopAnchor+beatsAhead*grid;
+
+  const totalBeatsMod=beatsAhead%beatsPerLoop;
+  beat=totalBeatsMod%timeSig;
+  bar=Math.floor(totalBeatsMod/timeSig);
+  lastCycleStart=loopAnchor+Math.floor(beatsAhead/beatsPerLoop)*beatsPerLoop*grid;
+
+  updateCounter();flash(bar*timeSig+beat);
+  scheduleNextBeat(myGen);
+}
+function stopMet(){metGen++;clearTimeout(tickTimer);tickTimer=null;
+  [...beatIndicator.children].forEach(d=>d.classList.remove('active'));}
+
+/* === LIVE NOTE EVENTS === */
+function recordEvent(obj){
+  if(!isRec) return;
+  const now=audio().currentTime;
+  const beatPos=((now-loopAnchor)*tempo/60)%beatsPerLoop;
+  obj.beatPos=beatPos;
+  curRec.events.push(obj);
+}
+function startNote(pid,x,y){
+  const w=pad.clientWidth,h=pad.clientHeight,nx=x/w,ny=1-y/h,f=freq(nx,ny),name=noteName(f),c=audio();
+  const osc=c.createOscillator(),g=c.createGain(),flt=c.createBiquadFilter();
+  osc.type='sine';osc.frequency.value=f;g.gain.value=.3;flt.type='lowpass';flt.frequency.value=5000;
+  osc.connect(flt);flt.connect(g);g.connect(c.destination);osc.start();
+  const col=`hsla(${(Math.log2(f)*100)%360},80%,60%,.8)`,m=marker('note-marker',x,y,col,name),id='n'+nextNoteId++;
+  touches.set(pid,{id,osc,gain:g,marker:m});
+  recordEvent({type:'start',id,nx,ny,f,name});
+}
+function moveNote(pid,x,y){
+  const t=touches.get(pid);if(!t)return;
+  const w=pad.clientWidth,h=pad.clientHeight,nx=x/w,ny=1-y/h,f=freq(nx,ny),name=noteName(f),
+        col=`hsla(${(Math.log2(f)*100)%360},80%,60%,.8)`;
+  t.osc.frequency.setTargetAtTime(f,ctx.currentTime,.01);
+  Object.assign(t.marker.style,{left:x+'px',top:y+'px',backgroundColor:col});t.marker.textContent=name;
+  recordEvent({type:'update',id:t.id,nx,ny,f,name});
+}
+function endNote(pid){
+  const t=touches.get(pid);if(!t)return;
+  t.gain.gain.setTargetAtTime(0,ctx.currentTime,RELEASE);
+  t.marker.style.transition=`opacity ${RELEASE}s`;t.marker.style.opacity='0';
+  setTimeout(()=>{t.osc.stop();t.marker.remove();},MARKER_FADE);touches.delete(pid);
+  recordEvent({type:'end',id:t.id});
+}
+
+/* === RECORDINGS UI === */
+function addRow(r){
+  const row=document.createElement('div');row.className='recording-item';row.id='rec-'+r.id;
+  const name=document.createElement('div');name.className='recording-name';name.textContent=r.name;
+  const ctr=document.createElement('div');ctr.className='recording-controls';
+  const tog=document.createElement('button');tog.textContent='▶';
+  tog.onclick=()=>{
+    r.active=!r.active;row.classList.toggle('active',r.active);tog.textContent=r.active?'■':'▶';updateBadge();
+    if(r.active&&!isPlay)startPlayback();if(!recordings.some(a=>a.active))stopPlayback();
+  };
+  const del=document.createElement('button');del.textContent='×';
+  del.onclick=()=>{stopPlayback();recordings=recordings.filter(a=>a!==r);row.remove();updateBadge();};
+  ctr.append(tog,del);row.append(name,ctr);recordingsList.appendChild(row);
+}
+
+/* === RECORD CONTROL === */
+function startRecording(){
+  const r={id:recSeq++,name:'Track '+(recSeq-1),events:[],active:false};
+  recordings.push(r);addRow(r);curRec=r;isRec=true;
+  recordBtn.classList.add('active');recordBtn.textContent='Recording...';
+  if(metOn&&tickTimer===null)startMet();
+}
+function stopRecording(){
+  if(!isRec)return;
+  isRec=false;recordBtn.classList.remove('active');recordBtn.textContent='Record';
+  if(!curRec.events.length){recordings=recordings.filter(a=>a!==curRec);$('rec-'+curRec.id)?.remove();}
+  else{
+    curRec.active=true;
+    const row=$('rec-'+curRec.id);row.classList.add('active');row.querySelector('button').textContent='■';
+  }
+  updateBadge();if(curRec.active&&!isPlay)startPlayback();curRec=null;
+}
+
+/* === PLAYBACK ENGINE === */
+function dispatch(rid,ev){
+  const key=rid+'_'+ev.id;
+  if(ev.type==='start'){
+    const x=ev.nx*pad.clientWidth,y=(1-ev.ny)*pad.clientHeight,c=audio();
+    const osc=c.createOscillator(),g=c.createGain(),flt=c.createBiquadFilter();
+    osc.type='sine';osc.frequency.value=ev.f;g.gain.value=.3;flt.type='lowpass';flt.frequency.value=5000;
+    osc.connect(flt);flt.connect(g);g.connect(c.destination);osc.start();
+    const col=`hsla(${(Math.log2(ev.f)*100)%360},80%,30%,.3)`,m=marker('playback-marker',x,y,col,ev.name);
+    playNotes.set(key,{osc,gain:g,marker:m});
+  }else if(ev.type==='update'){
+    const n=playNotes.get(key);if(!n)return;
+    const x=ev.nx*pad.clientWidth,y=(1-ev.ny)*pad.clientHeight,col=`hsla(${(Math.log2(ev.f)*100)%360},80%,30%,.3)`;
+    n.osc.frequency.setTargetAtTime(ev.f,ctx.currentTime,.01);
+    Object.assign(n.marker.style,{left:x+'px',top:y+'px',backgroundColor:col});n.marker.textContent=ev.name;
+  }else{
+    const n=playNotes.get(key);if(!n)return;
+    n.gain.gain.setTargetAtTime(0,ctx.currentTime,RELEASE);
+    n.marker.style.transition=`opacity ${RELEASE}s`;n.marker.style.opacity='0';
+    setTimeout(()=>{n.osc.stop();n.marker.remove();},MARKER_FADE);playNotes.delete(key);
+  }
+}
+function scheduleCycle(n){
+  const loopDur=60/tempo*beatsPerLoop;
+  const cycleStart=playOrigin+n*loopDur;
+  recordings.filter(r=>r.active).forEach(r=>r.events.forEach(ev=>{
+    const delay=(cycleStart+ev.beatPos*60/tempo-audio().currentTime)*1000;
+    playTimers.push(setTimeout(()=>dispatch(r.id,ev),Math.max(0,delay)));
+  }));
+  const nextDelay=(cycleStart+loopDur-audio().currentTime)*1000;
+  cycleTimer=setTimeout(()=>scheduleCycle(n+1),Math.max(0,nextDelay));
+}
+function startPlayback(){
+  if(isRec)stopRecording();
+  if(!recordings.some(r=>r.active))return;
+  isPlay=true;playBtn.classList.add('active');playBtn.textContent='Playing';
+
+  const c=audio();
+  if(loopAnchor===null) loopAnchor=c.currentTime+0.02;
+  const loopDur=60/tempo*beatsPerLoop;
+  const now=c.currentTime;
+  const cyclesUntilNext=Math.ceil((now-loopAnchor)/loopDur);
+  playOrigin=loopAnchor+cyclesUntilNext*loopDur;
+  scheduleCycle(0);
+
+  if(metOn&&tickTimer===null)startMet();
+}
+function stopPlayback(){
+  if(!isPlay)return;
+  isPlay=false;playBtn.classList.remove('active');playBtn.textContent='Play All';
+  playTimers.forEach(clearTimeout);playTimers=[];clearTimeout(cycleTimer);
+  playNotes.forEach(n=>{n.gain.gain.setTargetAtTime(0,ctx.currentTime,RELEASE);
+    n.marker.style.opacity='0';setTimeout(()=>{n.osc.stop();n.marker.remove();},MARKER_FADE);});
+  playNotes.clear();
+}
+
+/* === UI CONTROLS === */
+tempoSlider.oninput=e=>{tempo=+e.target.value;tempoValue.textContent=tempo+' BPM';
+  if(metOn){stopMet();startMet();}};
+metBtn.onclick   =()=>{metOn=!metOn;metBtn.textContent='Metronome: '+(metOn?'On':'Off');metOn?startMet():stopMet();};
+recordBtn.onclick=()=>isRec?stopRecording():startRecording();
+playBtn.onclick  =()=>isPlay?stopPlayback():startPlayback();
+stopBtn.onclick  =()=>{isRec&&stopRecording();isPlay&&stopPlayback();};
+clearBtn.onclick =()=>{if(!confirm('Clear everything?'))return;stopPlayback();isRec&&stopRecording();
+  recordings=[];recordingsList.innerHTML='';updateBadge();};
+recToggle.onclick=()=>{recordingsPanel.classList.toggle('visible');
+  arrow.textContent=recordingsPanel.classList.contains('visible')?'▲':'▼';};
+
+/* === POINTER EVENTS === */
+function down(e){e.preventDefault();
+  if(e.type==='mousedown'){startNote('mouse',e.clientX,e.clientY);
+    document.addEventListener('mousemove',move);document.addEventListener('mouseup',up);}
+  else[...e.changedTouches].forEach(t=>startNote(t.identifier,t.clientX,t.clientY));}
+function move(e){e.preventDefault();
+  if(e.type==='mousemove'){moveNote('mouse',e.clientX,e.clientY);}
+  else[...e.changedTouches].forEach(t=>moveNote(t.identifier,t.clientX,t.clientY));}
+function up(e){
+  if(e.type==='mouseup'){endNote('mouse');document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',up);}
+  else[...e.changedTouches].forEach(t=>endNote(t.identifier));}
+pad.addEventListener('mousedown',down);
+pad.addEventListener('touchstart',down,{passive:false});
+pad.addEventListener('touchmove',move,{passive:false});
+pad.addEventListener('touchend',up);pad.addEventListener('touchcancel',up);
+pad.addEventListener('contextmenu',e=>e.preventDefault());
+
+/* === INIT === */
+initDots();           // build beat dots; metronome off by default
+});
+</script>
+</body>
+</html>
