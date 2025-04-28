@@ -712,7 +712,7 @@
         // Load models list
         async function loadModelsList() {
             try {
-                const response = await fetch('/modelwelfare/refusalvsbailv2/models.json');
+                const response = await fetch('/modelwelfare/refusalvsbailv2/models.json', {cache: "reload"});
                 
                 if (!response.ok) {
                     throw new Error(`HTTP error! Status: ${response.status}`);
@@ -1075,7 +1075,7 @@
                     throw new Error(`Model ${modelName} not found in models list.`);
                 }
                 
-                const response = await fetch(`${modelData.modelData}`);
+                const response = await fetch(`${modelData.modelData}`, {cache: "reload"});
                 
                 if (!response.ok) {
                     throw new Error(`HTTP error! Status: ${response.status}`);
