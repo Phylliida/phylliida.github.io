@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Chat-data browser (simple)</title>
+
+<style>
+:root{
+  --accent:#0077cc;--border:#ddd;--user:#e7f3ff;--assist:#f3e7ff;
+}
+*{box-sizing:border-box;margin:0;padding:0;font:16px/1.45 system-ui}
+body{padding:1rem}
+.tree{list-style:none}.tree li{position:relative;padding-left:1.25rem}
+.tree li::before{content:"";position:absolute;left:0;top:.75rem;width:.75rem;height:1px;background:var(--border)}
+.name{font-weight:600}.summary{color:#555;font-size:.8rem;margin-left:.35rem}
+.spinner{display:inline-block;width:1em;height:1em;border:.15em solid var(--border);border-right-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(1turn)}}
+.msg{padding:.4rem .6rem;border-radius:.4rem;max-width:60ch;font-size:.9rem;margin:.15rem 0}
+.msg.user{background:var(--user)}.msg.assistant{background:var(--assist)}
+.role{font-weight:600;margin-right:.3rem;font-family:monospace}
+.hidden{display:none}
+</style>
+</head>
+
+<body>
+<h1>Chat-data hierarchy browser</h1>
+
+<div id="treePane">
+  <ul id="treeRoot" class="tree"></ul>
+</div>
+
+<div id="convPane" class="hidden"></div>
+
+<script>
+/* ──────────── helpers ──────────── */
+const $ = (tag, attrs={}, ...kids)=>{
+  const el=document.createElement(tag);
+  Object.entries(attrs).forEach(([k,v])=>{
+    if(k.startsWith('on')) el.addEventListener(k.slice(2),v);
+    else if(k==='class')   el.className=v;
+    else                   el.setAttribute(k,v);
+  });
+  kids.flat().forEach(c=>{
+    if(c==null) return;
+    el.appendChild(typeof c==='string'?document.createTextNode(c):c);
+  });
+  return el;
+};
+const spinner = ()=>$('span',{class:'spinner',title:'Loading…'});
+
+const fetchJson = url=>fetch(url).then(r=>{
+  if(!r.ok) throw Error(r.status); return r.json();
+});
+
+/* ──────────── state ──────────── */
+const ROOT = "/modelwelfare/cliowildchat1/rootObjects.json";
+const pathMap = new Map();       // path → <details>
+const loadedPlaceholders = new Set();   // ❶  remember expanded placeholders
+let openConvHash = null;         // "conv!path!idx"
+
+/* ──────────── build tree ──────────── */
+window.onload = async function() {
+    fetchJson(ROOT).then(data=>buildFacets(data));
+}
+
+function buildFacets(facets){
+  const root = document.getElementById('treeRoot');
+  facets.forEach((f,fi)=>{
+    const li=$('li',
+      {}, $('div',{},
+            $('span',{class:'name'},f.facet.name),
+            $('span',{class:'summary'},f.facet.question||'')));
+    const ul=$('ul',{class:'tree'});
+    f.hierarchy.forEach((n,ci)=>ul.appendChild(buildNode(n,[`f${fi}`,ci])));
+    li.appendChild(ul); root.appendChild(li);
+  });
+  restoreFromHash();
+}
+
+const join=p=>p.join('.'), split=s=>s.split('.');
+
+/* category or placeholder */
+function buildNode(item,pathArr){
+  if(typeof item==='string') return buildPlaceholder(item,pathArr);
+
+  const p=join(pathArr);
+  const details=$('details',{});
+  pathMap.set(p,details);
+
+  details.appendChild(
+    $('summary',{},
+      $('span',{class:'name'},item.name||'(unnamed)'),
+      item.summary?$('span',{class:'summary'},item.summary):null)
+  );
+
+  /* children */
+  const ul=$('ul',{class:'tree'});
+  (item.children||[]).forEach((ch,i)=>ul.appendChild(buildNode(ch,[...pathArr,i])));
+  details.appendChild(ul);
+
+  /* conversations */
+  if(item.conversations?.length){
+    details.__convs=item.conversations;
+    const convDetails=$('details',{},
+      $('summary',{},`Conversations (${item.conversations.length})`));
+    const convUL=$('ul',{class:'tree'});
+    item.conversations.forEach((c,i)=>{
+      const entry=$('details',{},
+        $('summary',{},c.facetValue||`Conversation #${i+1}`));
+      entry.firstChild.addEventListener('click',e=>{
+        e.stopPropagation();
+        openConversation(c,pathArr,i);
+      });
+      convUL.appendChild($('li',{},entry));
+    });
+    convDetails.appendChild(convUL);
+    details.appendChild(convDetails);
+  }
+
+  details.addEventListener('toggle',updateHash);
+  return $('li',{},details);
+}
+
+/* placeholder that lazily fetches JSON when shown */
+function buildPlaceholder(url,pathArr){
+  const pathStr=join(pathArr);
+  const li=$('li',{'data-url':url,'data-path':pathStr},spinner());
+  const load= async ()=>{
+    if(li.dataset.loaded) return;
+    li.dataset.loaded=1;
+    loadedPlaceholders.add(pathStr);   // ❷  remember in set
+    const d = await fetchJson(url);
+    li.replaceWith(
+      (Array.isArray(d.children)||d.conversations)?buildNode(d,pathArr):buildLeaf(url,d)
+    );
+    updateHash();
+  };
+  li.__load = load;                  // ❹  expose loader for hash restoration
+
+  /* auto-load when it becomes visible */
+  const obs=new IntersectionObserver(
+    ([e])=>{
+        if(e.isIntersecting){
+            load()
+            .then(
+                () => { obs.disconnect();}
+            );
+        }
+    }
+  );
+  obs.observe(li);
+  return li;
+}
+
+/* leaf: show tiny JSON preview */
+function buildLeaf(url,data){
+  const det=$('details',{},
+    $('summary',{},url.split('/').pop()));
+  const pre=$('pre',{},JSON.stringify(data,null,2).slice(0,1200));
+  det.appendChild(pre);
+  return $('li',{},det);
+}
+
+/* ──────────── conversation view ──────────── */
+const treePane=document.getElementById('treePane');
+const convPane=document.getElementById('convPane');
+
+function openConversation(obj,pathArr,idx){
+  openConvHash=`conv!${join(pathArr)}!${idx}`;
+  treePane.classList.add('hidden');
+  convPane.classList.remove('hidden');
+  convPane.innerHTML='';
+
+  convPane.appendChild(
+    $('p',{},
+      $('a',{href:'#',onclick:ev=>{ev.preventDefault();closeConversation();}},'← Back'))
+  );
+
+  const msgs=$('div',{});
+  obj.conversation.forEach(m=>{
+    msgs.appendChild(
+      $('div',{class:`msg ${m.role}`},
+        $('span',{class:'role'},m.role+': '),m.content)
+    );
+  });
+  convPane.appendChild(msgs);
+  updateHash();
+}
+function closeConversation(){
+  openConvHash=null;
+  treePane.classList.remove('hidden');
+  convPane.classList.add('hidden');
+  updateHash();
+}
+
+/* ──────────── hash sync ──────────── */
+function updateHash(){
+  if (!modifyHashAllowed) return;
+  const openPaths=[...pathMap.entries()].filter(([,d])=>d.open).map(([p])=>p);
+  const loaded = [...loadedPlaceholders].map(p=>'pl!'+p);   // ❺  add loaded placeholders
+  console.log("Loaded placeholders: " + loaded);
+  if(openConvHash) openPaths.push(openConvHash);
+  history.replaceState(null,'','#'+[...openPaths,...loaded].join(','));
+}
+var modifyHashAllowed = true;
+
+async function restoreFromHash(){
+  modifyHashAllowed = false;
+  const h=decodeURIComponent(location.hash.slice(1));
+  const segs=h?h.split(','):[];
+  const conv = segs.find(s=>s.startsWith('conv!'));
+  const plSegs=segs.filter(s=>s.startsWith('pl!')).map(s=>s.replace("pl!", ""));
+  const cats = segs.filter(s=>s && !s.startsWith('pl!') && s!==conv);
+
+
+  /* reload placeholders */
+  for (let p of plSegs) {
+    loadedPlaceholders.add(p);
+    const li=document.querySelector(`li[data-path="${CSS.escape(p)}"]`);
+    if(li?.__load) {
+        await li.__load();
+    }
+  }
+  /* reopen categories */
+  cats.forEach(p=>{
+    const det=pathMap.get(p);
+    console.log(p + " " + det);
+    console.log(pathMap);
+    if(det) det.open=true;
+  });
+
+  /* open conversation if any */
+  if(conv){
+    const [,path,idx]=conv.split('!');
+    const det=pathMap.get(path);
+    if(det && det.__convs){
+      const i=+idx;
+      openConversation(det.__convs[i],split(path),i);
+    }
+  }else{
+    closeConversation();
+  }
+  modifyHashAllowed = true;
+}
+</script>
+</body>
+</html>
