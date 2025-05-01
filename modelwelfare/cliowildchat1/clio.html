@@ -11,87 +11,46 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 
 <style>
-/* ═══════════  THEME  ═══════════ */
+/* (style section unchanged) */
 :root{
-  --bg-0:#121212;
-  --bg-1:#1e1e1e;
-  --bg-2:#262626;
-  --border:#333;
-  --txt-0:#e0e0e0;
-  --txt-1:#9e9e9e;
-  --accent:#2ea8ff;
-  --accent-hi:#6ec1ff;
-  --assist:#30336b;
-  --radius:.55rem;
-  --shadow:0 8px 24px rgba(0,0,0,.35);
+  --bg-0:#121212;--bg-1:#1e1e1e;--bg-2:#262626;--border:#333;
+  --txt-0:#e0e0e0;--txt-1:#9e9e9e;--accent:#2ea8ff;--accent-hi:#6ec1ff;
+  --assist:#30336b;--radius:.55rem;--shadow:0 8px 24px rgba(0,0,0,.35);
   --trans:.25s cubic-bezier(.25,.8,.25,1);
   color-scheme:dark;
 }
 *{box-sizing:border-box;margin:0;padding:0;font:16px/1.45 "Inter",system-ui}
 html,body{height:100%}
 body{background:var(--bg-0);color:var(--txt-0);padding:1.25rem;overflow-x:hidden}
-
-/* ═══════════  TREE  ═══════════ */
+/* … the rest of your CSS stays the same … */
 .tree{list-style:none}
 .tree li{position:relative;padding-left:1.25rem}
 .tree li::before{content:"";position:absolute;left:0;top:calc(.9rem + 2px);width:.75rem;height:1px;background:var(--border)}
-
-/* summary row -------------------------------------------------- */
-summary{
-  position:relative;                      /* new → makes pseudo-element local */
-  cursor:pointer;outline:none;user-select:none;
-  display:inline-flex;align-items:center;gap:.35rem;
-  padding:.15rem .25rem;margin-left:-.25rem; /* keeps highlight nicely aligned */
-  border-radius:var(--radius);
-}
+summary{position:relative;cursor:pointer;outline:none;user-select:none;display:inline-flex;align-items:center;gap:.35rem;padding:.15rem .25rem;margin-left:-.25rem;border-radius:var(--radius)}
 summary:hover{color:var(--accent-hi)}
 details>summary::-webkit-details-marker{display:none}
-
+summary:hover::after{content:"";position:absolute;left:-.25rem;right:-.25rem;top:0;height:100%;background:var(--bg-2);border-radius:var(--radius);z-index:-1}
 .name{font-weight:600}
 .summary{color:var(--txt-1);font-size:.8rem}
 .stats{color:var(--txt-1);font-size:.75rem}
-
-/* nice accordion animation */
-details>ul, details>div:not(.modal){padding-left:.4rem}
-details[open] > summary{margin-bottom:.35rem}
-details>ul{transition:max-height var(--trans),opacity var(--trans);overflow:hidden;max-height:0;opacity:0}
-details[open]>ul{max-height:2000px;opacity:1}
-
-/* hover row */
-summary:hover::after{content:"";position:absolute;left:-.5rem;right:0;top:0;bottom:0;border-radius:var(--radius);background:var(--bg-2);z-index:-1}
-
-/* spinner */
-.spinner{display:inline-block;width:1em;height:1em;border:.15em solid var(--border);
-         border-right-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+details[open]>ul{animation:fadeDown var(--trans) ease-out}
+@keyframes fadeDown{from{opacity:0;max-height:0}to{opacity:1;max-height:2000px}}
+.spinner{display:inline-block;width:1em;height:1em;border:.15em solid var(--border);border-right-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(1turn)}}
-
-/* ═══════════  MESSAGE BUBBLES  ═══════════ */
-.msg{padding:.5rem .8rem;border-radius:var(--radius);max-width:65ch;font-size:.9rem;margin:.25rem 0;
-     white-space:pre-wrap;background:var(--bg-2)}
+.msg{padding:.5rem .8rem;border-radius:var(--radius);max-width:65ch;font-size:.9rem;margin:.25rem 0;white-space:pre-wrap;background:var(--bg-2)}
 .msg.user{background:var(--accent);color:#000}
 .msg.assistant{background:var(--assist)}
 .role{font-weight:600;margin-right:.3rem;font-family:monospace}
-
-/* inline & block code inside bubbles */
 .msg pre{background:#0004;padding:.6rem;border-radius:var(--radius);overflow:auto}
 .msg code{background:#0004;padding:.1rem .35rem;border-radius:.35rem;font-family:monospace}
-
-/* ═══════════  FACET BUBBLES  ═══════════ */
 .facets{margin:.7rem 0;display:flex;flex-wrap:wrap;gap:.35rem}
-.facetBubble{color:#000;font-weight:600;border-radius:var(--radius);padding:.25rem .6rem;
-             background:var(--accent);font-size:.75rem}
-
-/* ═══════════  MODAL  ═══════════ */
-#modalWrap{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;
-           justify-content:center;z-index:999;opacity:0;pointer-events:none;transition:opacity var(--trans)}
+.facetBubble{color:#000;font-weight:600;border-radius:var(--radius);padding:.25rem .6rem;background:var(--accent);font-size:.75rem}
+.hidden{display:none}
+#modalWrap{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:999;opacity:0;pointer-events:none;transition:opacity var(--trans)}
 #modalWrap.show{opacity:1;pointer-events:auto}
-.modal{background:var(--bg-1);border-radius:var(--radius);padding:1.2rem;max-width:90vw;max-height:90vh;
-       display:flex;flex-direction:column;box-shadow:var(--shadow);overflow:auto}
-.closeBtn{align-self:flex-end;background:none;border:none;color:var(--txt-1);font-size:1.6rem;line-height:1;
-          cursor:pointer;transition:color var(--trans)}
+.modal{background:var(--bg-1);border-radius:var(--radius);padding:1.2rem;max-width:90vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:var(--shadow);overflow:auto}
+.closeBtn{align-self:flex-end;background:none;border:none;color:var(--txt-1);font-size:1.6rem;line-height:1;cursor:pointer;transition:color var(--trans)}
 .closeBtn:hover{color:var(--accent-hi)}
-
-/* ═══════════  SCROLLBAR  ═══════════ */
 ::-webkit-scrollbar{width:.5rem}
 ::-webkit-scrollbar-thumb{border-radius:1rem;background:#555}
 ::-webkit-scrollbar-track{background:#222}
@@ -103,7 +62,7 @@ summary:hover::after{content:"";position:absolute;left:-.5rem;right:0;top:0;bott
 
 <div id="treePane"><ul id="treeRoot" class="tree"></ul></div>
 
-<!-- ───────── MODAL (initially hidden) ───────── -->
+<!-- ───────── MODAL ───────── -->
 <div id="modalWrap" class="hidden">
   <div class="modal">
     <button class="closeBtn" title="Esc">✕</button>
@@ -113,26 +72,26 @@ summary:hover::after{content:"";position:absolute;left:-.5rem;right:0;top:0;bott
 
 <script>
 /* ═══════════  HELPERS  ═══════════ */
-const $ = (t,a={},...k)=>{
+const $=(t,a={},...k)=>{
   const e=document.createElement(t);
-  Object.entries(a).forEach(([key,val])=>{
+  for(const [key,val] of Object.entries(a)){
     if(key.startsWith('on')) e.addEventListener(key.slice(2),val);
-    else if(key==='class')  e.className=val;
-    else                    e.setAttribute(key,val);
-  });
+    else if(key==='class') e.className=val;
+    else e.setAttribute(key,val);
+  }
   k.flat().forEach(c=>e.appendChild(typeof c==='string'?document.createTextNode(c):c));
   return e;
 };
 const spinner=()=>$('span',{class:'spinner',title:'Loading…'});
-const fetchJson=u=>fetch(u,{cache:'reload'}).then(r=>{if(!r.ok) throw Error(r.status);return r.json();});
+const fetchJson=u=>fetch(u,{cache:'reload'}).then(r=>{if(!r.ok)throw Error(r.status);return r.json();});
 
-/* data helpers */
+const join=p=>p.join('.'), split=s=>s.split('.');
+
 const getNum=i=>i?.numConversations??i?.numConvs??0;
 const isPlaceholder=i=>typeof i==='object'&&i!==null&&'path'in i&&!('children'in i);
 const count=getNum;
 const sortByCount=a=>[...a].sort((p,q)=>count(q)-count(p));
 
-/* markdown (tiny) */
 function mdToHtml(t=''){
   let h=t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   h=h.replace(/```([\s\S]*?)```/g,(m,c)=>`<pre><code>${c}</code></pre>`);
@@ -142,78 +101,58 @@ function mdToHtml(t=''){
   return h.replace(/\n/g,'<br>');
 }
 
-/* ═══════════  STATE  ═══════════ */
+/* ═══════════  STATE ═══════════ */
 const ROOT="/modelwelfare/cliowildchat1/rootObjects.json";
 const pathMap=new Map(), loadedPlaceholders=new Set();
 let openConvHash=null;
 
-/* ═══════════  TREE BUILD  ═══════════ */
+/* ═══════════  TREE BUILD (root) ═══════════ */
 window.onload=()=>fetchJson(ROOT).then(buildFacets);
 
 function buildFacets(raw){
   const facets=sortByCount(raw);
   const root=document.getElementById('treeRoot');
   root.innerHTML='';
-
   const topTotal=facets.reduce((s,f)=>s+count(f),0);
 
   facets.forEach((f,fi)=>{
     const own=count(f), pct=Math.round(own*100/topTotal||0);
     const li=$('li',{},
-      $('div',{},
-        $('span',{class:'name'},f.facet?.name||'Facet'),
-        $('span',{class:'stats'},`${own} (${pct} %)`),
-        $('span',{class:'summary'},f.facet?.question||'')));
-    const hierarchy=sortByCount(f.hierarchy);
-    const siblingTotal=hierarchy.reduce((s,i)=>s+count(i),0);
-    const ul=$('ul',{class:'tree'});
-    hierarchy.forEach((n,ci)=>ul.appendChild(buildNode(n,[`f${fi}`,ci],siblingTotal)));
-    li.appendChild(ul); root.appendChild(li);
+      $('details',{},
+        $('summary',{},
+          $('span',{class:'name'},f.facet?.name||'Facet'),
+          $('span',{class:'stats'},`${own} (${pct} %)`),
+          $('span',{class:'summary'},f.facet?.question||''))));
+    const details=li.firstChild;
+    details.__childrenData=sortByCount(f.hierarchy);
+    details.__pathArr=[`f${fi}`];
+    details.addEventListener('toggle',handleToggle);
+    pathMap.set('f'+fi,details);
+    root.appendChild(li);
   });
   restoreFromHash();
 }
 
-const join=p=>p.join('.'), split=s=>s.split('.');
-
-function buildNode(item,pathArr,siblingTotal=0){
+/* ═══════════  NODE BUILDERS  ═══════════ */
+function buildNode(item,pathArr,siblingTotal){
   if(isPlaceholder(item)) return buildPlaceholder(item,pathArr,siblingTotal);
-
   const p=join(pathArr);
   const details=$('details',{}); pathMap.set(p,details);
 
   const own=count(item), pct=siblingTotal?Math.round(own*100/siblingTotal):100;
-
   details.appendChild(
     $('summary',{},
       $('span',{class:'name'},item.name||'(unnamed)'),
       $('span',{class:'stats'},`${own} (${pct} %)`),
       item.summary?$('span',{class:'summary'},item.summary):null));
 
-  const children=sortByCount(item.children||[]);
-  const childTotal=children.reduce((s,i)=>s+count(i),0);
-  const ul=$('ul',{class:'tree'});
-  children.forEach((ch,i)=>ul.appendChild(buildNode(ch,[...pathArr,i],childTotal)));
-  details.appendChild(ul);
-
-  if(item.conversations?.length){
-    details.__convs=item.conversations;
-    const cDet=$('details',{},$('summary',{},`Conversations (${item.conversations.length})`));
-    const cUL=$('ul',{class:'tree'});
-    item.conversations.forEach((c,i)=>{
-      const ent=$('details',{},$('summary',{},c.facetValue||`Conversation #${i+1}`));
-      ent.firstChild.addEventListener('click',e=>{
-        e.stopPropagation();openConversation(c,pathArr,i);
-      });
-      cUL.appendChild($('li',{},ent));
-    });
-    cDet.appendChild(cUL); details.appendChild(cDet);
-  }
-
-  details.addEventListener('toggle',updateHash);
+  details.__childrenData=sortByCount(item.children||[]);
+  details.__convs=item.conversations||null;
+  details.__pathArr=pathArr;
+  details.addEventListener('toggle',handleToggle);
   return $('li',{},details);
 }
 
-/* ═══════════  PLACEHOLDER  ═══════════ */
 function buildPlaceholder(ph,pathArr,siblingTotal){
   const url=ph.path, pathStr=join(pathArr);
   const li=$('li',{'data-url':url,'data-path':pathStr},spinner());
@@ -224,8 +163,7 @@ function buildPlaceholder(ph,pathArr,siblingTotal){
     li.replaceWith(
       (data.children||data.conversations)
         ? buildNode(data,pathArr,siblingTotal)
-        : buildLeaf(url,data)
-    );
+        : buildLeaf(url,data));
     updateHash();
   };
   li.__load=load;
@@ -238,18 +176,67 @@ function buildLeaf(url,data){
   return $('li',{},d);
 }
 
-/* ═══════════  MODAL (conversation)  ═══════════ */
+/* ═══════════  VIRTUALISATION HANDLER  ═══════════ */
+function handleToggle(e){
+  const det=e.currentTarget;
+  const parentPath=join(det.__pathArr);
+
+  if(det.open){
+    /* ---------- opening ---------- */
+    if(!det.__built && det.__childrenData){
+      const childTotal=det.__childrenData.reduce((s,i)=>s+count(i),0);
+      const ul=$('ul',{class:'tree'});
+      det.__childrenData.forEach((ch,i)=>ul.appendChild(
+        buildNode(ch,[...det.__pathArr,i],childTotal)));
+      det.appendChild(ul);
+      det.__built=true;
+    }
+    if(det.__convs && !det.__convsBuilt){
+      const cDet=$('details',{},$('summary',{},`Conversations (${det.__convs.length})`));
+      const cUL=$('ul',{class:'tree'});
+      det.__convs.forEach((c,i)=>{
+        const ent=$('details',{},$('summary',{},c.facetValue||`Conversation #${i+1}`));
+        ent.firstChild.addEventListener('click',ev=>{
+          ev.stopPropagation();openConversation(c,det.__pathArr,i);
+        });
+        cUL.appendChild($('li',{},ent));
+      });
+      cDet.appendChild(cUL); det.appendChild(cDet);
+      det.__convsBuilt=true;
+    }
+  }else{
+    /* ---------- closing ---------- */
+
+    /* 1. prune DOM children */
+    det.querySelectorAll(':scope > ul.tree, :scope > details').forEach(n=>n.remove());
+    det.__built=false;det.__convsBuilt=false;
+
+    /* 2. forget every descendant in pathMap */
+    for(const key of [...pathMap.keys()]){
+      if(key!==parentPath && key.startsWith(parentPath+'.')){
+        pathMap.delete(key);
+      }
+    }
+
+    /* 3. close modal if it belonged to this branch */
+    if(openConvHash && openConvHash.startsWith(`conv!${parentPath}.`)){
+      closeConversation();
+    }
+  }
+  updateHash();
+}
+
+/* ═══════════  MODAL  ═══════════ */
 const modalWrap=document.getElementById('modalWrap');
 const convContent=document.getElementById('convContent');
 document.querySelector('.closeBtn').onclick=closeConversation;
-modalWrap.addEventListener('click',e=>{if(e.target===modalWrap) closeConversation();});
-document.addEventListener('keydown',e=>{if(e.key==='Escape') closeConversation();});
+modalWrap.addEventListener('click',e=>{if(e.target===modalWrap)closeConversation();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeConversation();});
 
 function openConversation(obj,pathArr,idx){
   openConvHash=`conv!${join(pathArr)}!${idx}`;
   convContent.innerHTML='';
 
-  /* facet chips */
   if(obj.allFacetValues?.length){
     const colors=['#ff7675','#74b9ff','#55efc4','#fdcb6e','#ffeaa7','#a29bfe','#fab1a0','#81ecec'];
     const box=$('div',{class:'facets'});
@@ -260,33 +247,56 @@ function openConversation(obj,pathArr,idx){
     convContent.appendChild(box);
   }
 
-  /* messages */
   obj.conversation.forEach(m=>{
     const d=$('div',{class:`msg ${m.role}`},
       $('span',{class:'role'},m.role+': '));
-    const span=$('span',{}); span.innerHTML=mdToHtml(m.content);
-    d.appendChild(span); convContent.appendChild(d);
+    const span=$('span',{});span.innerHTML=mdToHtml(m.content);
+    d.appendChild(span);convContent.appendChild(d);
   });
 
-  modalWrap.classList.add('show'); modalWrap.classList.remove('hidden');
+  modalWrap.classList.add('show');modalWrap.classList.remove('hidden');
   updateHash();
 }
 function closeConversation(){
-  if(!modalWrap.classList.contains('show')) return;
+  if(!modalWrap.classList.contains('show'))return;
   modalWrap.classList.remove('show');
   setTimeout(()=>modalWrap.classList.add('hidden'),250);
-  openConvHash=null; updateHash();
+  openConvHash=null;updateHash();
 }
 
 /* ═══════════  HASH SYNC  ═══════════ */
 function updateHash(){
-  if(!modifyHashAllowed) return;
+  if(!modifyHashAllowed)return;
   const open=[...pathMap.entries()].filter(([,d])=>d.open).map(([p])=>p);
   const loaded=[...loadedPlaceholders].map(p=>'pl!'+p);
-  if(openConvHash) open.push(openConvHash);
+  if(openConvHash)open.push(openConvHash);
   history.replaceState(null,'','#'+[...open,...loaded].join(','));
 }
 let modifyHashAllowed=true;
+
+/* --- new helper: walk a path and ensure every node exists & is open --- */
+async function expandPath(pathStr){
+  const segs=split(pathStr);
+  const prefix=[];
+  for(const seg of segs){
+    prefix.push(seg);
+    const cur=join(prefix);
+
+    /* make sure placeholder (if any) is loaded */
+    let det=pathMap.get(cur);
+    if(!det){
+      const li=document.querySelector(`li[data-path="${CSS.escape(cur)}"]`);
+      if(li?.__load) await li.__load();
+      det=pathMap.get(cur);
+    }
+
+    if(det && !det.open){
+      det.open=true;          // visually open
+      handleToggle({currentTarget:det}); // build children synchronously
+    }
+  }
+}
+
 async function restoreFromHash(){
   modifyHashAllowed=false;
   const segs=decodeURIComponent(location.hash.slice(1)).split(',').filter(Boolean);
@@ -294,17 +304,30 @@ async function restoreFromHash(){
   const plSegs=segs.filter(s=>s.startsWith('pl!')).map(s=>s.slice(3));
   const cats=segs.filter(s=>s && !s.startsWith('pl!') && s!==conv);
 
+  /* 1. restore placeholders that were previously fetched */
   for(const p of plSegs){
     loadedPlaceholders.add(p);
     const li=document.querySelector(`li[data-path="${CSS.escape(p)}"]`);
     if(li?.__load) await li.__load();
   }
-  cats.forEach(p=>{const d=pathMap.get(p); if(d) d.open=true;});
 
+  /* 2. open each category path – shallow first so parents exist */
+  const catList=[...cats].sort((a,b)=>a.split('.').length - b.split('.').length);
+  for(const p of catList){
+    await expandPath(p);
+  }
+
+  /* 3. reopen conversation if indicated */
   if(conv){
-    const [,path,idx]=conv.split('!'); const d=pathMap.get(path);
-    if(d && d.__convs) openConversation(d.__convs[+idx],split(path),+idx);
-  }else closeConversation();
+    const [,path,idxStr]=conv.split('!');
+    await expandPath(path);
+    const det=pathMap.get(path);
+    if(det && det.__convs){
+      openConversation(det.__convs[+idxStr],split(path),+idxStr);
+    }
+  }else{
+    closeConversation();
+  }
   modifyHashAllowed=true;
 }
 </script>
