@@ -3,204 +3,282 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Chat-data browser (simple)</title>
+<title>Chat-data browser</title>
+
+<!-- ██████  FONTS  ██████-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 
 <style>
+/* ═══════════  THEME  ═══════════ */
 :root{
-  --accent:#0077cc;--border:#ddd;--user:#e7f3ff;--assist:#f3e7ff;
+  --bg-0:#121212;
+  --bg-1:#1e1e1e;
+  --bg-2:#262626;
+  --border:#333;
+  --txt-0:#e0e0e0;
+  --txt-1:#9e9e9e;
+  --accent:#2ea8ff;
+  --accent-hi:#6ec1ff;
+  --assist:#30336b;
+  --radius:.55rem;
+  --shadow:0 8px 24px rgba(0,0,0,.35);
+  --trans:.25s cubic-bezier(.25,.8,.25,1);
+  color-scheme:dark;
 }
-*{box-sizing:border-box;margin:0;padding:0;font:16px/1.45 system-ui}
-body{padding:1rem}
-.tree{list-style:none}.tree li{position:relative;padding-left:1.25rem}
-.tree li::before{content:"";position:absolute;left:0;top:.75rem;width:.75rem;height:1px;background:var(--border)}
-.name{font-weight:600}.summary{color:#555;font-size:.8rem;margin-left:.35rem}
-.spinner{display:inline-block;width:1em;height:1em;border:.15em solid var(--border);border-right-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+*{box-sizing:border-box;margin:0;padding:0;font:16px/1.45 "Inter",system-ui}
+html,body{height:100%}
+body{background:var(--bg-0);color:var(--txt-0);padding:1.25rem;overflow-x:hidden}
+
+/* ═══════════  TREE  ═══════════ */
+.tree{list-style:none}
+.tree li{position:relative;padding-left:1.25rem}
+.tree li::before{content:"";position:absolute;left:0;top:calc(.9rem + 2px);width:.75rem;height:1px;background:var(--border)}
+
+/* summary row -------------------------------------------------- */
+summary{
+  position:relative;                      /* new → makes pseudo-element local */
+  cursor:pointer;outline:none;user-select:none;
+  display:inline-flex;align-items:center;gap:.35rem;
+  padding:.15rem .25rem;margin-left:-.25rem; /* keeps highlight nicely aligned */
+  border-radius:var(--radius);
+}
+summary:hover{color:var(--accent-hi)}
+details>summary::-webkit-details-marker{display:none}
+
+.name{font-weight:600}
+.summary{color:var(--txt-1);font-size:.8rem}
+.stats{color:var(--txt-1);font-size:.75rem}
+
+/* nice accordion animation */
+details>ul, details>div:not(.modal){padding-left:.4rem}
+details[open] > summary{margin-bottom:.35rem}
+details>ul{transition:max-height var(--trans),opacity var(--trans);overflow:hidden;max-height:0;opacity:0}
+details[open]>ul{max-height:2000px;opacity:1}
+
+/* hover row */
+summary:hover::after{content:"";position:absolute;left:-.5rem;right:0;top:0;bottom:0;border-radius:var(--radius);background:var(--bg-2);z-index:-1}
+
+/* spinner */
+.spinner{display:inline-block;width:1em;height:1em;border:.15em solid var(--border);
+         border-right-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(1turn)}}
-.msg{
-  padding:.4rem .6rem;border-radius:.4rem;
-  max-width:60ch;font-size:.9rem;margin:.15rem 0;
-  white-space:pre-wrap;               /* preserve line breaks */
-}
-.msg.user{background:var(--user)}.msg.assistant{background:var(--assist)}
+
+/* ═══════════  MESSAGE BUBBLES  ═══════════ */
+.msg{padding:.5rem .8rem;border-radius:var(--radius);max-width:65ch;font-size:.9rem;margin:.25rem 0;
+     white-space:pre-wrap;background:var(--bg-2)}
+.msg.user{background:var(--accent);color:#000}
+.msg.assistant{background:var(--assist)}
 .role{font-weight:600;margin-right:.3rem;font-family:monospace}
-.hidden{display:none}
 
-/* facet bubbles */
-.facets{
-  margin:.5rem 0;display:flex;flex-direction:column;align-items:flex-start;gap:.15rem;
-}
-.facetBubble{
-  display:inline-block;width:fit-content;
-  color:#fff;background:var(--accent);
-  padding:.25rem .5rem;border-radius:.5rem;font-size:.8rem;white-space:pre-wrap;
-}
+/* inline & block code inside bubbles */
+.msg pre{background:#0004;padding:.6rem;border-radius:var(--radius);overflow:auto}
+.msg code{background:#0004;padding:.1rem .35rem;border-radius:.35rem;font-family:monospace}
 
-/* code styling inside messages */
-.msg pre{background:#f6f6f6;padding:.5rem;border-radius:.4rem;overflow:auto}
-.msg code{background:#eee;padding:0 .25rem;border-radius:.25rem;font-family:monospace}
+/* ═══════════  FACET BUBBLES  ═══════════ */
+.facets{margin:.7rem 0;display:flex;flex-wrap:wrap;gap:.35rem}
+.facetBubble{color:#000;font-weight:600;border-radius:var(--radius);padding:.25rem .6rem;
+             background:var(--accent);font-size:.75rem}
+
+/* ═══════════  MODAL  ═══════════ */
+#modalWrap{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;
+           justify-content:center;z-index:999;opacity:0;pointer-events:none;transition:opacity var(--trans)}
+#modalWrap.show{opacity:1;pointer-events:auto}
+.modal{background:var(--bg-1);border-radius:var(--radius);padding:1.2rem;max-width:90vw;max-height:90vh;
+       display:flex;flex-direction:column;box-shadow:var(--shadow);overflow:auto}
+.closeBtn{align-self:flex-end;background:none;border:none;color:var(--txt-1);font-size:1.6rem;line-height:1;
+          cursor:pointer;transition:color var(--trans)}
+.closeBtn:hover{color:var(--accent-hi)}
+
+/* ═══════════  SCROLLBAR  ═══════════ */
+::-webkit-scrollbar{width:.5rem}
+::-webkit-scrollbar-thumb{border-radius:1rem;background:#555}
+::-webkit-scrollbar-track{background:#222}
 </style>
 </head>
 
 <body>
-<h1>Chat-data hierarchy browser</h1>
+<h1 style="margin-bottom:.8rem;font-size:1.7rem">Chat-data hierarchy browser</h1>
 
-<div id="treePane">
-  <ul id="treeRoot" class="tree"></ul>
+<div id="treePane"><ul id="treeRoot" class="tree"></ul></div>
+
+<!-- ───────── MODAL (initially hidden) ───────── -->
+<div id="modalWrap" class="hidden">
+  <div class="modal">
+    <button class="closeBtn" title="Esc">✕</button>
+    <div id="convContent"></div>
+  </div>
 </div>
 
-<div id="convPane" class="hidden"></div>
-
 <script>
-/* ───────── helpers ───────── */
-const $ = (tag, attrs={}, ...kids)=>{
-  const el=document.createElement(tag);
-  Object.entries(attrs).forEach(([k,v])=>{
-    if(k.startsWith('on')) el.addEventListener(k.slice(2),v);
-    else if(k==='class')   el.className=v;
-    else                   el.setAttribute(k,v);
+/* ═══════════  HELPERS  ═══════════ */
+const $ = (t,a={},...k)=>{
+  const e=document.createElement(t);
+  Object.entries(a).forEach(([key,val])=>{
+    if(key.startsWith('on')) e.addEventListener(key.slice(2),val);
+    else if(key==='class')  e.className=val;
+    else                    e.setAttribute(key,val);
   });
-  kids.flat().forEach(c=>{
-    if(c==null) return;
-    el.appendChild(typeof c==='string'?document.createTextNode(c):c);
-  });
-  return el;
+  k.flat().forEach(c=>e.appendChild(typeof c==='string'?document.createTextNode(c):c));
+  return e;
 };
-const spinner = ()=>$('span',{class:'spinner',title:'Loading…'});
-const fetchJson = url=>fetch(url).then(r=>{if(!r.ok) throw Error(r.status); return r.json();});
+const spinner=()=>$('span',{class:'spinner',title:'Loading…'});
+const fetchJson=u=>fetch(u,{cache:'reload'}).then(r=>{if(!r.ok) throw Error(r.status);return r.json();});
 
-/* ─── tiny markdown helper ─── */
-function mdToHtml(text){
-  let h=text
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;');
+/* data helpers */
+const getNum=i=>i?.numConversations??i?.numConvs??0;
+const isPlaceholder=i=>typeof i==='object'&&i!==null&&'path'in i&&!('children'in i);
+const count=getNum;
+const sortByCount=a=>[...a].sort((p,q)=>count(q)-count(p));
 
-  /* code blocks ``` ... ``` */
-  h=h.replace(/```([\s\S]*?)```/g,(m,code)=>`<pre><code>${code}</code></pre>`);
-  /* inline code */
+/* markdown (tiny) */
+function mdToHtml(t=''){
+  let h=t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  h=h.replace(/```([\s\S]*?)```/g,(m,c)=>`<pre><code>${c}</code></pre>`);
   h=h.replace(/`([^`]+?)`/g,'<code>$1</code>');
-  /* bold then italic */
   h=h.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
   h=h.replace(/\*([^*]+)\*/g,'<em>$1</em>');
-  /* new lines */
   return h.replace(/\n/g,'<br>');
 }
 
-/* ───────── state ───────── */
+/* ═══════════  STATE  ═══════════ */
 const ROOT="/modelwelfare/cliowildchat1/rootObjects.json";
-const pathMap=new Map();
-const loadedPlaceholders=new Set();
+const pathMap=new Map(), loadedPlaceholders=new Set();
 let openConvHash=null;
 
-/* ───────── build tree ───────── */
+/* ═══════════  TREE BUILD  ═══════════ */
 window.onload=()=>fetchJson(ROOT).then(buildFacets);
 
-function buildFacets(facets){
+function buildFacets(raw){
+  const facets=sortByCount(raw);
   const root=document.getElementById('treeRoot');
+  root.innerHTML='';
+
+  const topTotal=facets.reduce((s,f)=>s+count(f),0);
+
   facets.forEach((f,fi)=>{
+    const own=count(f), pct=Math.round(own*100/topTotal||0);
     const li=$('li',{},
       $('div',{},
-        $('span',{class:'name'},f.facet.name),
-        $('span',{class:'summary'},f.facet.question||'')));
+        $('span',{class:'name'},f.facet?.name||'Facet'),
+        $('span',{class:'stats'},`${own} (${pct} %)`),
+        $('span',{class:'summary'},f.facet?.question||'')));
+    const hierarchy=sortByCount(f.hierarchy);
+    const siblingTotal=hierarchy.reduce((s,i)=>s+count(i),0);
     const ul=$('ul',{class:'tree'});
-    f.hierarchy.forEach((n,ci)=>ul.appendChild(buildNode(n,[`f${fi}`,ci])));
+    hierarchy.forEach((n,ci)=>ul.appendChild(buildNode(n,[`f${fi}`,ci],siblingTotal)));
     li.appendChild(ul); root.appendChild(li);
   });
   restoreFromHash();
 }
-const join=p=>p.join('.'),split=s=>s.split('.');
 
-function buildNode(item,pathArr){
-  if(typeof item==='string') return buildPlaceholder(item,pathArr);
+const join=p=>p.join('.'), split=s=>s.split('.');
+
+function buildNode(item,pathArr,siblingTotal=0){
+  if(isPlaceholder(item)) return buildPlaceholder(item,pathArr,siblingTotal);
 
   const p=join(pathArr);
   const details=$('details',{}); pathMap.set(p,details);
 
+  const own=count(item), pct=siblingTotal?Math.round(own*100/siblingTotal):100;
+
   details.appendChild(
     $('summary',{},
       $('span',{class:'name'},item.name||'(unnamed)'),
+      $('span',{class:'stats'},`${own} (${pct} %)`),
       item.summary?$('span',{class:'summary'},item.summary):null));
 
+  const children=sortByCount(item.children||[]);
+  const childTotal=children.reduce((s,i)=>s+count(i),0);
   const ul=$('ul',{class:'tree'});
-  (item.children||[]).forEach((ch,i)=>ul.appendChild(buildNode(ch,[...pathArr,i])));
+  children.forEach((ch,i)=>ul.appendChild(buildNode(ch,[...pathArr,i],childTotal)));
   details.appendChild(ul);
 
   if(item.conversations?.length){
     details.__convs=item.conversations;
-    const convDetails=$('details',{},
-      $('summary',{},`Conversations (${item.conversations.length})`));
-    const convUL=$('ul',{class:'tree'});
+    const cDet=$('details',{},$('summary',{},`Conversations (${item.conversations.length})`));
+    const cUL=$('ul',{class:'tree'});
     item.conversations.forEach((c,i)=>{
-      const entry=$('details',{},
-        $('summary',{},c.facetValue||`Conversation #${i+1}`));
-      entry.firstChild.addEventListener('click',e=>{
+      const ent=$('details',{},$('summary',{},c.facetValue||`Conversation #${i+1}`));
+      ent.firstChild.addEventListener('click',e=>{
         e.stopPropagation();openConversation(c,pathArr,i);
       });
-      convUL.appendChild($('li',{},entry));
+      cUL.appendChild($('li',{},ent));
     });
-    convDetails.appendChild(convUL); details.appendChild(convDetails);
+    cDet.appendChild(cUL); details.appendChild(cDet);
   }
+
   details.addEventListener('toggle',updateHash);
   return $('li',{},details);
 }
 
-function buildPlaceholder(url,pathArr){
-  const pathStr=join(pathArr);
+/* ═══════════  PLACEHOLDER  ═══════════ */
+function buildPlaceholder(ph,pathArr,siblingTotal){
+  const url=ph.path, pathStr=join(pathArr);
   const li=$('li',{'data-url':url,'data-path':pathStr},spinner());
   const load=async()=>{
     if(li.dataset.loaded) return;
     li.dataset.loaded=1; loadedPlaceholders.add(pathStr);
-    const d=await fetchJson(url);
-    li.replaceWith((Array.isArray(d.children)||d.conversations)?
-      buildNode(d,pathArr):buildLeaf(url,d));
+    const data=await fetchJson(url);
+    li.replaceWith(
+      (data.children||data.conversations)
+        ? buildNode(data,pathArr,siblingTotal)
+        : buildLeaf(url,data)
+    );
     updateHash();
   };
   li.__load=load;
-  const obs=new IntersectionObserver(([e])=>{
-    if(e.isIntersecting){load().then(()=>obs.disconnect());}});
-  obs.observe(li); return li;
+  new IntersectionObserver(([e],o)=>{if(e.isIntersecting){load().then(()=>o.disconnect());}}).observe(li);
+  return li;
 }
-
 function buildLeaf(url,data){
-  const det=$('details',{},$('summary',{},url.split('/').pop()));
-  det.appendChild($('pre',{},JSON.stringify(data,null,2).slice(0,1200)));
-  return $('li',{},det);
+  const d=$('details',{},$('summary',{},url.split('/').pop()));
+  d.appendChild($('pre',{},JSON.stringify(data,null,2).slice(0,1000)));
+  return $('li',{},d);
 }
 
-/* ───────── conversation view ───────── */
-const treePane=document.getElementById('treePane');
-const convPane=document.getElementById('convPane');
+/* ═══════════  MODAL (conversation)  ═══════════ */
+const modalWrap=document.getElementById('modalWrap');
+const convContent=document.getElementById('convContent');
+document.querySelector('.closeBtn').onclick=closeConversation;
+modalWrap.addEventListener('click',e=>{if(e.target===modalWrap) closeConversation();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape') closeConversation();});
 
 function openConversation(obj,pathArr,idx){
   openConvHash=`conv!${join(pathArr)}!${idx}`;
-  treePane.classList.add('hidden'); convPane.classList.remove('hidden'); convPane.innerHTML='';
+  convContent.innerHTML='';
 
-  convPane.appendChild($('p',{},$('a',{href:'#',onclick:e=>{e.preventDefault();closeConversation();}},'← Back')));
-
-  if(Array.isArray(obj.allFacetValues)&&obj.allFacetValues.length){
-    const colors=['#0077cc','#ff8a00','#28a745','#e83e8c','#17a2b8','#6f42c1','#ffc107','#20c997','#6c757d'];
+  /* facet chips */
+  if(obj.allFacetValues?.length){
+    const colors=['#ff7675','#74b9ff','#55efc4','#fdcb6e','#ffeaa7','#a29bfe','#fab1a0','#81ecec'];
     const box=$('div',{class:'facets'});
     obj.allFacetValues.forEach((fv,i)=>{
       box.appendChild($('div',{class:'facetBubble',style:`background:${colors[i%colors.length]}`},
         `${fv.facet}: ${fv.value}`));
     });
-    convPane.appendChild(box);
+    convContent.appendChild(box);
   }
 
-  const msgs=$('div',{});
+  /* messages */
   obj.conversation.forEach(m=>{
-    const msgDiv=$('div',{class:`msg ${m.role}`});
-    msgDiv.appendChild($('span',{class:'role'},m.role+': '));
-    const content=$('span',{}); content.innerHTML=mdToHtml(m.content||'');
-    msgDiv.appendChild(content); msgs.appendChild(msgDiv);
+    const d=$('div',{class:`msg ${m.role}`},
+      $('span',{class:'role'},m.role+': '));
+    const span=$('span',{}); span.innerHTML=mdToHtml(m.content);
+    d.appendChild(span); convContent.appendChild(d);
   });
-  convPane.appendChild(msgs); updateHash();
+
+  modalWrap.classList.add('show'); modalWrap.classList.remove('hidden');
+  updateHash();
 }
 function closeConversation(){
-  openConvHash=null; treePane.classList.remove('hidden'); convPane.classList.add('hidden'); updateHash();
+  if(!modalWrap.classList.contains('show')) return;
+  modalWrap.classList.remove('show');
+  setTimeout(()=>modalWrap.classList.add('hidden'),250);
+  openConvHash=null; updateHash();
 }
 
-/* ───────── hash sync ───────── */
+/* ═══════════  HASH SYNC  ═══════════ */
 function updateHash(){
   if(!modifyHashAllowed) return;
   const open=[...pathMap.entries()].filter(([,d])=>d.open).map(([p])=>p);
@@ -213,18 +291,19 @@ async function restoreFromHash(){
   modifyHashAllowed=false;
   const segs=decodeURIComponent(location.hash.slice(1)).split(',').filter(Boolean);
   const conv=segs.find(s=>s.startsWith('conv!'));
-  const plSegs=segs.filter(s=>s.startsWith('pl!')).map(s=>s.replace('pl!',''));
+  const plSegs=segs.filter(s=>s.startsWith('pl!')).map(s=>s.slice(3));
   const cats=segs.filter(s=>s && !s.startsWith('pl!') && s!==conv);
 
   for(const p of plSegs){
     loadedPlaceholders.add(p);
-    const li=document.querySelector(`li[data-path="${CSS.escape(p)}"]`); if(li?.__load) await li.__load();
+    const li=document.querySelector(`li[data-path="${CSS.escape(p)}"]`);
+    if(li?.__load) await li.__load();
   }
-  cats.forEach(p=>{const det=pathMap.get(p); if(det) det.open=true;});
+  cats.forEach(p=>{const d=pathMap.get(p); if(d) d.open=true;});
 
   if(conv){
-    const [,path,idx]=conv.split('!'); const det=pathMap.get(path);
-    if(det&&det.__convs) openConversation(det.__convs[+idx],split(path),+idx);
+    const [,path,idx]=conv.split('!'); const d=pathMap.get(path);
+    if(d && d.__convs) openConversation(d.__convs[+idx],split(path),+idx);
   }else closeConversation();
   modifyHashAllowed=true;
 }
