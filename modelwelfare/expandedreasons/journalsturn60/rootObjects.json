@@ -1,0 +1,1 @@
+[{"facet": {"name": "Leave Reasons", "question": "", "prefill": "", "summaryCriteria": "The cluster name should be a clear single sentence that accurately captures why the LLM chose to leave (or stay) in the conversation.", "numeric": []}, "hierarchy": [{"path": "/modelwelfare/expandedreasons/journalsturn60/Leave Reasons/levels02/data0.json", "numConvs": 499}]}]
