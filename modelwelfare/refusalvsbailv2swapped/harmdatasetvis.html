@@ -712,7 +712,7 @@
         // Load models list
         async function loadModelsList() {
             try {
-                const response = await fetch('/modelwelfare/refusalvsbailv2/models.json', {cache: "reload"});
+                const response = await fetch('/modelwelfare/refusalvsbailv2swapped/models.json', {cache: "reload"});
                 
                 if (!response.ok) {
                     throw new Error(`HTTP error! Status: ${response.status}`);
