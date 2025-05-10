@@ -83,9 +83,11 @@ const $=(t,a={},...k)=>{
   return e;
 };
 const spinner=()=>$('span',{class:'spinner',title:'Loading…'});
-const fetchJson=u=>fetch(u,{cache:'reload'}).then(r=>{if(!r.ok)throw Error(r.status);
+async function fetchJson(u) {
+  res = await fetch(u,{cache:'reload'});
+  if (!res.ok) throw new Error(res.status);
   // we used compressed jsons
-  return r.json();
+  return res.json();
   });
 async function fetchJsonGz(url) {
   const res = await fetch("https://raw.githubusercontent.com/Phylliida/OpenClioWildchatResults/refs/heads/main" + url, { cache: 'reload' });
