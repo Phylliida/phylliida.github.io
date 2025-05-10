@@ -84,7 +84,7 @@ const $=(t,a={},...k)=>{
 };
 const spinner=()=>$('span',{class:'spinner',title:'Loading…'});
 async function fetchJson(u) {
-  res = await fetch(u,{cache:'reload'});
+  const res = await fetch(u,{cache:'reload'});
   if (!res.ok) throw new Error(res.status);
   // we used compressed jsons
   return res.json();
