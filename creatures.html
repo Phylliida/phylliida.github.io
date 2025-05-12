@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Creature Runner – Ring Catch Game v3</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=VT323&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --pink:#ff9ecb;--hotpink:#ff3e9e;--aqua:#8efaff;--lav:#cab3ff;
+  --green:#00ff8c;--yellow:#ffdb4d;--orange:#ffa654;
+  --bg:#101015;--card:#181821;--r:18px;
+}
+
+html,body{height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-text-size-adjust:100%;
+          background:var(--bg);color:#fff;font-family:'Fredoka One',cursive}
+
+/* ─── WORLD ─────────────────────────────────────── */
+#map{position:relative;width:100%;height:100%;overflow:hidden}
+#world{position:absolute;left:0;top:0;width:4000px;height:4000px;
+       transform:translate(0,0);transition:transform .25s}
+#world:before{content:'';position:absolute;inset:0;
+  background:repeating-linear-gradient(0deg ,rgba(255,255,255,.03)0 2px,transparent 2px 120px),
+             repeating-linear-gradient(90deg,rgba(255,255,255,.03)0 2px,transparent 2px 120px)}
+#world:after{content:'';position:absolute;inset:0;
+  background:radial-gradient(circle,#fff 0 1px,transparent 2px) 0 0/3px 3px;
+  opacity:.05;animation:twinkle 14s linear infinite;pointer-events:none}
+@keyframes twinkle{to{background-position:500px 800px}}
+.env-neon{background:#15151e}.env-candy{background:#ffd1e8}
+.env-forest{background:#112819}.env-ocean{background:#003d5c}
+
+/* ─── WILD BLOBS ───────────────────────────────── */
+.wild{position:absolute;width:56px;height:56px;border-radius:50%;overflow:hidden;cursor:pointer}
+.wild img{width:100%;height:100%;object-fit:contain;pointer-events:none}
+
+/* ─── D-PAD ────────────────────────────────────── */
+.dpad{position:absolute;left:18px;bottom:110px;width:96px;height:96px;z-index:5}
+.dpad button{position:absolute;width:36px;height:36px;border:none;border-radius:50%;cursor:pointer;
+  background:var(--lav);color:#111;font-size:1.2rem;box-shadow:0 0 8px var(--lav),0 0 14px var(--pink)}
+.dpad button:active{transform:scale(.9)}
+#arrow-up{left:30px;top:0}#arrow-down{left:30px;bottom:0}
+#arrow-left{left:0;top:30px}#arrow-right{right:0;top:30px}
+
+/* ─── FABs ─────────────────────────────────────── */
+.fab{position:absolute;z-index:6;border:none;border-radius:var(--r);cursor:pointer;
+     padding:16px 20px;font-size:.8rem;background:var(--pink);color:#311;
+     box-shadow:0 0 8px var(--pink),0 0 18px var(--hotpink)}
+.fab:hover{transform:scale(1.06)}
+#btn-creatures{right:18px;bottom:98px}
+#btn-add{right:18px;bottom:30px;background:var(--aqua);box-shadow:0 0 8px var(--aqua),0 0 18px var(--lav)}
+#btn-env{left:18px;bottom:30px;background:var(--lav);box-shadow:0 0 8px var(--lav),0 0 18px var(--pink)}
+#btn-env:before{content:'🌎';position:absolute;left:-10px;top:-10px;font-size:22px}
+
+/* ─── COLLECTION PANEL ─────────────────────────── */
+#panel{position:fixed;left:0;right:0;bottom:-100%;height:78vh;z-index:10;background:#050508;
+  border-top:4px solid var(--aqua);box-shadow:0 -8px 20px rgba(0,255,255,.3);
+  overflow-y:auto;transition:bottom .35s cubic-bezier(.38,.07,.43,.98)}
+#panel.open{bottom:0}
+.panel-head{position:sticky;top:0;display:flex;justify-content:space-between;gap:12px;
+            background:#050508;padding:20px 18px 18px}
+.panel-head h2{margin:0;font-size:1.2rem;color:var(--aqua)}
+#btn-close{background:none;border:none;color:var(--pink);font-size:1.9rem;cursor:pointer}
+#sort{font-size:1rem;font-family:inherit;background:var(--card);color:var(--pink);
+      border:2px solid var(--aqua);border-radius:14px;padding:10px 36px 10px 12px;appearance:none}
+#sort-wrap{position:relative}#sort-wrap:after{content:'▼';position:absolute;right:12px;top:11px;font-size:.6rem;color:var(--aqua)}
+#panel-body{padding:0 18px 40px}
+#cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(124px,1fr));gap:18px}
+.card{position:relative;padding:16px 12px 14px;text-align:center;cursor:pointer;
+      background:var(--card);border:2px solid var(--hotpink);border-radius:var(--r);
+      box-shadow:0 0 8px var(--hotpink);transition:transform .15s}
+.card:hover{transform:translateY(-4px)}
+.card:before{content:'';position:absolute;inset:0;border:2px solid var(--hotpink);border-radius:var(--r);
+             filter:blur(6px);opacity:.6}
+.thumb{width:60px;height:60px;margin:0 auto 10px;border-radius:50%;overflow:hidden}
+.thumb img{width:100%;height:100%;object-fit:contain}
+.name{font-size:.8rem;color:var(--lav);margin-bottom:4px}.cp{font-size:.65rem;color:var(--pink)}
+
+/* ─── MODALS ───────────────────────────────────── */
+#modal,#catch{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:12;
+  background:rgba(0,0,0,.6);backdrop-filter:blur(4px);opacity:0;pointer-events:none;transition:.3s}
+#modal.show,#catch.show{opacity:1;pointer-events:auto}
+.modal-box,.catch-box{width:92%;max-width:340px;padding:26px 20px;text-align:center;
+                      background:#0c0c13;border:3px solid var(--aqua);border-radius:22px;
+                      box-shadow:0 0 12px var(--aqua);position:relative}
+#modal-close,#catch-close{position:absolute;top:12px;right:16px;background:none;border:none;font-size:1.6rem;color:var(--pink);cursor:pointer}
+
+/* ─── CATCH ARENA ─────────────────────────────── */
+#arena{position:relative;width:260px;height:260px;margin:0 auto}
+.ring{position:absolute;left:50%;top:50%;width:260px;height:260px;border-radius:50%;
+      transform:translate(-50%,-50%);
+      background:conic-gradient(var(--green) 0 30deg,var(--yellow) 30deg 90deg,var(--orange) 90deg 360deg);
+      mask:radial-gradient(transparent 43%,#000 45%)}
+.ticker{position:absolute;left:50%;top:50%;width:130px;height:2px;background:#fff;
+        transform-origin:left center}
+.catch-thumb{position:absolute;left:50%;top:50%;width:100px;height:100px;margin:-50px 0 0 -50px;border-radius:50%;overflow:hidden}
+.catch-thumb img{width:100%;height:100%;object-fit:contain}
+.fill{position:absolute;left:50%;top:50%;width:0;height:0;border-radius:50%;transform:translate(-50%,-50%);opacity:.6}
+#catch-msg{font-size:.9rem;color:var(--aqua);margin-top:14px;min-height:24px}
+
+/* ─── DETAIL MODAL EXTRAS ─────────────────────── */
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;font-size:.8rem;margin:14px 0}
+.stat{position:relative;background:var(--card);border:2px solid var(--hotpink);border-radius:14px;padding:10px 0}
+.stat:before{content:'';position:absolute;inset:0;border:2px solid var(--hotpink);border-radius:14px;filter:blur(5px);opacity:.6}
+.stat .label{display:block;color:var(--lav);margin-bottom:4px}.stat .val{display:block;color:var(--aqua)}
+#rename-btn{padding:10px 18px;font-size:.8rem;border:none;border-radius:14px;cursor:pointer;background:var(--pink);color:#311;
+            box-shadow:0 0 8px var(--pink),0 0 14px var(--hotpink)}
+#rename-wrap{display:none;margin-top:12px}
+#rename-input{width:70%;max-width:220px;padding:10px;border:2px solid var(--aqua);border-radius:14px;font-size:1rem;text-align:center;color:#311;font-family:inherit}
+.rename-act{width:40px;height:40px;margin:0 4px;border:none;border-radius:50%;cursor:pointer;font-size:1.15rem;background:var(--aqua);color:#000}
+.rename-cancel{background:var(--pink)}
+
+@media(max-width:420px){.fab{padding:12px 14px;font-size:.68rem}.dpad{left:8px}}
+</style>
+</head>
+<body>
+
+<div id="map">
+  <div id="world" class="env-neon"></div>
+
+  <div class="dpad">
+    <button id="arrow-up">▲</button><button id="arrow-down">▼</button>
+    <button id="arrow-left">◀</button><button id="arrow-right">▶</button>
+  </div>
+
+  <button id="btn-env" class="fab">ENV</button>
+  <button id="btn-add" class="fab">+ TEST</button>
+  <button id="btn-creatures" class="fab">MY CREW</button>
+</div>
+
+<section id="panel">
+  <div class="panel-head">
+    <h2>Your Crew</h2>
+    <div id="sort-wrap">
+      <select id="sort">
+        <option value="newest">Newest First</option><option value="name-asc">Name A→Z</option><option value="name-desc">Name Z→A</option>
+        <option value="cp-asc">CP ↑</option><option value="cp-desc">CP ↓</option>
+        <option value="hp-asc">HP ↑</option><option value="hp-desc">HP ↓</option>
+        <option value="atk-asc">ATK ↑</option><option value="atk-desc">ATK ↓</option>
+        <option value="def-asc">DEF ↑</option><option value="def-desc">DEF ↓</option>
+      </select>
+    </div>
+    <button id="btn-close">&#215;</button>
+  </div>
+  <div id="panel-body"><div id="cards"></div></div>
+</section>
+
+<div id="modal">
+  <div class="modal-box">
+    <button id="modal-close">&#215;</button>
+    <div class="modal-thumb" id="modal-thumb"></div>
+    <div class="modal-name" id="modal-name"></div>
+    <div class="modal-id" id="modal-id"></div>
+    <div class="stats">
+      <div class="stat"><span class="label">CP</span><span class="val" id="stat-cp"></span></div>
+      <div class="stat"><span class="label">HP</span><span class="val" id="stat-hp"></span></div>
+      <div class="stat"><span class="label">ATK</span><span class="val" id="stat-atk"></span></div>
+      <div class="stat"><span class="label">DEF</span><span class="val" id="stat-def"></span></div>
+    </div>
+    <button id="rename-btn">RENAME</button>
+    <div id="rename-wrap">
+      <input id="rename-input" maxlength="18">
+      <button class="rename-act" id="rename-save">💾</button>
+      <button class="rename-act rename-cancel" id="rename-cancel">✕</button>
+    </div>
+  </div>
+</div>
+
+<div id="catch">
+  <div class="catch-box">
+    <button id="catch-close">&#215;</button>
+    <div id="arena">
+      <div class="ring"></div>
+      <div class="ticker" id="ticker"></div>
+      <div class="catch-thumb" id="catch-thumb"></div>
+      <div class="fill" id="fill"></div>
+    </div>
+    <div id="catch-msg"></div>
+  </div>
+</div>
+
+<script>
+/* ─── HELPERS ─────────────────────────── */
+const rand=(m,M)=>Math.floor(Math.random()*(M-m+1))+m;
+
+function blobInfo(fill){
+  const pts=8,r=80,v=25,s=Math.PI*2/pts;
+  let d='',minX=200,minY=200,maxX=0,maxY=0;
+  const ptsArr=[];
+  for(let i=0;i<pts;i++){
+    const a=i*s,R=r+rand(-v,v);
+    const x=100+R*Math.cos(a),y=100+R*Math.sin(a);
+    ptsArr.push([x,y]);
+    minX=Math.min(minX,x);minY=Math.min(minY,y);
+    maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);
+    d+=(i?'L':'M')+x+','+y;
+  }
+  const cx=(minX+maxX)/2,cy=(minY+maxY)/2;
+  const svg=`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><path d='${d}Z' fill='${fill}'/></svg>`;
+  return{
+    uri:'data:image/svg+xml;base64,'+btoa(svg),
+    offX:(100-cx)*0.5,             // SVG units → px (200→100px => factor .5)
+    offY:(100-cy)*0.5
+  };
+}
+const colours=['#ff8bd9','#8efaff','#cab3ff','#ff3e9e'];
+
+/* ─── CAMERA & ENV ────────────────────── */
+const world=document.getElementById('world');
+let camX=0,camY=0,maxX=0,maxY=0;
+function setBounds(){maxX=world.offsetWidth-innerWidth;maxY=world.offsetHeight-innerHeight}
+addEventListener('resize',setBounds);
+function move(dx,dy){camX=Math.min(0,Math.max(camX+dx,-maxX));camY=Math.min(0,Math.max(camY+dy,-maxY));
+ world.style.transform=`translate(${camX}px,${camY}px)`;}
+document.getElementById('arrow-up').onclick   =()=>move(0, 200);
+document.getElementById('arrow-down').onclick =()=>move(0,-200);
+document.getElementById('arrow-left').onclick =()=>move( 200,0);
+document.getElementById('arrow-right').onclick=()=>move(-200,0);
+
+const env=['env-neon','env-candy','env-forest','env-ocean'];let envIdx=0;
+function setEnv(i){env.forEach(c=>world.classList.remove(c));world.classList.add(env[i]);}
+setEnv(0);document.getElementById('btn-env').onclick=()=>{envIdx=(envIdx+1)%env.length;setEnv(envIdx);};
+
+/* ─── SPAWN WILDS ─────────────────────── */
+function spawnWilds(n=25){
+  for(let i=0;i<n;i++){
+    const info=blobInfo(colours[rand(0,3)]);
+    const w=document.createElement('div');w.className='wild';
+    w.style.left=rand(0,3940)+'px';w.style.top=rand(0,3940)+'px';
+    w.innerHTML=`<img src="${info.uri}" style="transform:translate(${info.offX}px,${info.offY}px)">`;
+    world.appendChild(w);
+    w.onclick=()=>openCatch(w,info);
+  }
+}
+
+/* ─── CATCH GAME ──────────────────────── */
+const catchM=document.getElementById('catch'),ticker=document.getElementById('ticker'),
+      thumb=document.getElementById('catch-thumb'),msg=document.getElementById('catch-msg'),
+      fill=document.getElementById('fill');
+let spinning=false,rafId=null,targetWild=null,targetInfo=null;
+const lap=750;
+
+function spin(now){ticker.style.transform=`rotate(${(now%lap)/lap*360}deg)`;rafId=requestAnimationFrame(spin);}
+function startSpin(){spinning=true;rafId=requestAnimationFrame(spin);}
+function stopSpin(){spinning=false;cancelAnimationFrame(rafId);}
+
+function openCatch(el,info){
+  if(spinning)return;
+  targetWild=el;targetInfo=info;
+  thumb.innerHTML=`<img src="${info.uri}" style="transform:translate(${info.offX}px,${info.offY}px)">`;
+  msg.textContent='Tap & hold to stop!';
+  fill.style.display='none';
+  catchM.classList.add('show');
+  startSpin();
+}
+
+function quality(angle){angle=((angle%360)+360)%360;return angle<30?'best':angle<90?'good':'ok';}
+const odds={best:.8,good:.6,ok:.4},cols={best:'var(--green)',good:'var(--yellow)',ok:'var(--orange)'};
+let pulsesLeft=0,qual='';
+
+function pointerDown(e){
+  if(!spinning)return;
+  const ang=parseFloat(ticker.style.transform.match(/-?[\d.]+/));
+  stopSpin();
+  qual=quality(ang);pulsesLeft=3;
+  msg.textContent=qual.toUpperCase()+' catch!';
+  fill.style.background=cols[qual];fill.style.display='block';
+  pulse();
+}
+function pulse(){
+  fill.animate([{width:'0',height:'0',opacity:.6},{width:'260px',height:'260px',opacity:.05}],
+    {duration:1500,fill:'forwards'}).onfinish=()=>{
+      if(Math.random()<odds[qual]){pulsesLeft--;if(pulsesLeft){pulse();return}
+        msg.textContent='Caught! 🎉';setTimeout(()=>{catchM.classList.remove('show');
+          addCrew(targetInfo);targetWild.remove();},900);}
+      else{msg.textContent='Broke out! Hold again.';fill.style.display='none';startSpin();}
+    };
+}
+
+document.getElementById('arena').addEventListener('pointerdown',pointerDown);
+document.getElementById('catch-close').onclick=()=>{stopSpin();catchM.classList.remove('show');};
+catchM.onclick=e=>{if(e.target===catchM){stopSpin();catchM.classList.remove('show');}};
+
+/* ─── CREW & UI ───────────────────────── */
+const crew=[],names=['CandyClaw','NeonKit','BubbleBat','PixelPanda','StarBunny','GlitchKitty'];
+function addCrew(info){crew.push({id:Date.now(),name:names[rand(0,5)],
+  cp:rand(10,999),hp:rand(20,200),atk:rand(5,99),def:rand(5,99),img:info.uri,dx:info.offX,dy:info.offY});renderList();}
+document.getElementById('btn-add').onclick=()=>addCrew(blobInfo(colours[rand(0,3)]));
+
+let sort='newest';document.getElementById('sort').onchange=e=>{sort=e.target.value;renderList();}
+function sortArr(a){const num=(k,d)=>d==='asc'?(x,y)=>x[k]-y[k]:(x,y)=>y[k]-x[k];
+ switch(sort){
+  case'name-asc':return a.sort((x,y)=>x.name.localeCompare(y.name));
+  case'name-desc':return a.sort((x,y)=>y.name.localeCompare(x.name));
+  case'cp-asc':return a.sort(num('cp','asc'));case'cp-desc':return a.sort(num('cp','desc'));
+  case'hp-asc':return a.sort(num('hp','asc'));case'hp-desc':return a.sort(num('hp','desc'));
+  case'atk-asc':return a.sort(num('atk','asc'));case'atk-desc':return a.sort(num('atk','desc'));
+  case'def-asc':return a.sort(num('def','asc'));case'def-desc':return a.sort(num('def','desc'));
+  default:return a.sort((x,y)=>y.id-x.id);}
+}
+function renderList(){
+  const g=document.getElementById('cards');if(!g)return;g.innerHTML='';
+  sortArr([...crew]).forEach(c=>{
+    const d=document.createElement('div');d.className='card';
+    d.innerHTML=`<div class="thumb"><img src="${c.img}" style="transform:translate(${c.dx}px,${c.dy}px)"></div>
+                 <div class="name">${c.name}</div><div class="cp">CP ${c.cp}</div>`;
+    d.onclick=()=>openModal(c);g.appendChild(d);
+  });
+}
+
+const panel=document.getElementById('panel');
+document.getElementById('btn-creatures').onclick=()=>panel.classList.add('open');
+document.getElementById('btn-close').onclick=()=>panel.classList.remove('open');
+
+const modal=document.getElementById('modal');let cur=null;
+function openModal(c){
+  cur=c;document.getElementById('modal-thumb').innerHTML=`<img src="${c.img}" style="transform:translate(${c.dx}px,${c.dy}px)">`;
+  document.getElementById('modal-name').textContent=c.name;document.getElementById('modal-id').textContent='ID '+c.id;
+  ['cp','hp','atk','def'].forEach(k=>document.getElementById('stat-'+k).textContent=c[k]);
+  renameWrap.style.display='none';renameBtn.style.display='inline-block';modal.classList.add('show');
+}
+document.getElementById('modal-close').onclick=()=>modal.classList.remove('show');
+modal.onclick=e=>{if(e.target===modal)modal.classList.remove('show')}
+
+const renameBtn=document.getElementById('rename-btn'),renameWrap=document.getElementById('rename-wrap'),
+      renameInput=document.getElementById('rename-input');
+renameBtn.onclick=()=>{renameInput.value=cur.name;renameWrap.style.display='flex';renameBtn.style.display='none';renameInput.focus();}
+function finishRename(save){if(save){const v=renameInput.value.trim();if(v)cur.name=v;}renderList();openModal(cur);}
+document.getElementById('rename-save').onclick=()=>finishRename(true);
+document.getElementById('rename-cancel').onclick=()=>finishRename(false);
+renameInput.onkeydown=e=>{if(e.key==='Enter')finishRename(true)};
+
+/* ─── INIT ───────────────────────────── */
+setBounds();spawnWilds();
+</script>
+</body>
+</html>
