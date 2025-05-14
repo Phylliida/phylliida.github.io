@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Chat-data browser</title>
-
+<script src="https://unpkg.com/pako@2.1.0/dist/pako.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
@@ -83,7 +83,37 @@ const $=(t,a={},...k)=>{
   return e;
 };
 const spinner=()=>$('span',{class:'spinner',title:'Loading…'});
-const fetchJson=u=>fetch(u,{cache:'reload'}).then(r=>{if(!r.ok)throw Error(r.status);return r.json();});
+async function fetchJson(u) {
+  const res = await fetch(u,{cache:'reload'});
+  if (!res.ok) throw new Error(res.status);
+  // we used compressed jsons
+  return res.json();
+}
+
+function sleep(seconds) {
+  return new Promise(resolve => setTimeout(resolve, seconds * 1000));
+}
+    
+async function fetchJsonGz(url) {
+  var res;
+  var numRetries = 5;
+  for (var retryIter = 0; retryIter < numRetries; retryIter++) {
+    res = await fetch("url,{cache:'reload'});
+    if (res.ok) break;
+    if (retryIter == numRetries-1) {
+        throw new Error(res.status);
+    } else {
+        await sleep(1); // rate limit
+    }
+  }
+
+  const ab   = await res.arrayBuffer();     // wait here
+  const buf  = new Uint8Array(ab);
+  const text = pako.ungzip(buf, { to: 'string' });
+
+
+  return JSON.parse(text);
+}
 const join=p=>p.join('.'), split=s=>s.split('.');
 const getNum=i=>i?.numConversations??i?.numConvs??0;
 const isPlaceholder=i=>typeof i==='object'&&i!==null&&'path'in i&&!('children'in i);
@@ -92,7 +122,7 @@ const sortByCount=a=>[...a].sort((p,q)=>count(q)-count(p));
 const facetCount=f=>Array.isArray(f.hierarchy)?f.hierarchy.reduce((s,c)=>s+count(c),0):0;
 
 const ROOT="/modelwelfare/qwenbailconversationsWithJournals/rootObjects.json";
-const pathMap=new Map(), loadedPlaceholders=new Set();
+const pathMap=new Map();
 let openConvHash=null;
 
 /* ───────── root build ───────── */
@@ -118,9 +148,10 @@ function buildFacets(raw){
   restoreFromHash();
 }
 
+
 /* ───────── builders ───────── */
-function buildNode(item,pathArr,siblingTotal){
-  if(isPlaceholder(item)) return buildPlaceholder(item,pathArr,siblingTotal);
+async function buildNode(item,pathArr,siblingTotal){
+  if(isPlaceholder(item)) return await buildPlaceholder(item,pathArr,siblingTotal);
   const p=join(pathArr);
   const details=$('details',{}); pathMap.set(p,details);
   const own=count(item), pct=siblingTotal?Math.round(own*100/siblingTotal):100;
@@ -135,22 +166,10 @@ function buildNode(item,pathArr,siblingTotal){
   details.addEventListener('toggle',handleToggle);
   return $('li',{},details);
 }
-function buildPlaceholder(ph,pathArr,siblingTotal){
+async function buildPlaceholder(ph,pathArr,siblingTotal){
   const url=ph.path, pathStr=join(pathArr);
-  const li=$('li',{'data-url':url,'data-path':pathStr},spinner());
-  const load=async()=>{
-    if(li.dataset.loaded) return;
-    li.dataset.loaded=1; loadedPlaceholders.add(pathStr);
-    const data=await fetchJson(url);
-    li.replaceWith(
-      (data.children||data.conversations)
-        ? buildNode(data,pathArr,siblingTotal)
-        : buildLeaf(url,data));
-    updateHash();
-  };
-  li.__load=load;
-  new IntersectionObserver(([e],o)=>{if(e.isIntersecting){load().then(()=>o.disconnect());}}).observe(li);
-  return li;
+  const data=await fetchJsonGz(url);
+  return (data.children||data.conversations) ?  await buildNode(data,pathArr,siblingTotal) : buildLeaf(url,data);
 }
 function buildLeaf(url,data){
   const d=$('details',{},$('summary',{},url.split('/').pop()));
@@ -159,16 +178,29 @@ function buildLeaf(url,data){
 }
 
 /* ───────── toggle handler ───────── */
-function handleToggle(e){
+async function handleToggle(e){
   const det=e.currentTarget;
   const parentPath=join(det.__pathArr);
   if(det.open){
     if(!det.__built && det.__childrenData){
       const childTotal=det.__childrenData.reduce((s,i)=>s+count(i),0);
       const ul=$('ul',{class:'tree'});
-      det.__childrenData.forEach((ch,i)=>ul.appendChild(
-        buildNode(ch,[...det.__pathArr,i],childTotal)));
       det.appendChild(ul);
+      for (var i in det.__childrenData) {
+        var ch = det.__childrenData[i];
+        var spinnerChild = "";
+        if (isPlaceholder(ch)) {
+            spinnerChild = $('li',{},spinner());
+            ul.appendChild(spinnerChild);
+        }
+        var childNode = await buildNode(ch,[...det.__pathArr,i],childTotal);
+        if (isPlaceholder(ch)) {
+            spinnerChild.replaceWith(childNode);
+        }
+        else {
+            ul.appendChild(childNode);
+        }
+      }
       det.__built=true;
     }
     if(det.__convs && !det.__convsBuilt){
@@ -242,15 +274,26 @@ function mdToHtml(t=''){
   return h.replace(/\n/g,'<br>');
 }
 
+
+var curHash = "";
+
+window.addEventListener("hashchange", function(event) {
+  if (window.location.hash != curHash && modifyHashAllowed) {
+    restoreFromHash().then(() => {
+        curHash = window.location.hash;
+    });
+  }
+});
+
 /* ───────── hash sync ───────── */
 function updateHash(){
   if(!modifyHashAllowed)return;
   const open=[...pathMap.entries()].filter(([,d])=>d.open).map(([p])=>p);
-  const loaded=[...loadedPlaceholders].map(p=>'p!'+p);
   if(openConvHash)open.push(openConvHash);
-  hashStr = [...open,...loaded].join(',');
+  hashStr = [...open].join(',');
   const compressedBase64 = LZUTF8.encodeBase64(LZUTF8.compress(hashStr));
-  window.location.hash = encodeURIComponent(compressedBase64);
+  curHash = "#" + encodeURIComponent(compressedBase64);
+  window.location.hash = curHash;
 }
 let modifyHashAllowed=true;
 
@@ -261,21 +304,18 @@ async function expandPath(pathStr){
     prefix.push(seg);
     const cur=join(prefix);
     let det=pathMap.get(cur);
-    if(!det){
-      const li=document.querySelector(`li[data-path="${CSS.escape(cur)}"]`);
-      if(li?.__load) await li.__load();
-      det=pathMap.get(cur);
-    }
     if(det && !det.open){
-      det.open=true;
-      handleToggle({currentTarget:det});
+      det.removeEventListener('toggle', handleToggle);
+      det.open = true;
+      await handleToggle({ currentTarget: det }); // run it yourself
+      det.addEventListener('toggle', handleToggle);
     }
   }
 }
 
 async function restoreFromHash(){
   modifyHashAllowed=false;
-  hashStr = location.hash
+  hashStr = window.location.hash;
   if (hashStr.length > 0) {
     try {
       hashStr = decodeURIComponent(hashStr.substring(1)) // remove #
@@ -285,21 +325,16 @@ async function restoreFromHash(){
       hashStr = ""
     }
   }
+  curHash = window.location.hash;
 
   const segs=decodeURIComponent(hashStr).split(',').filter(Boolean);
   const convSeg=segs.find(s=>s.startsWith('c!'));
-  const plSegs=segs.filter(s=>s.startsWith('p!')).map(s=>s.slice(2));
 
   const catSegs=[], convListSegs=[];
-  segs.filter(s=>s && !s.startsWith('p!') && s!==convSeg).forEach(p=>{
+  segs.filter(s=>s && s!==convSeg).forEach(p=>{
     p.endsWith('$c')?convListSegs.push(p):catSegs.push(p);
   });
 
-  for(const p of plSegs){
-    loadedPlaceholders.add(p);
-    const li=document.querySelector(`li[data-path="${CSS.escape(p)}"]`);
-    if(li?.__load) await li.__load();
-  }
 
   for(const p of [...catSegs].sort((a,b)=>a.split('.').length-b.split('.').length)){
     await expandPath(p);
@@ -316,7 +351,6 @@ async function restoreFromHash(){
     const det=pathMap.get(path);
     if(det && det.__convs) openConversation(det.__convs[+idx],split(path),+idx);
   }else closeConversation();
-
   modifyHashAllowed=true;
 }
 
