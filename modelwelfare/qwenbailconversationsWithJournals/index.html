@@ -168,7 +168,7 @@ async function buildNode(item,pathArr,siblingTotal){
 }
 async function buildPlaceholder(ph,pathArr,siblingTotal){
   const url=ph.path, pathStr=join(pathArr);
-  const data=await fetchJsonGz(url);
+  const data=await fetchJson(url);
   return (data.children||data.conversations) ?  await buildNode(data,pathArr,siblingTotal) : buildLeaf(url,data);
 }
 function buildLeaf(url,data){
