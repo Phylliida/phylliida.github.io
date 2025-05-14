@@ -98,7 +98,7 @@ async function fetchJsonGz(url) {
   var res;
   var numRetries = 5;
   for (var retryIter = 0; retryIter < numRetries; retryIter++) {
-    res = await fetch("url,{cache:'reload'});
+    res = await fetch(url,{cache:'reload'});
     if (res.ok) break;
     if (retryIter == numRetries-1) {
         throw new Error(res.status);
