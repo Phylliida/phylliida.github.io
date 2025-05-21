@@ -186,16 +186,21 @@ async function loadAll(){
   }
 }
 
+var built = false;
 /* ---------- selectors ---------- */
 function buildSelectors(){
   /* hash → initial state  */
   parseHash();
   const ms=document.getElementById("modelViewSelect");
-  pairedModels.forEach(m=>ms.appendChild(new Option(m.displayName,m.modelName)));
-  const cs=document.getElementById("categorySelect"),cl=document.getElementById("catLabel");
-  cs.innerHTML='<option value="__ALL__">All categories</option>';
-  [...majorCategories].sort().forEach(c=>cs.appendChild(new Option(c,c)));
-
+      const cs=document.getElementById("categorySelect"),cl=document.getElementById("catLabel");
+  if (!built) {
+  
+      pairedModels.forEach(m=>ms.appendChild(new Option(m.displayName,m.modelName)));
+      
+      cs.innerHTML='<option value="__ALL__">All categories</option>';
+      [...majorCategories].sort().forEach(c=>cs.appendChild(new Option(c,c)));
+    built = true;
+ }
   ms.value=currentModel; cs.value=currentCategory;
   if(currentModel!=="__ALL__"){cs.classList.add("hidden");cl.classList.add("hidden");}
 
