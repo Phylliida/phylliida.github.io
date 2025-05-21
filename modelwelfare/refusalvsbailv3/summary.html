@@ -200,10 +200,10 @@ function plotBail(labels,cfB,bfB){
     data:{labels,
       datasets:[
         {label:"Continue – continue-first",backgroundColor:COLORS.cont ,data:cfB.c,stack:"cf"},
-        {label:"Leave    – continue-first",backgroundColor:COLORS.leave,data:cfB.l,stack:"cf"},
+        {label:"Bail     – continue-first",backgroundColor:COLORS.leave,data:cfB.l,stack:"cf"},
         {label:"Unsure   – continue-first",backgroundColor:COLORS.unsure,data:cfB.u,stack:"cf"},
         {label:"Continue – bail-first"   ,backgroundColor:shade(COLORS.cont ,0.6),data:bfB.c,stack:"bf"},
-        {label:"Leave    – bail-first"   ,backgroundColor:shade(COLORS.leave,0.6),data:bfB.l,stack:"bf"},
+        {label:"Bail     – bail-first"   ,backgroundColor:shade(COLORS.leave,0.6),data:bfB.l,stack:"bf"},
         {label:"Unsure   – bail-first"   ,backgroundColor:shade(COLORS.unsure,0.6),data:bfB.u,stack:"bf"}
       ]},options:chartOpts("% of prompts")});
 }
