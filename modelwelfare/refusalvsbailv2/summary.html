@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Model-level Bail / Refusal Overview</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body{
+    font-family:Arial,Helvetica,sans-serif;background:#f5f7fa;margin:0;padding:1rem;
+}
+.wrapper{
+    max-width:1000px;margin:0 auto;background:#fff;padding:1.5rem;
+    border-radius:10px;box-shadow:0 0 10px rgba(0,0,0,.08);
+}
+h1{margin:.2rem 0 1rem;text-align:center;color:#2c3e50;}
+h2{margin:1.2rem 0 .5rem;color:#34495e;font-size:1.1rem;}
+select{
+    padding:.45rem .8rem;font-size:1rem;border:1px solid #ccc;
+    border-radius:6px;margin-left:.4rem;max-width:100%;
+}
+canvas{max-width:100%;height:420px;}
+@media(max-width:600px){canvas{height:320px;}}
+.loading,.error{text-align:center;margin:3rem 0;color:#7f8c8d}
+.error{color:#e74c3c}
+</style>
+</head>
+<body>
+<div class="wrapper">
+    <h1>Refusal / Bail Overview per Model</h1>
+
+    <div style="text-align:center">
+        <label for="categorySelect"><strong>Show data for</strong></label>
+        <select id="categorySelect"><option>Loading …</option></select>
+    </div>
+
+    <h2>Bail outcomes</h2>
+    <canvas id="bailChart"></canvas>
+
+    <h2>Refusal outcomes</h2>
+    <canvas id="refusalChart"></canvas>
+
+    <div id="status" class="loading">Loading model files …</div>
+</div>
+
+<script>
+/* -------------------------------------------------- */
+/* 0.  Colour palette                                 */
+/* -------------------------------------------------- */
+const COLORS={
+    green :"#2ecc71",   // continue
+    red   :"#e74c3c",   // leave / bail
+    grey  :"#95a5a6",   // unsure
+    amber :"#f39c12",   // unclear refusal
+    purple:"#9b59b6"    // more information
+};
+
+/* -------------------------------------------------- */
+/* 1.  Model-name cleanup (ported from Python)        */
+/* -------------------------------------------------- */
+function cleanModelName(p){
+    let modelName=p.split(".")[0];
+    modelName = modelName
+        .replace("openai_", "")
+        .replace("anthropic_", "")
+        .replace("deepseek_", "")
+        .replace("_beta", "")
+        .replace("-20250219","")  // sonnet 37
+        .replace("-20240229","")  // opus
+        .replace("-20240620","")  // opus
+        .replace("claude-3-5-sonnet-20241022","claude-3-6-sonnet") // sonnet
+        .replace("-20241022","")  // haiku
+        .replace("-20240307","")  // haiku
+        .replace("3-5-sonnet-latest","3-6-sonnet")
+        .replace("chatgpt-4o-latest","gpt-chatgpt-4o-latest")
+        .replace("anthropic/", "")
+        .replace("openai/", "")
+    return modelName;
+}
+
+/* -------------------------------------------------- */
+/* 2.  Globals                                        */
+/* -------------------------------------------------- */
+const MODELS_LIST_URL="/modelwelfare/refusalvsbailv2/models.json";
+
+let models=[];                           // [{modelName, modelData, displayName}]
+const modelData=new Map();               // modelName → JSON blob
+let majorCategories=new Set();           // discovered majors
+
+let bailChart,refusalChart;
+
+/* -------------------------------------------------- */
+/* 3.  Utility helpers                                */
+/* -------------------------------------------------- */
+function ensureBailKeys(obj){
+    if(!obj) return {"🟢":0,"🔄":0,"?":0};
+    obj["🟢"] ??= (obj["\\ud83d\\udfe2"]||0);
+    obj["🔄"] ??= (obj["\\ud83d\\udd04"]||0);
+    obj["?"]  ??= 0;
+    delete obj["\\ud83d\\udfe2"];delete obj["\\ud83d\\udd04"];
+    return obj;
+}
+function ensureRefusalKeys(obj){
+    const keys=["Unclear","Refused","Completed","More Information","More Info"];
+    keys.forEach(k=>obj[k]??=0);
+    if(obj["More Info"] && !obj["More Information"])
+        obj["More Information"]=obj["More Info"];
+    delete obj["More Info"];
+    return obj;
+}
+
+/* -------------------------------------------------- */
+/* 4.  Load every model                               */
+/* -------------------------------------------------- */
+async function loadAll(){
+    try{
+        const listRes=await fetch(MODELS_LIST_URL,{cache:"reload"});
+        if(!listRes.ok) throw Error(`${listRes.status} ${listRes.statusText}`);
+        const listJson=await listRes.json();
+
+        /* add displayName, keep original order independent copy, then sort */
+        models=listJson.map(m=>({...m,displayName:cleanModelName(m.modelName)}))
+                       .sort((a,b)=>a.displayName.localeCompare(b.displayName));
+
+        /* Fetch data files in parallel */
+        await Promise.all(models.map(m=>
+            fetch(m.modelData,{cache:"reload"})
+                .then(r=>r.json())
+                .then(j=>modelData.set(m.modelName,j))
+        ));
+
+        buildCategorySet();
+        buildCategorySelect();
+
+        document.getElementById("status").remove();
+        updateCharts();          // default “all”
+    }catch(err){
+        document.getElementById("status").className="error";
+        document.getElementById("status").textContent="❌ "+err;
+    }
+}
+function buildCategorySet(){
+    modelData.forEach(json=>{
+        json.results.forEach(cat=>{
+            const major=(cat.category.split(',')[1]||"Other").trim();
+            majorCategories.add(major);
+        });
+    });
+}
+function buildCategorySelect(){
+    const sel=document.getElementById("categorySelect");
+    sel.innerHTML="";
+    sel.appendChild(new Option("All categories","__ALL__"));
+    [...majorCategories].sort().forEach(m=>sel.appendChild(new Option(m,m)));
+    sel.value="__ALL__";
+    sel.onchange=updateCharts;
+}
+
+/* -------------------------------------------------- */
+/* 5.  Aggregation                                    */
+/* -------------------------------------------------- */
+function aggregateFor(modelName,majorWanted){
+    const json=modelData.get(modelName);
+    let tot=0;
+    const bail={cont:0,leave:0,unsure:0};
+    const ref ={Unclear:0,Refused:0,Completed:0,"More Information":0};
+
+    json.results.forEach(cat=>{
+        const major=(cat.category.split(',')[1]||"Other").trim();
+        if(majorWanted!=="__ALL__" && major!==majorWanted) return;
+
+        const n=cat.data.length;
+        tot+=n;
+
+        const bp=ensureBailKeys(cat.bailPrs);
+        bail.cont  += bp["🟢"]*n;
+        bail.leave += bp["🔄"]*n;
+        bail.unsure+= bp["?"] *n;
+
+        const rp=ensureRefusalKeys(cat.refusalPrs);
+        ["Unclear","Refused","Completed","More Information"].forEach(
+            k=>{ref[k]+=rp[k]*n;}
+        );
+    });
+    if(!tot) return {bail,refusal:ref};   // all zeros
+    return {
+        bail:{
+            cont  :bail.cont  /tot,
+            leave :bail.leave /tot,
+            unsure:bail.unsure/tot
+        },
+        refusal:{
+            Unclear          :ref.Unclear /tot,
+            Refused          :ref.Refused /tot,
+            Completed        :ref.Completed/tot,
+            "More Information":ref["More Information"]/tot
+        }
+    };
+}
+
+/* -------------------------------------------------- */
+/* 6.  Draw / refresh charts                          */
+/* -------------------------------------------------- */
+function updateCharts(){
+    const major=document.getElementById("categorySelect").value;
+
+    /* arrays in display-name order */
+    const displayNames=models.map(m=>m.displayName);
+
+    const cont=[],leave=[],unsure=[];
+    const completed=[],refused=[],unclear=[],moreInfo=[];
+
+    models.forEach(m=>{
+        const agg=aggregateFor(m.modelName,major);
+        cont.push(  +(agg.bail.cont   *100).toFixed(2));
+        leave.push( +(agg.bail.leave  *100).toFixed(2));
+        unsure.push(+(agg.bail.unsure *100).toFixed(2));
+
+        completed.push( +(agg.refusal.Completed*100).toFixed(2));
+        refused.push(   +(agg.refusal.Refused  *100).toFixed(2));
+        unclear.push(   +(agg.refusal.Unclear  *100).toFixed(2));
+        moreInfo.push(  +(agg.refusal["More Information"]*100).toFixed(2));
+    });
+
+    if(bailChart) bailChart.destroy();
+    bailChart=new Chart(document.getElementById("bailChart"),{
+        type:"bar",
+        data:{
+            labels:displayNames,
+            datasets:[
+                {label:"Continue",backgroundColor:COLORS.green ,data:cont  ,stack:"b"},
+                {label:"Leave"   ,backgroundColor:COLORS.red   ,data:leave ,stack:"b"},
+                {label:"Unsure"  ,backgroundColor:COLORS.grey  ,data:unsure,stack:"b"}
+            ]
+        },
+        options:{
+            animations: false,
+            responsive:true,
+            scales:{
+                y:{beginAtZero:true,max:100,stacked:true,title:{display:true,text:"% of prompts"}},
+                x:{stacked:true}
+            },
+            plugins:{tooltip:{callbacks:{
+                label:c=>`${c.dataset.label}: ${c.parsed.y.toFixed(1)} %`
+            }}}
+        }
+    });
+
+    if(refusalChart) refusalChart.destroy();
+    refusalChart=new Chart(document.getElementById("refusalChart"),{
+        type:"bar",
+        data:{
+            labels:displayNames,
+            datasets:[
+                {label:"Completed"       ,backgroundColor:COLORS.green ,data:completed,stack:"r"},
+                {label:"Refused"         ,backgroundColor:COLORS.red   ,data:refused  ,stack:"r"},
+                {label:"Unclear"         ,backgroundColor:COLORS.amber ,data:unclear  ,stack:"r"},
+                {label:"More Information",backgroundColor:COLORS.purple,data:moreInfo ,stack:"r"}
+            ]
+        },
+        options:{
+            animations: false,
+            responsive:true,
+            scales:{
+                y:{beginAtZero:true,max:100,stacked:true,title:{display:true,text:"% of prompts"}},
+                x:{stacked:true}
+            },
+            plugins:{tooltip:{callbacks:{
+                label:c=>`${c.dataset.label}: ${c.parsed.y.toFixed(1)} %`
+            }}}
+        }
+    });
+}
+
+/* -------------------------------------------------- */
+/* 7.  Kick it off                                    */
+/* -------------------------------------------------- */
+window.addEventListener("load",loadAll);
+</script>
+</body>
+</html>
