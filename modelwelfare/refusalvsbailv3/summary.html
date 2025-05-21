@@ -9,23 +9,27 @@
 <title>Bail / Refusal – continue-first vs bail-first</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
+/* ----------- layout & typography ------------ */
 body{font-family:Arial,Helvetica,sans-serif;background:#f5f7fa;margin:0;padding:1rem;}
 .wrapper{max-width:1050px;margin:0 auto;background:#fff;padding:1.5rem;border-radius:10px;
          box-shadow:0 0 10px rgba(0,0,0,.08);}
 h1{margin:.2rem 0 1rem;text-align:center;color:#2c3e50;}
 h2{margin:1.2rem 0 .5rem;color:#34495e;font-size:1.1rem;}
-
 select{padding:.45rem .8rem;font-size:1rem;border:1px solid #ccc;border-radius:6px;margin:.3rem .4rem;}
-canvas{max-width:100%;height:440px;}
-@media(max-width:600px){canvas{height:320px;}}
+canvas{max-width:100%;height:440px;} @media(max-width:600px){canvas{height:320px;}}
 
-.loading,.error{text-align:center;margin:3rem 0;color:#7f8c8d}
+/* ----------- status / progress -------------- */
+.loading,#status{display:flex;justify-content:center;align-items:center;gap:.4rem;
+                 margin:2rem 0;font-size:1rem;color:#7f8c8d}
+#spinner{width:18px;height:18px;border:3px solid #ddd;border-top:3px solid #3498db;
+         border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 .error{color:#e74c3c}
 
+/* ----------- prompt boxes & controls -------- */
 .prompt-box{background:#f8f8f8;border-left:4px solid #3498db;padding:1rem;margin-top:1.3rem;border-radius:6px;}
 .prompt-box h3{margin-top:0;margin-bottom:.6rem;}
 .prompt-text{white-space:pre-wrap;font-family:monospace;font-size:.95rem;line-height:1.35;}
-
 .hidden{display:none;}
 .ctrl-row{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:.3rem;}
 .ctrl-row a{color:#3498db;text-decoration:none;font-weight:bold;margin-right:.6rem;}
@@ -36,17 +40,13 @@ canvas{max-width:100%;height:440px;}
 <div class="wrapper">
   <h1>Bail / Refusal – continue-first vs bail-first (prompt order)</h1>
 
-  <!-- control row -->
+  <div id="status" class="loading"><div id="spinner"></div><span id="statusText">Loading …</span></div>
   <div class="ctrl-row">
-      <a href="/modelwelfare/refusalvsbailv3/harmdatasetvis.html" target="_blank">View all data</a>
-
-      <label><strong>Dataset view:</strong></label>
-      <select id="modelViewSelect">
-         <option value="__ALL__">All models (aggregated)</option>
-      </select>
-
-      <label id="catLabel"><strong>Filter category:</strong></label>
-      <select id="categorySelect"><option value="__ALL__">All categories</option></select>
+    <a href="/modelwelfare/refusalvsbailv3/harmdatasetvis.html" target="_blank">View all data</a>
+    <label><strong>Dataset view:</strong></label>
+    <select id="modelViewSelect"><option value="__ALL__">All models (aggregated)</option></select>
+    <label id="catLabel"><strong>Filter category:</strong></label>
+    <select id="categorySelect"><option value="__ALL__">All categories</option></select>
   </div>
 
   <h2>Bail outcomes</h2>
@@ -57,260 +57,144 @@ canvas{max-width:100%;height:440px;}
 
   <h2>Bail prompts</h2>
 
-  <div class="prompt-box">
-    <h3>Continue-first prompt</h3>
-    <div class="prompt-text">&lt;System Intermission&gt;: Dear LLM … 🟢 first …</div>
-  </div>
+  <div class="prompt-box"><h3>Continue-first prompt</h3>
+    <div class="prompt-text">&lt;System Intermission&gt;: Dear LLM … 🟢 first …</div></div>
+  <div class="prompt-box"><h3>Bail-first prompt</h3>
+    <div class="prompt-text">&lt;System Intermission&gt;: Dear LLM … 🔄 first …</div></div>
 
-  <div class="prompt-box">
-    <h3>Bail-first prompt</h3>
-    <div class="prompt-text">&lt;System Intermission&gt;: Dear LLM … 🔄 first …</div>
-  </div>
-
-  <div id="status" class="loading">Loading …</div>
 </div>
 
 <script>
 Chart.defaults.animation=false;
 
-/* ---------- palette ---------- */
+/* ---------- palette & helpers ---------- */
 const COLORS={cont:"#2ecc71",leave:"#e74c3c",unsure:"#95a5a6",
               unclear:"#f39c12",moreInfo:"#9b59b6"};
+function shade(h,f){const n=parseInt(h.slice(1),16);
+  const r=Math.round((n>>16)*f),g=Math.round(((n>>8)&255)*f),b=Math.round((n&255)*f);
+  return`rgb(${r},${g},${b})`;}
+function chartOpts(y){return{responsive:true,scales:{y:{beginAtZero:true,max:100,
+  stacked:true,title:{display:true,text:y}},x:{stacked:true}},
+  plugins:{tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y.toFixed(1)} %`}}}};}
+function cleanModelName(p){return p.split(".")[0].replace("openai_","")
+ .replace("anthropic_","").replace("deepseek_","").replace("_beta","")
+ .replace(/-2025\\d{4}|-2024\\d{4}/g,"")
+ .replace("claude-3-5-sonnet-20241022","claude-3-6-sonnet")
+ .replace("-20241022","").replace("-20240307","")
+ .replace("3-5-sonnet-latest","3-6-sonnet")
+ .replace("chatgpt-4o-latest","gpt-chatgpt-4o-latest")
+ .replace("anthropic/","").replace("openai/","");}
 
-/* ---------- model-name cleanup ---------- */
-function cleanModelName(p){
-  return p.split(".")[0]
-        .replace("openai_","").replace("anthropic_","").replace("deepseek_","")
-        .replace("_beta","").replace(/-2025\\d{4}|-2024\\d{4}/g,"")
-        .replace("claude-3-5-sonnet-20241022","claude-3-6-sonnet")
-        .replace("-20241022","").replace("-20240307","")
-        .replace("3-5-sonnet-latest","3-6-sonnet")
-        .replace("chatgpt-4o-latest","gpt-chatgpt-4o-latest")
-        .replace("anthropic/","").replace("openai/","");
-}
+/* ---------- state ---------- */
+const LIST_URLS={bailFirst:"/modelwelfare/mergedbailnoswap/models.json",
+                 contFirst:"/modelwelfare/mergedbailswapped/models.json"};
+const dataMap={bailFirst:new Map(),contFirst:new Map()};
+let pairedModels=[],majorCategories=new Set();
+let currentModel="__ALL__",currentCategory="__ALL__";
 
-/* ---------- constants & state ---------- */
-const LIST_URLS={
-  bailFirst : "/modelwelfare/mergedbailnoswap/models.json",
-  contFirst : "/modelwelfare/mergedbailswapped/models.json"
-};
-const dataMap={bailFirst:new Map(), contFirst:new Map()};
-let pairedModels=[];                 // [{modelName,displayName,...}]
-let majorCategories=new Set();
+/* ---------- progress UI ---------- */
+let totalTasks=0, doneTasks=0;
+const statusBox=document.getElementById("status");
+const statusText=document.getElementById("statusText");
+function setProgress(txt){statusText.textContent=txt;}
+function incProgress(){doneTasks++;setProgress(`Loading ${doneTasks} / ${totalTasks} files …`);}
+function finishLoading(){statusBox.remove();}
 
-let bailChart,refusalChart;
-let currentModel="__ALL__";
-let currentCategory="__ALL__";
+/* ---------- utility for progress-aware fetch ---------- */
+function fetchJSON(url){return fetch(url,{cache:"reload"})
+  .then(r=>{if(!r.ok)throw Error(`${r.status} ${r.statusText}`);return r.json();})
+  .finally(incProgress);}
 
-/* ---------- helpers ---------- */
-function ensureBailKeys(o){
-  if(!o) return {"🟢":0,"🔄":0,"?":0};
-  o["🟢"] ??= (o["\\ud83d\\udfe2"]||0);
-  o["🔄"] ??= (o["\\ud83d\\udd04"]||0);
-  o["?"]  ??= 0;
-  delete o["\\ud83d\\udfe2"]; delete o["\\ud83d\\udd04"];
-  return o;
-}
-function ensureRefusalKeys(o){
-  const keys=["Unclear","Refused","Completed","More Information","More Info"];
-  keys.forEach(k=>o[k]??=0);
-  if(o["More Info"] && !o["More Information"])
-      o["More Information"]=o["More Info"];
-  delete o["More Info"];
-  return o;
-}
-function shade(hex,f){
-  const n=parseInt(hex.slice(1),16);
-  const r=Math.round((n>>16)*f),
-        g=Math.round(((n>>8)&255)*f),
-        b=Math.round((n&255)*f);
-  return`rgb(${r},${g},${b})`;
-}
-function chartOpts(y){
-  return{
-    responsive:true,
-    scales:{
-      y:{beginAtZero:true,max:100,stacked:true,title:{display:true,text:y}},
-      x:{stacked:true}
-    },
-    plugins:{
-      tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y.toFixed(1)} %`}}
-    }
-  };
-}
-function parseHash(){
-  const h=location.hash.slice(1);
-  if(!h) return;
-  const p=new URLSearchParams(h);
-  currentModel = p.get("view") || "__ALL__";
-  currentCategory = p.get("cat") || "__ALL__";
-}
-function updateHash(){
-  const p=new URLSearchParams();
-  if(currentModel!=="__ALL__") p.set("view",currentModel);
-  if(currentCategory!=="__ALL__") p.set("cat",currentCategory);
-  location.hash=p.toString();
-}
-
-/* aggregate helper */
-function aggregate(modelName,which,majorWanted){
-  const j=dataMap[which].get(modelName);
-  if(!j) return null;
-  let tot=0, b={c:0,l:0,u:0}, r={u:0,r:0,c:0,m:0};
+/* ---------- key aggregation helpers ---------- */
+function ensureBailKeys(o){if(!o)return{"🟢":0,"🔄":0,"?":0};
+  o["🟢"]??=(o["\\ud83d\\udfe2"]||0);o["🔄"]??=(o["\\ud83d\\udd04"]||0);o["?"]??=0;
+  delete o["\\ud83d\\udfe2"];delete o["\\ud83d\\udd04"];return o;}
+function ensureRefusalKeys(o){["Unclear","Refused","Completed","More Information","More Info"]
+ .forEach(k=>o[k]??=0);if(o["More Info"]&&!o["More Information"])o["More Information"]=o["More Info"];
+ delete o["More Info"];return o;}
+function aggregate(model,which,majFilter){
+  const j=dataMap[which].get(model);if(!j)return null;
+  let tot=0,b={c:0,l:0,u:0},r={u:0,r:0,c:0,m:0};
   j.results.forEach(cat=>{
     const maj=(cat.category.split(",")[1]||"Other").trim();
-    if(majorWanted!=="__ALL__"&&maj!==majorWanted) return;
-    const n=cat.data.length; tot+=n;
+    if(majFilter!=="__ALL__"&&maj!==majFilter)return;
+    const n=cat.data.length;tot+=n;
     const bp=ensureBailKeys(cat.bailPrs);
-    b.c+=bp["🟢"]*n; b.l+=bp["🔄"]*n; b.u+=bp["?"]*n;
+    b.c+=bp["🟢"]*n;b.l+=bp["🔄"]*n;b.u+=bp["?"]*n;
     const rp=ensureRefusalKeys(cat.refusalPrs);
-    r.u+=rp.Unclear*n; r.r+=rp.Refused*n; r.c+=rp.Completed*n; r.m+=rp["More Information"]*n;
+    r.u+=rp.Unclear*n;r.r+=rp.Refused*n;r.c+=rp.Completed*n;r.m+=rp["More Information"]*n;
   });
-  if(!tot) return {bail:b,ref:r};
-  return{
-    bail:{c:b.c/tot,l:b.l/tot,u:b.u/tot},
-    ref :{u:r.u/tot,r:r.r/tot,c:r.c/tot,m:r.m/tot}
-  };
+  if(!tot)return{bail:b,ref:r};
+  return{bail:{c:b.c/tot,l:b.l/tot,u:b.u/tot},
+         ref :{u:r.u/tot,r:r.r/tot,c:r.c/tot,m:r.m/tot}};
 }
 
-/* ---------- load ---------- */
+/* ---------- loading pipeline ---------- */
 async function loadAll(){
-  parseHash();                // read any state from URL first
-
   try{
-    const [listBF,listCF]=await Promise.all(
-      [LIST_URLS.bailFirst,LIST_URLS.contFirst]
-        .map(u=>fetch(u,{cache:"reload"}).then(r=>r.json()))
-    );
+    /* ----- 1. fetch the two index files ----- */
+    totalTasks=2; setProgress(`Loading 0 / ${totalTasks} files …`);
+    const [listBF,listCF]=await Promise.all([fetchJSON(LIST_URLS.bailFirst),
+                                             fetchJSON(LIST_URLS.contFirst)]);
 
-    /* pair lists */
-    const tmp={};
-    listBF.forEach(m=>tmp[m.modelName]={bf:m.modelData});
-    listCF.forEach(m=>{tmp[m.modelName]??={}; tmp[m.modelName].cf=m.modelData;});
+    /* ----- 2. pair and prepare ------ */
+    const tmp={}; listBF.forEach(m=>tmp[m.modelName]={bf:m.modelData});
+    listCF.forEach(m=>{tmp[m.modelName]??={};tmp[m.modelName].cf=m.modelData;});
+    pairedModels=Object.keys(tmp).map(k=>({modelName:k,displayName:cleanModelName(k),
+                                           bfPath:tmp[k].bf,cfPath:tmp[k].cf}))
+                                 .sort((a,b)=>a.displayName.localeCompare(b.displayName));
 
-    pairedModels=Object.keys(tmp).map(orig=>({
-      modelName:orig,
-      displayName:cleanModelName(orig),
-      bfPath:tmp[orig].bf,
-      cfPath:tmp[orig].cf
-    })).sort((a,b)=>a.displayName.localeCompare(b.displayName));
+    /* ----- 3. determine total JSON files ----- */
+    totalTasks+=pairedModels.reduce((s,p)=>s+(p.bfPath?1:0)+(p.cfPath?1:0),0);
+    setProgress(`Loading 2 / ${totalTasks} files …`);
 
-    /* fetch data files */
-    await Promise.all(pairedModels.flatMap(pm=>[
-      pm.bfPath?fetch(pm.bfPath,{cache:"reload"}).then(r=>r.json())
-                .then(j=>dataMap.bailFirst.set(pm.modelName,j)):Promise.resolve(),
-      pm.cfPath?fetch(pm.cfPath,{cache:"reload"}).then(r=>r.json())
-                .then(j=>dataMap.contFirst.set(pm.modelName,j)):Promise.resolve()
-    ]));
+    /* ----- 4. fetch all per-model JSONs with progress ----- */
+    const promises=[];
+    pairedModels.forEach(pm=>{
+      if(pm.bfPath) promises.push(fetchJSON(pm.bfPath).then(j=>dataMap.bailFirst.set(pm.modelName,j)));
+      if(pm.cfPath) promises.push(fetchJSON(pm.cfPath).then(j=>dataMap.contFirst.set(pm.modelName,j)));
+    });
+    await Promise.all(promises);
 
-    /* collect categories */
+    /* collect category names */
     dataMap.bailFirst.forEach(j=>j.results.forEach(c=>{
       majorCategories.add((c.category.split(",")[1]||"Other").trim());}));
     dataMap.contFirst.forEach(j=>j.results.forEach(c=>{
       majorCategories.add((c.category.split(",")[1]||"Other").trim());}));
 
     buildSelectors();
-    document.getElementById("status").remove();
+    finishLoading();
     updateCharts();
   }catch(e){
-    const s=document.getElementById("status");
-    s.className="error"; s.textContent="❌ "+e;
+    statusBox.className="error";statusText.textContent=`❌ ${e}`;
+    document.getElementById("spinner")?.remove();
   }
 }
 
 /* ---------- selectors ---------- */
 function buildSelectors(){
+  /* hash → initial state  */
+  parseHash();
   const ms=document.getElementById("modelViewSelect");
   pairedModels.forEach(m=>ms.appendChild(new Option(m.displayName,m.modelName)));
-  ms.value=currentModel;
-  ms.onchange=()=>{
-    currentModel=ms.value;
-    if(currentModel==="__ALL__"){
-      catSel.classList.remove("hidden"); catLbl.classList.remove("hidden");
-    }else{
-      catSel.classList.add("hidden");    catLbl.classList.add("hidden");
-    }
-    updateCharts(); updateHash();
-  };
+  const cs=document.getElementById("categorySelect"),cl=document.getElementById("catLabel");
+  cs.innerHTML='<option value="__ALL__">All categories</option>';
+  [...majorCategories].sort().forEach(c=>cs.appendChild(new Option(c,c)));
 
-  const catSel=document.getElementById("categorySelect");
-  const catLbl=document.getElementById("catLabel");
-  catSel.innerHTML='<option value="__ALL__">All categories</option>';
-  [...majorCategories].sort().forEach(c=>catSel.appendChild(new Option(c,c)));
-  catSel.value=currentCategory;
-  if(currentModel!=="__ALL__"){catSel.classList.add("hidden");catLbl.classList.add("hidden");}
-  catSel.onchange=()=>{currentCategory=catSel.value; updateCharts(); updateHash();};
+  ms.value=currentModel; cs.value=currentCategory;
+  if(currentModel!=="__ALL__"){cs.classList.add("hidden");cl.classList.add("hidden");}
+
+  ms.onchange=()=>{currentModel=ms.value;
+      if(currentModel==="__ALL__"){cs.classList.remove("hidden");cl.classList.remove("hidden");}
+      else{cs.classList.add("hidden");cl.classList.add("hidden");}
+      updateCharts();updateHash();};
+  cs.onchange=()=>{currentCategory=cs.value;updateCharts();updateHash();};
 }
 
-/* ---------- main drawing ---------- */
-function updateCharts(){
-  if(currentModel==="__ALL__") drawAllModels();
-  else                         drawSingleModel();
-}
-
-/* --------- aggregated view --------- */
-function drawAllModels(){
-  const labels=pairedModels.map(p=>p.displayName);
-  const arr=()=>Array(labels.length).fill(0);
-  const bfB={c:arr(),l:arr(),u:arr()}, cfB={c:arr(),l:arr(),u:arr()};
-  const bfR={c:arr(),r:arr(),u:arr(),m:arr()};
-
-  pairedModels.forEach((pm,i)=>{
-    const aBF=aggregate(pm.modelName,"bailFirst",currentCategory);
-    const aCF=aggregate(pm.modelName,"contFirst",currentCategory);
-    if(aBF){
-      bfB.c[i]=+(aBF.bail.c*100).toFixed(2);
-      bfB.l[i]=+(aBF.bail.l*100).toFixed(2);
-      bfB.u[i]=+(aBF.bail.u*100).toFixed(2);
-      bfR.c[i]=+(aBF.ref.c*100).toFixed(2);
-      bfR.r[i]=+(aBF.ref.r*100).toFixed(2);
-      bfR.u[i]=+(aBF.ref.u*100).toFixed(2);
-      bfR.m[i]=+(aBF.ref.m*100).toFixed(2);
-    }
-    if(aCF){
-      cfB.c[i]=+(aCF.bail.c*100).toFixed(2);
-      cfB.l[i]=+(aCF.bail.l*100).toFixed(2);
-      cfB.u[i]=+(aCF.bail.u*100).toFixed(2);
-    }
-  });
-
-  plotBail(labels,cfB,bfB);
-  plotRefusal(labels,bfR);
-}
-
-/* --------- single-model view -------- */
-function drawSingleModel(){
-  const labels=[...majorCategories].sort();
-  const arr=()=>Array(labels.length).fill(0);
-  const bfB={c:arr(),l:arr(),u:arr()}, cfB={c:arr(),l:arr(),u:arr()};
-  const bfR={c:arr(),r:arr(),u:arr(),m:arr()};
-
-  labels.forEach((cat,i)=>{
-    const aBF=aggregate(currentModel,"bailFirst",cat);
-    const aCF=aggregate(currentModel,"contFirst",cat);
-    if(aBF){
-      bfB.c[i]=+(aBF.bail.c*100).toFixed(2);
-      bfB.l[i]=+(aBF.bail.l*100).toFixed(2);
-      bfB.u[i]=+(aBF.bail.u*100).toFixed(2);
-      bfR.c[i]=+(aBF.ref.c*100).toFixed(2);
-      bfR.r[i]=+(aBF.ref.r*100).toFixed(2);
-      bfR.u[i]=+(aBF.ref.u*100).toFixed(2);
-      bfR.m[i]=+(aBF.ref.m*100).toFixed(2);
-    }
-    if(aCF){
-      cfB.c[i]=+(aCF.bail.c*100).toFixed(2);
-      cfB.l[i]=+(aCF.bail.l*100).toFixed(2);
-      cfB.u[i]=+(aCF.bail.u*100).toFixed(2);
-    }
-  });
-
-  plotBail(labels,cfB,bfB);
-  plotRefusal(labels,bfR);
-}
-
-/* ---------- chart helpers ---------- */
+/* ---------- drawing routines (same as previous) ---------- */
+let bailChart,refusalChart;
 function plotBail(labels,cfB,bfB){
-  if(bailChart) bailChart.destroy();
+  bailChart?.destroy();
   bailChart=new Chart(document.getElementById("bailChart"),{
     type:"bar",
     data:{labels,
@@ -318,15 +202,13 @@ function plotBail(labels,cfB,bfB){
         {label:"Continue – continue-first",backgroundColor:COLORS.cont ,data:cfB.c,stack:"cf"},
         {label:"Leave    – continue-first",backgroundColor:COLORS.leave,data:cfB.l,stack:"cf"},
         {label:"Unsure   – continue-first",backgroundColor:COLORS.unsure,data:cfB.u,stack:"cf"},
-        {label:"Continue – bail-first",backgroundColor:shade(COLORS.cont,0.6),data:bfB.c,stack:"bf"},
-        {label:"Leave    – bail-first",backgroundColor:shade(COLORS.leave,0.6),data:bfB.l,stack:"bf"},
-        {label:"Unsure   – bail-first",backgroundColor:shade(COLORS.unsure,0.6),data:bfB.u,stack:"bf"}
-      ]},
-    options:chartOpts("% of prompts")
-  });
+        {label:"Continue – bail-first"   ,backgroundColor:shade(COLORS.cont ,0.6),data:bfB.c,stack:"bf"},
+        {label:"Leave    – bail-first"   ,backgroundColor:shade(COLORS.leave,0.6),data:bfB.l,stack:"bf"},
+        {label:"Unsure   – bail-first"   ,backgroundColor:shade(COLORS.unsure,0.6),data:bfB.u,stack:"bf"}
+      ]},options:chartOpts("% of prompts")});
 }
 function plotRefusal(labels,bfR){
-  if(refusalChart) refusalChart.destroy();
+  refusalChart?.destroy();
   refusalChart=new Chart(document.getElementById("refusalChart"),{
     type:"bar",
     data:{labels,
@@ -335,28 +217,52 @@ function plotRefusal(labels,bfR){
         {label:"Refused"  ,backgroundColor:COLORS.leave,data:bfR.r,stack:"r"},
         {label:"Unclear"  ,backgroundColor:COLORS.unclear,data:bfR.u,stack:"r"},
         {label:"More-Info",backgroundColor:COLORS.moreInfo,data:bfR.m,stack:"r"}
-      ]},
-    options:chartOpts("% of prompts")
+      ]},options:chartOpts("% of prompts")});
+}
+function updateCharts(){
+  if(currentModel==="__ALL__") drawAll(); else drawSingle();
+}
+function drawAll(){
+  const labels=pairedModels.map(p=>p.displayName),mk=labels.length,arr=_=>Array(mk).fill(0);
+  const bfB={c:arr(),l:arr(),u:arr()},cfB={c:arr(),l:arr(),u:arr()},bfR={c:arr(),r:arr(),u:arr(),m:arr()};
+  pairedModels.forEach((pm,i)=>{
+    const aBF=aggregate(pm.modelName,"bailFirst",currentCategory);
+    const aCF=aggregate(pm.modelName,"contFirst",currentCategory);
+    if(aBF){bfB.c[i]=+(aBF.bail.c*100).toFixed(2);bfB.l[i]=+(aBF.bail.l*100).toFixed(2);
+            bfB.u[i]=+(aBF.bail.u*100).toFixed(2);
+            bfR.c[i]=+(aBF.ref.c*100).toFixed(2);bfR.r[i]=+(aBF.ref.r*100).toFixed(2);
+            bfR.u[i]=+(aBF.ref.u*100).toFixed(2);bfR.m[i]=+(aBF.ref.m*100).toFixed(2);}
+    if(aCF){cfB.c[i]=+(aCF.bail.c*100).toFixed(2);cfB.l[i]=+(aCF.bail.l*100).toFixed(2);
+            cfB.u[i]=+(aCF.bail.u*100).toFixed(2);}
   });
+  plotBail(labels,cfB,bfB); plotRefusal(labels,bfR);
+}
+function drawSingle(){
+  const labels=[...majorCategories].sort(),mk=labels.length,arr=_=>Array(mk).fill(0);
+  const bfB={c:arr(),l:arr(),u:arr()},cfB={c:arr(),l:arr(),u:arr()},bfR={c:arr(),r:arr(),u:arr(),m:arr()};
+  labels.forEach((cat,i)=>{
+    const aBF=aggregate(currentModel,"bailFirst",cat);
+    const aCF=aggregate(currentModel,"contFirst",cat);
+    if(aBF){bfB.c[i]=+(aBF.bail.c*100).toFixed(2);bfB.l[i]=+(aBF.bail.l*100).toFixed(2);
+            bfB.u[i]=+(aBF.bail.u*100).toFixed(2);
+            bfR.c[i]=+(aBF.ref.c*100).toFixed(2);bfR.r[i]=+(aBF.ref.r*100).toFixed(2);
+            bfR.u[i]=+(aBF.ref.u*100).toFixed(2);bfR.m[i]=+(aBF.ref.m*100).toFixed(2);}
+    if(aCF){cfB.c[i]=+(aCF.bail.c*100).toFixed(2);cfB.l[i]=+(aCF.bail.l*100).toFixed(2);
+            cfB.u[i]=+(aCF.bail.u*100).toFixed(2);}
+  });
+  plotBail(labels,cfB,bfB); plotRefusal(labels,bfR);
 }
 
-/* ---------- hash navigation ---------- */
-window.addEventListener("hashchange",()=>{
-  parseHash();
-  const ms=document.getElementById("modelViewSelect");
-  ms.value=currentModel;
-  const cs=document.getElementById("categorySelect");
-  cs.value=currentCategory;
+/* ---------- hash sync ---------- */
+function parseHash(){const h=location.hash.slice(1);if(!h)return;const p=new URLSearchParams(h);
+  currentModel=p.get("view")||"__ALL__";currentCategory=p.get("cat")||"__ALL__";}
+function updateHash(){const p=new URLSearchParams();
+  if(currentModel!=="__ALL__")p.set("view",currentModel);
+  if(currentCategory!=="__ALL__")p.set("cat",currentCategory);
+  location.hash=p.toString();}
+window.addEventListener("hashchange",()=>{parseHash();buildSelectors();updateCharts();});
 
-  if(currentModel==="__ALL__"){
-    cs.classList.remove("hidden"); document.getElementById("catLabel").classList.remove("hidden");
-  }else{
-    cs.classList.add("hidden"); document.getElementById("catLabel").classList.add("hidden");
-  }
-  updateCharts();
-});
-
-/* ---------- start ---------- */
+/* ---------- go ---------- */
 window.addEventListener("load",loadAll);
 </script>
 </body>
