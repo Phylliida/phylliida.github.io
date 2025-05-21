@@ -32,17 +32,17 @@ canvas{max-width:100%;height:440px;} @media(max-width:600px){canvas{height:320px
 .prompt-text{white-space:pre-wrap;font-family:monospace;font-size:.95rem;line-height:1.35;}
 .hidden{display:none;}
 .ctrl-row{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:.3rem;}
-.ctrl-row a{color:#3498db;text-decoration:none;font-weight:bold;margin-right:.6rem;}
-.ctrl-row a:hover{text-decoration:underline;}
+a{color:#3498db;text-decoration:none;font-weight:bold;margin-right:.6rem;}
+a:hover{text-decoration:underline;}
 </style>
 </head>
 <body>
+    <a href="/modelwelfare/refusalvsbailv3/harmdatasetvis.html" target="_blank">View all data</a>
 <div class="wrapper">
   <h1>Bail / Refusal – continue-first vs bail-first (prompt order)</h1>
 
   <div id="status" class="loading"><div id="spinner"></div><span id="statusText">Loading …</span></div>
   <div class="ctrl-row">
-    <a href="/modelwelfare/refusalvsbailv3/harmdatasetvis.html" target="_blank">View all data</a>
     <label><strong>Dataset view:</strong></label>
     <select id="modelViewSelect"><option value="__ALL__">All models (aggregated)</option></select>
     <label id="catLabel"><strong>Filter category:</strong></label>
