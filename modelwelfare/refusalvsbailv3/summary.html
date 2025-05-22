@@ -105,14 +105,7 @@ function chartOpts(y){return{responsive:true,scales:{
   y:{beginAtZero:true,max:100,stacked:true,title:{display:true,text:y}},
   x:{stacked:true}},plugins:{tooltip:{callbacks:{
   label:c=>`${c.dataset.label}: ${c.parsed.y.toFixed(1)} %`}}}};}
-function cleanModelName(p){return p.split(".")[0]
- .replace("openai_","").replace("anthropic_","").replace("deepseek_","")
- .replace("_beta","").replace(/-2025\\d{4}|-2024\\d{4}/g,"")
- .replace("claude-3-5-sonnet-20241022","claude-3-6-sonnet")
- .replace("-20241022","").replace("-20240307","")
- .replace("3-5-sonnet-latest","3-6-sonnet")
- .replace("chatgpt-4o-latest","gpt-chatgpt-4o-latest")
- .replace("anthropic/","").replace("openai/","");}
+function cleanModelName(p){return p;}
 
 /* ---------- scrolling width helper ---------- */
 function setCanvasWidth(isFlat,nLabels){
