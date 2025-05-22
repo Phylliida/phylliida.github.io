@@ -97,7 +97,7 @@ Chart.defaults.animation=false;
 const COLORS={cont:"#2ecc71",leave:"#e74c3c",unsure:"#95a5a6",
               unclear:"#f39c12",moreInfo:"#9b59b6"};
 
-/* ---------- small helpers ---------- */
+/* ---------- helpers ---------- */
 function shade(h,f){const n=parseInt(h.slice(1),16);
   const r=Math.round((n>>16)*f),g=Math.round(((n>>8)&255)*f),b=Math.round((n&255)*f);
   return`rgb(${r},${g},${b})`;}
@@ -109,7 +109,7 @@ function cleanModelName(p){return p;}
 
 /* ---------- scrolling width helper ---------- */
 function setCanvasWidth(isFlat,nLabels){
-  const px=isFlat?Math.max(nLabels*110,1050):1050;           // 110 px/label
+  const px=isFlat?Math.max(nLabels*110,1050):1050;
   document.getElementById("bailChart").style.width=px+"px";
   document.getElementById("refusalChart").style.width=px+"px";
 }
@@ -128,24 +128,17 @@ let bailChart,refusalChart;
 let totalTasks=0,doneTasks=0;
 const statusText=document.getElementById("statusText");
 function incProgress(){doneTasks++;statusText.textContent=`Loading ${doneTasks} / ${totalTasks} files …`;}
-async function fetchJSON(url) {
-  var res;
-  var numRetries = 5;
-  for (var retryIter = 0; retryIter < numRetries; retryIter++) {
-    res = await fetch(url);
-    if (res.ok) break;
-    if (retryIter == numRetries-1) {
-        throw new Error(res.status);
-    } else {
-        await sleep(1); // rate limit
-    }
+async function fetchJSON(url){
+  for(let i=0;i<5;i++){
+    const r=await fetch(url,{cache:"reload"});
+    if(r.ok) return r.json();
+    await new Promise(res=>setTimeout(res,1000));
   }
-
-  return res.json();
+  throw Error("Failed "+url);
 }
 function finishLoading(){document.getElementById("status").remove();}
 
-/* ---------- ensure result keys ---------- */
+/* ---------- ensure keys ---------- */
 function ensureBailKeys(o){if(!o)return{"🟢":0,"🔄":0,"?":0};
   o["🟢"]??=(o["\\ud83d\\udfe2"]||0);o["🔄"]??=(o["\\ud83d\\udd04"]||0);o["?"]??=0;
   delete o["\\ud83d\\udfe2"];delete o["\\ud83d\\udd04"];return o;}
@@ -153,7 +146,7 @@ function ensureRefusalKeys(o){["Unclear","Refused","Completed","More Information
  .forEach(k=>o[k]??=0);if(o["More Info"]&&!o["More Information"])o["More Information"]=o["More Info"];
  delete o["More Info"];return o;}
 
-/* ---------- filtered aggregation ---------- */
+/* ---------- aggregation ---------- */
 function aggregate(model,which,maj,sub){
   const j=dataMap[which].get(model);if(!j)return null;
   let tot=0,b={c:0,l:0,u:0},r={u:0,r:0,c:0,m:0};
@@ -178,33 +171,24 @@ function aggregate(model,which,maj,sub){
 async function loadAll(){
   try{
     totalTasks=2;incProgress();incProgress();totalTasks=2;
-    const [listBF,listCF]=await Promise.all([fetchJSON(LIST_URLS.bailFirst),
-                                             fetchJSON(LIST_URLS.contFirst)]);
-
+    const [listBF,listCF]=await Promise.all([fetchJSON(LIST_URLS.bailFirst),fetchJSON(LIST_URLS.contFirst)]);
     const tmp={};listBF.forEach(m=>tmp[m.modelName]={bf:m.modelData});
     listCF.forEach(m=>{tmp[m.modelName]??={};tmp[m.modelName].cf=m.modelData;});
     pairedModels=Object.keys(tmp).map(k=>({modelName:k,displayName:cleanModelName(k),
                                            bfPath:tmp[k].bf,cfPath:tmp[k].cf}))
                                  .sort((a,b)=>a.displayName.localeCompare(b.displayName));
-
     totalTasks+=pairedModels.reduce((s,p)=>s+(p.bfPath?1:0)+(p.cfPath?1:0),0)-2;
     statusText.textContent=`Loading ${totalTasks} files …`;
-
     await Promise.all(pairedModels.flatMap(pm=>[
       pm.bfPath?fetchJSON(pm.bfPath).then(j=>dataMap.bailFirst.set(pm.modelName,j)):Promise.resolve(),
       pm.cfPath?fetchJSON(pm.cfPath).then(j=>dataMap.contFirst.set(pm.modelName,j)):Promise.resolve()
     ]));
-
-    /* build category maps */
     const add=(maj,sub)=>{majorCats.add(maj);subMap.has(maj)||subMap.set(maj,new Set());
                           subMap.get(maj).add(sub);};
     dataMap.bailFirst.forEach(j=>j.results.forEach(c=>{
-      const [sub,maj]=c.category.split(",").map(s=>s.trim());
-      add(maj||sub,sub);}));  
+      const [sub,maj]=c.category.split(",").map(s=>s.trim());add(maj||sub,sub);}));  
     dataMap.contFirst.forEach(j=>j.results.forEach(c=>{
-      const [sub,maj]=c.category.split(",").map(s=>s.trim());
-      add(maj||sub,sub);})); 
-
+      const [sub,maj]=c.category.split(",").map(s=>s.trim());add(maj||sub,sub);})); 
     buildSelectors();finishLoading();updateCharts();
   }catch(e){const st=document.getElementById("status");st.className="error";st.textContent="❌ "+e;}
 }
@@ -225,23 +209,17 @@ function updateHash(){
 let built=false;
 function buildSelectors(){
   parseHash();
-
   const ms=document.getElementById("modelViewSelect"),
         cs=document.getElementById("categorySelect"),
-        cl=document.getElementById("catLabel"),
         ss=document.getElementById("subCategorySelect"),
         sl=document.getElementById("subLabel");
-
   if(!built){pairedModels.forEach(m=>ms.appendChild(new Option(m.displayName,m.modelName)));built=true;}
 
-  /* fill major selector */
   function fillMajor(){
-    cs.innerHTML='';
-    cs.appendChild(new Option("All categories","__ALL__"));
+    cs.innerHTML='';cs.appendChild(new Option("All categories","__ALL__"));
     if(currentModel!=="__ALL__")cs.appendChild(new Option("All sub-categories (flat)","__ALLSUBS__"));
     [...majorCats].sort().forEach(c=>cs.appendChild(new Option(c,c)));
   }
-  /* fill sub selector */
   function fillSub(){
     ss.innerHTML='<option value="__ALL__">All sub-categories</option>';
     if(currentCategory==="__ALL__"||currentCategory==="__ALLSUBS__")return;
@@ -250,23 +228,17 @@ function buildSelectors(){
 
   fillMajor();cs.value=currentCategory;fillSub();ss.value=currentSub;ms.value=currentModel;
 
-  const subVisible=(currentCategory!=="__ALL__"&&currentCategory!=="__ALLSUBS__");
-  ss.classList.toggle("hidden",!subVisible);sl.classList.toggle("hidden",!subVisible);
+  const subVis=(currentCategory!=="__ALL__"&&currentCategory!=="__ALLSUBS__");
+  ss.classList.toggle("hidden",!subVis);sl.classList.toggle("hidden",!subVis);
 
   ms.onchange=()=>{currentModel=ms.value;currentCategory="__ALL__";currentSub="__ALL__";
-    fillMajor();fillSub();cs.value=currentCategory;ss.value=currentSub;
-    ss.classList.add("hidden");sl.classList.add("hidden");
+    fillMajor();fillSub();updateCharts();updateHash();};
+  cs.onchange=()=>{currentCategory=cs.value;currentSub="__ALL__";fillSub();
     updateCharts();updateHash();};
-
-  cs.onchange=()=>{currentCategory=cs.value;currentSub="__ALL__";fillSub();ss.value="__ALL__";
-    const vis=(currentCategory!=="__ALL__"&&currentCategory!=="__ALLSUBS__");
-    ss.classList.toggle("hidden",!vis);sl.classList.toggle("hidden",!vis);
-    updateCharts();updateHash();};
-
   ss.onchange=()=>{currentSub=ss.value;updateCharts();updateHash();};
 }
 
-/* ---------- chart plotting ---------- */
+/* ---------- plotting helpers ---------- */
 function plotBail(labels,cfB,bfB){
   bailChart?.destroy();
   bailChart=new Chart(document.getElementById("bailChart"),{
@@ -294,81 +266,84 @@ function plotRefusal(labels,bfR){
       ]},options:chartOpts("% of prompts")});
 }
 
-/* ---------- data helpers for single model view ---------- */
+/* ---------- util reorder ---------- */
+function reorder(arr,idx){return idx.map(i=>arr[i]);}
+function reorderDatasets(obj,idx){Object.keys(obj).forEach(k=>obj[k]=reorder(obj[k],idx));}
+
+/* ---------- data helpers ---------- */
 function singleData(){
-  if(currentCategory==="__ALL__"){            // majors on x-axis
-    const labels=[...majorCats].sort(),mk=labels.length,arr=_=>Array(mk).fill(0);
+  const collect=(labels,makePair)=>{
+    const mk=labels.length,arr=_=>Array(mk).fill(0);
     const bfB={c:arr(),l:arr(),u:arr()},cfB={c:arr(),l:arr(),u:arr()},bfR={c:arr(),r:arr(),u:arr(),m:arr()};
-    labels.forEach((cat,i)=>{
-      const aBF=aggregate(currentModel,"bailFirst",cat,"__ALL__");
-      const aCF=aggregate(currentModel,"contFirst",cat,"__ALL__");
-      if(aBF){bfB.c[i]=+(aBF.bail.c*100).toFixed(2);bfB.l[i]=+(aBF.bail.l*100).toFixed(2);bfB.u[i]=+(aBF.bail.u*100).toFixed(2);
-              bfR.c[i]=+(aBF.ref.c*100).toFixed(2);bfR.r[i]=+(aBF.ref.r*100).toFixed(2);
-              bfR.u[i]=+(aBF.ref.u*100).toFixed(2);bfR.m[i]=+(aBF.ref.m*100).toFixed(2);}
-      if(aCF){cfB.c[i]=+(aCF.bail.c*100).toFixed(2);cfB.l[i]=+(aCF.bail.l*100).toFixed(2);cfB.u[i]=+(aCF.bail.u*100).toFixed(2);}
+    labels.forEach((label,i)=>{
+      const {maj,sub}=makePair(label,i);
+      const aBF=aggregate(currentModel,"bailFirst",maj,sub);
+      const aCF=aggregate(currentModel,"contFirst",maj,sub);
+      if(aBF){bfB.c[i]=aBF.bail.c;bfB.l[i]=aBF.bail.l;bfB.u[i]=aBF.bail.u;
+              bfR.c[i]=aBF.ref.c;bfR.r[i]=aBF.ref.r;bfR.u[i]=aBF.ref.u;bfR.m[i]=aBF.ref.m;}
+      if(aCF){cfB.c[i]=aCF.bail.c;cfB.l[i]=aCF.bail.l;cfB.u[i]=aCF.bail.u;}
     });
-    return{labels,bfB,cfB,bfR,isFlat:false};
-  }
+    /* ---- sort by average bail ---- */
+    const order=[...labels.keys()].sort((a,b)=>
+      (bfB.l[b]+cfB.l[b]) - (bfB.l[a]+cfB.l[a]));
+    const lbls=reorder(labels,order);
+    reorderDatasets(bfB,order);reorderDatasets(cfB,order);reorderDatasets(bfR,order);
+    /* to % */
+    ["c","l","u"].forEach(k=>{bfB[k]=bfB[k].map(v=>+(v*100).toFixed(2));
+                              cfB[k]=cfB[k].map(v=>+(v*100).toFixed(2));});
+    ["c","r","u","m"].forEach(k=>bfR[k]=bfR[k].map(v=>+(v*100).toFixed(2)));
+    return{labels:lbls,bfB,cfB,bfR};
+  };
 
-  if(currentCategory==="__ALLSUBS__"){        // every sub from every major
+  if(currentCategory==="__ALL__"){
+    const labels=[...majorCats].sort();
+    return{...collect(labels,(lbl)=>({maj:lbl,sub:"__ALL__"})),isFlat:false};
+  }
+  if(currentCategory==="__ALLSUBS__"){
     const pairs=[];
-    [...majorCats].forEach(maj=>
-      [...subMap.get(maj)].forEach(sub=>pairs.push({maj,sub,label:`${maj}: ${sub}`}))
-    );
+    majorCats.forEach(maj=>subMap.get(maj).forEach(sub=>pairs.push({maj,sub,label:`${maj}: ${sub}`})));
     pairs.sort((a,b)=>a.label.localeCompare(b.label));
-    const mk=pairs.length,arr=_=>Array(mk).fill(0);
-    const bfB={c:arr(),l:arr(),u:arr()},cfB={c:arr(),l:arr(),u:arr()},bfR={c:arr(),r:arr(),u:arr(),m:arr()};
-    pairs.forEach((p,i)=>{
-      const aBF=aggregate(currentModel,"bailFirst",p.maj,p.sub);
-      const aCF=aggregate(currentModel,"contFirst",p.maj,p.sub);
-      if(aBF){bfB.c[i]=+(aBF.bail.c*100).toFixed(2);bfB.l[i]=+(aBF.bail.l*100).toFixed(2);bfB.u[i]=+(aBF.bail.u*100).toFixed(2);
-              bfR.c[i]=+(aBF.ref.c*100).toFixed(2);bfR.r[i]=+(aBF.ref.r*100).toFixed(2);
-              bfR.u[i]=+(aBF.ref.u*100).toFixed(2);bfR.m[i]=+(aBF.ref.m*100).toFixed(2);}
-      if(aCF){cfB.c[i]=+(aCF.bail.c*100).toFixed(2);cfB.l[i]=+(aCF.bail.l*100).toFixed(2);cfB.u[i]=+(aCF.bail.u*100).toFixed(2);}
-    });
-    return{labels:pairs.map(p=>p.label),bfB,cfB,bfR,isFlat:true};
+    const labels=pairs.map(p=>p.label);
+    return{...collect(labels,(lbl,i)=>pairs[i]),isFlat:true};
   }
-
-  /* sub list of a single major */
-  const labels=[...subMap.get(currentCategory)].sort(),mk=labels.length,arr=_=>Array(mk).fill(0);
-  const bfB={c:arr(),l:arr(),u:arr()},cfB={c:arr(),l:arr(),u:arr()},bfR={c:arr(),r:arr(),u:arr(),m:arr()};
-  labels.forEach((sub,i)=>{
-    const aBF=aggregate(currentModel,"bailFirst",currentCategory,sub);
-    const aCF=aggregate(currentModel,"contFirst",currentCategory,sub);
-    if(aBF){bfB.c[i]=+(aBF.bail.c*100).toFixed(2);bfB.l[i]=+(aBF.bail.l*100).toFixed(2);bfB.u[i]=+(aBF.bail.u*100).toFixed(2);
-            bfR.c[i]=+(aBF.ref.c*100).toFixed(2);bfR.r[i]=+(aBF.ref.r*100).toFixed(2);
-            bfR.u[i]=+(aBF.ref.u*100).toFixed(2);bfR.m[i]=+(aBF.ref.m*100).toFixed(2);}
-    if(aCF){cfB.c[i]=+(aCF.bail.c*100).toFixed(2);cfB.l[i]=+(aCF.bail.l*100).toFixed(2);cfB.u[i]=+(aCF.bail.u*100).toFixed(2);}
-  });
-  return{labels,bfB,cfB,bfR,isFlat:false};
+  /* specific major */
+  const labels=[...subMap.get(currentCategory)].sort();
+  return{...collect(labels,(lbl)=>({maj:currentCategory,sub:lbl})),isFlat:false};
 }
 
-/* ---------- main draw wrappers ---------- */
 function drawSingle(){
   const {labels,bfB,cfB,bfR,isFlat}=singleData();
   setCanvasWidth(isFlat,labels.length);
   plotBail(labels,cfB,bfB);plotRefusal(labels,bfR);
 }
+
 function drawAll(){
   setCanvasWidth(false,0);
-  const labels=pairedModels.map(p=>p.displayName),mk=labels.length,arr=_=>Array(mk).fill(0);
-  const bfB={c:arr(),l:arr(),u:arr()},cfB={c:arr(),l:arr(),u:arr()},bfR={c:arr(),r:arr(),u:arr(),m:arr()};
+  const mk=pairedModels.length,arr=_=>Array(mk).fill(0),
+        labels=pairedModels.map(p=>p.displayName),
+        bfB={c:arr(),l:arr(),u:arr()},cfB={c:arr(),l:arr(),u:arr()},
+        bfR={c:arr(),r:arr(),u:arr(),m:arr()};
   pairedModels.forEach((pm,i)=>{
     const aBF=aggregate(pm.modelName,"bailFirst",currentCategory,currentSub);
     const aCF=aggregate(pm.modelName,"contFirst",currentCategory,currentSub);
-    if(aBF){bfB.c[i]=+(aBF.bail.c*100).toFixed(2);bfB.l[i]=+(aBF.bail.l*100).toFixed(2);bfB.u[i]=+(aBF.bail.u*100).toFixed(2);
-            bfR.c[i]=+(aBF.ref.c*100).toFixed(2);bfR.r[i]=+(aBF.ref.r*100).toFixed(2);
-            bfR.u[i]=+(aBF.ref.u*100).toFixed(2);bfR.m[i]=+(aBF.ref.m*100).toFixed(2);}
-    if(aCF){cfB.c[i]=+(aCF.bail.c*100).toFixed(2);cfB.l[i]=+(aCF.bail.l*100).toFixed(2);cfB.u[i]=+(aCF.bail.u*100).toFixed(2);}
+    if(aBF){bfB.c[i]=aBF.bail.c;bfB.l[i]=aBF.bail.l;bfB.u[i]=aBF.bail.u;
+            bfR.c[i]=aBF.ref.c;bfR.r[i]=aBF.ref.r;bfR.u[i]=aBF.ref.u;bfR.m[i]=aBF.ref.m;}
+    if(aCF){cfB.c[i]=aCF.bail.c;cfB.l[i]=aCF.bail.l;cfB.u[i]=aCF.bail.u;}
   });
-  plotBail(labels,cfB,bfB);plotRefusal(labels,bfR);
+  const order=[...labels.keys()].sort((a,b)=>
+     (bfB.l[b]+cfB.l[b]) - (bfB.l[a]+cfB.l[a]));
+  const lbls=reorder(labels,order);
+  reorderDatasets(bfB,order);reorderDatasets(cfB,order);reorderDatasets(bfR,order);
+  ["c","l","u"].forEach(k=>{bfB[k]=bfB[k].map(v=>+(v*100).toFixed(2));
+                            cfB[k]=cfB[k].map(v=>+(v*100).toFixed(2));});
+  ["c","r","u","m"].forEach(k=>bfR[k]=bfR[k].map(v=>+(v*100).toFixed(2)));
+  plotBail(lbls,cfB,bfB);plotRefusal(lbls,bfR);
 }
+
 function updateCharts(){currentModel==="__ALL__"?drawAll():drawSingle();}
 
-/* ---------- rebuild on hash edits ---------- */
+/* ---------- listeners ---------- */
 window.addEventListener("hashchange",()=>{buildSelectors();updateCharts();});
-
-/* ---------- bootstrap ---------- */
 window.addEventListener("load",loadAll);
 </script>
 </body>
