@@ -182,12 +182,17 @@ async function loadAll(){
     pairedModels=Object.keys(tmp).map(k=>({modelName:k,displayName:cleanModelName(k),
                                            bfPath:tmp[k].bf,cfPath:tmp[k].cf}))
                                  .sort((a,b)=>a.displayName.localeCompare(b.displayName));
-    totalTasks+=pairedModels.reduce((s,p)=>s+(p.bfPath?1:0)+(p.cfPath?1:0),0)-2;
-    statusText.textContent=`Loading ${totalTasks} files …`;
-    await Promise.all(pairedModels.flatMap(pm=>[
-      pm.bfPath?fetchJSON(pm.bfPath).then(j=>dataMap.bailFirst.set(pm.modelName,j)):Promise.resolve(),
-      pm.cfPath?fetchJSON(pm.cfPath).then(j=>dataMap.contFirst.set(pm.modelName,j)):Promise.resolve()
-    ]));
+    totalTasks+=pairedModels.reduce((s,p)=>s+(p.bfPath?1:0)+(p.cfPath?1:0),0)/2;
+    
+    statusText.textContent=`Loading 0/${totalTasks} files …`;
+    for (var pairedModelI = 0; pairedModelI < pairedModels.length; pairedModelI++) {
+        var pm = pairedModels[pairedModelI];
+        var j1 = await fetchJSON(pm.bfPath);
+        dataMap.bailFirst.set(pm.modelName,j1);
+        var j2 = await fetchJSON(pm.cfPath);
+        dataMap.contFirst.set(pm.modelName,j2);
+        statusText.textContent=`Loading ${pairedModelI}/${totalTasks} files …`;
+    }
     const add=(maj,sub)=>{majorCats.add(maj);subMap.has(maj)||subMap.set(maj,new Set());
                           subMap.get(maj).add(sub);};
     dataMap.bailFirst.forEach(j=>j.results.forEach(c=>{
