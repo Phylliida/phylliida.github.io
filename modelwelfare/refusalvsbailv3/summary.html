@@ -135,7 +135,21 @@ let bailChart,refusalChart;
 let totalTasks=0,doneTasks=0;
 const statusText=document.getElementById("statusText");
 function incProgress(){doneTasks++;statusText.textContent=`Loading ${doneTasks} / ${totalTasks} files …`;}
-function fetchJSON(u){return fetch(u,{cache:"reload"}).then(r=>{if(!r.ok)throw Error(r.status);return r.json();}).finally(incProgress);}
+async function fetchJSON(url) {
+  var res;
+  var numRetries = 5;
+  for (var retryIter = 0; retryIter < numRetries; retryIter++) {
+    res = await fetch(url);
+    if (res.ok) break;
+    if (retryIter == numRetries-1) {
+        throw new Error(res.status);
+    } else {
+        await sleep(1); // rate limit
+    }
+  }
+
+  return res.json();
+}
 function finishLoading(){document.getElementById("status").remove();}
 
 /* ---------- ensure result keys ---------- */
@@ -181,7 +195,7 @@ async function loadAll(){
                                  .sort((a,b)=>a.displayName.localeCompare(b.displayName));
 
     totalTasks+=pairedModels.reduce((s,p)=>s+(p.bfPath?1:0)+(p.cfPath?1:0),0)-2;
-    statusText.textContent=`Loading 2 / ${totalTasks} files …`;
+    statusText.textContent=`Loading ${totalTasks} files …`;
 
     await Promise.all(pairedModels.flatMap(pm=>[
       pm.bfPath?fetchJSON(pm.bfPath).then(j=>dataMap.bailFirst.set(pm.modelName,j)):Promise.resolve(),
