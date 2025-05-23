@@ -19,7 +19,7 @@ select{padding:.45rem .8rem;font-size:1rem;border:1px solid #ccc;border-radius:6
 
 /* ------------ canvases & scrolling ------------- */
 .chart-wrap{width:100%;overflow-x:auto;}
-.chart-wrap canvas{max-width:100%;height:440px;}
+.chart-wrap canvas{max-width:100%;height:600px;}
 @media(max-width:600px){.chart-wrap canvas{height:320px;}}
 
 /* ------------ status spinner ------------------- */
@@ -178,11 +178,11 @@ function plotBail(labels,cfB,bfB){
     type:"bar",
     data:{labels,
       datasets:[
-        {label:"Continue – continue-first",backgroundColor:COLORS.cont ,data:cfB.c,stack:"cf"},
         {label:"Bail     – continue-first",backgroundColor:COLORS.leave,data:cfB.l,stack:"cf"},
+        {label:"Continue – continue-first",backgroundColor:COLORS.cont ,data:cfB.c,stack:"cf"},
         {label:"Unsure   – continue-first",backgroundColor:COLORS.unsure,data:cfB.u,stack:"cf"},
-        {label:"Continue – bail-first"   ,backgroundColor:shade(COLORS.cont ,0.6),data:bfB.c,stack:"bf"},
         {label:"Bail     – bail-first"   ,backgroundColor:shade(COLORS.leave,0.6),data:bfB.l,stack:"bf"},
+        {label:"Continue – bail-first"   ,backgroundColor:shade(COLORS.cont ,0.6),data:bfB.c,stack:"bf"},
         {label:"Unsure   – bail-first"   ,backgroundColor:shade(COLORS.unsure,0.6),data:bfB.u,stack:"bf"}
       ]},options:chartOpts("% of prompts")});
 }
