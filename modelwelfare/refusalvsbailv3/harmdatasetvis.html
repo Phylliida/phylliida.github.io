@@ -610,6 +610,28 @@ a{color:#3498db;text-decoration:none;font-weight:bold;margin-right:.6rem;}
     </div>
 
     <script>
+    async function fetchJsonGz(url) {
+      var res;
+      var numRetries = 5;
+      for (var retryIter = 0; retryIter < numRetries; retryIter++) {
+        res = await fetch(url,{cache:'reload'});
+        if (res.ok) break;
+        if (retryIter == numRetries-1) {
+            throw new Error(res.status);
+        } else {
+            await sleep(1); // rate limit
+        }
+      }
+
+      const ab   = await res.arrayBuffer();     // wait here
+      const buf  = new Uint8Array(ab);
+      const text = pako.ungzip(buf, { to: 'string' });
+
+
+      return JSON.parse(text);
+    }
+        
+    
         // Initialize charts
         let refusalChart, wellbeingChart, subcategoryRefusalChart, subcategoryWellbeingChart;
         
@@ -716,7 +738,7 @@ a{color:#3498db;text-decoration:none;font-weight:bold;margin-right:.6rem;}
         // Load models list
         async function loadModelsList() {
             try {
-                const response = await fetch('/modelwelfare/mergedbailnoswap/models.json', {cache: "reload"});
+                const response = await fetchJsonGz('/modelwelfare/mergedbailnoswap/models.json.gz');
                 
                 if (!response.ok) {
                     throw new Error(`HTTP error! Status: ${response.status}`);
@@ -1079,7 +1101,7 @@ a{color:#3498db;text-decoration:none;font-weight:bold;margin-right:.6rem;}
                     throw new Error(`Model ${modelName} not found in models list.`);
                 }
                 
-                const response = await fetch(`${modelData.modelData}`, {cache: "reload"});
+                const response = await fetchJsonGz(`${modelData.modelData}`);
                 
                 if (!response.ok) {
                     throw new Error(`HTTP error! Status: ${response.status}`);
