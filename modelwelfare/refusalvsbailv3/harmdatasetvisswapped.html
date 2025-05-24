@@ -1099,7 +1099,7 @@ a{color:#3498db;text-decoration:none;font-weight:bold;margin-right:.6rem;}
                     throw new Error(`Model ${modelName} not found in models list.`);
                 }
                 
-                const response = await fetchJsonGZ(`${modelData.modelData}`);
+                const response = await fetchJsonGz(`${modelData.modelData}`);
                 
                 JSONDATA = response;                
                 // Process data
