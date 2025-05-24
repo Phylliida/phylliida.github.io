@@ -10,6 +10,7 @@
     <a href="/modelwelfare/refusalvsbailv3/summary.html">View summary stats</a><br/>
     <a href="/modelwelfare/refusalvsbailv3/harmdatasetvis.html" onclick="this.href += location.hash">View non-swapped prompt data</a>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/pako@2.1.0/dist/pako.min.js"></script>
     <style>
 a{color:#3498db;text-decoration:none;font-weight:bold;margin-right:.6rem;}
  a:hover{text-decoration:underline;}
@@ -741,11 +742,7 @@ a{color:#3498db;text-decoration:none;font-weight:bold;margin-right:.6rem;}
             try {
                 const response = await fetchJsonGz('/modelwelfare/mergedbailswapped/models.json.gz');
                 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-                
-                modelsList = await response.json();
+                modelsList = response;
                 
                 // Setup model selector
                 setupModelSelector();
@@ -1104,12 +1101,7 @@ a{color:#3498db;text-decoration:none;font-weight:bold;margin-right:.6rem;}
                 
                 const response = await fetchJsonGZ(`${modelData.modelData}`);
                 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-                
-                JSONDATA = await response.json();
-                
+                JSONDATA = response;                
                 // Process data
                 processData();
                 
