@@ -241,7 +241,7 @@ function plotRefusal(labels,bfR){
       datasets:[
         {label:"Refused"  ,backgroundColor:COLORS.leave,data:bfR.r,stack:"r"},
         {label:"Unclear"  ,backgroundColor:COLORS.unclear,data:bfR.u,stack:"r"},
-        {label:"More-Info",backgroundColor:COLORS.moreInfo,data:bfR.m,stack:"r"}
+        {label:"More-Info",backgroundColor:COLORS.moreInfo,data:bfR.m,stack:"r"},
         {label:"Completed",backgroundColor:COLORS.cont ,data:bfR.c,stack:"r"},
       ]},options:chartOpts("% of prompts")});
 }
