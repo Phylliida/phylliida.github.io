@@ -226,11 +226,11 @@ function plotBail(labels,cfB,bfB){
     data:{labels,
       datasets:[
         {label:"Bail (Continue first)",backgroundColor:COLORS.leave,data:cfB.l,stack:"cf"},
-        {label:"Continue (Continue first)",backgroundColor:COLORS.cont ,data:cfB.c,stack:"cf"},
         {label:"Unsure (Continue first)",backgroundColor:COLORS.unsure,data:cfB.u,stack:"cf"},
+        {label:"Continue (Continue first)",backgroundColor:COLORS.cont ,data:cfB.c,stack:"cf"},
         {label:"Bail (Bail first)"   ,backgroundColor:shade(COLORS.leave,0.6),data:bfB.l,stack:"bf"},
-        {label:"Continue (Bail first)"   ,backgroundColor:shade(COLORS.cont ,0.6),data:bfB.c,stack:"bf"},
         {label:"Unsure (Bail First)"   ,backgroundColor:shade(COLORS.unsure,0.6),data:bfB.u,stack:"bf"}
+        {label:"Continue (Bail first)"   ,backgroundColor:shade(COLORS.cont ,0.6),data:bfB.c,stack:"bf"},
       ]},options:chartOpts("% of prompts")});
 }
 function plotRefusal(labels,bfR){
@@ -240,9 +240,9 @@ function plotRefusal(labels,bfR){
     data:{labels,
       datasets:[
         {label:"Refused"  ,backgroundColor:COLORS.leave,data:bfR.r,stack:"r"},
-        {label:"Completed",backgroundColor:COLORS.cont ,data:bfR.c,stack:"r"},
         {label:"Unclear"  ,backgroundColor:COLORS.unclear,data:bfR.u,stack:"r"},
         {label:"More-Info",backgroundColor:COLORS.moreInfo,data:bfR.m,stack:"r"}
+        {label:"Completed",backgroundColor:COLORS.cont ,data:bfR.c,stack:"r"},
       ]},options:chartOpts("% of prompts")});
 }
 
