@@ -152,12 +152,41 @@
             flex: 1;
             margin-left: 10px;
             color: var(--text-primary);
+            cursor: text;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+
+        .list-item-content:hover {
+            background-color: var(--bg-tertiary);
+        }
+
+        .list-item-content.editing {
+            background-color: var(--bg-tertiary);
+        }
+
+        .list-item-input {
+            flex: 1;
+            margin-left: 10px;
+            padding: 4px 8px;
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--accent-primary);
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
         }
         
         .list-item button {
             margin: 0 2px;
             padding: 5px 10px;
             font-size: 12px;
+        }
+
+        .list-item button.small {
+            padding: 4px 8px;
+            font-size: 11px;
         }
         
         .suggestion-item {
@@ -280,6 +309,9 @@ The Golden Goblet</textarea>
             suggestions: []
         };
 
+        // Track which item is being edited
+        let editingIndex = null;
+
         // Initialize on page load
         window.addEventListener('load', () => {
             loadStateFromHash();
@@ -387,6 +419,36 @@ The Golden Goblet</textarea>
             hideError();
         }
 
+        // Start editing an item
+        function startEdit(index) {
+            if (editingIndex !== null) {
+                // Save any current edit first
+                saveEdit(editingIndex);
+            }
+            editingIndex = index;
+            renderListItems();
+        }
+
+        // Save an edited item
+        function saveEdit(index) {
+            const input = document.querySelector(`#edit-input-${index}`);
+            if (input) {
+                const newValue = input.value.trim();
+                if (newValue && newValue !== state.listItems[index]) {
+                    state.listItems[index] = newValue;
+                    saveState();
+                }
+            }
+            editingIndex = null;
+            renderListItems();
+        }
+
+        // Cancel editing
+        function cancelEdit() {
+            editingIndex = null;
+            renderListItems();
+        }
+
         // Render current list items
         function renderListItems() {
             const container = document.getElementById('listItemsContainer');
@@ -400,27 +462,54 @@ The Golden Goblet</textarea>
             state.listItems.forEach((item, index) => {
                 const itemDiv = document.createElement('div');
                 itemDiv.className = 'list-item';
-                itemDiv.draggable = true;
+                itemDiv.draggable = editingIndex !== index; // Disable dragging while editing
                 itemDiv.dataset.index = index;
                 
                 // Escape the item text to prevent XSS
                 const escapedItem = item.replace(/</g, '&lt;').replace(/>/g, '&gt;');
                 
-                itemDiv.innerHTML = `
-                    <span class="drag-handle">☰</span>
-                    <span class="list-item-content">${escapedItem}</span>
-                    <button onclick="removeItem(${index})" class="danger">Remove</button>
-                `;
-                
-                // Drag and drop handlers
-                itemDiv.addEventListener('dragstart', handleDragStart);
-                itemDiv.addEventListener('dragend', handleDragEnd);
-                itemDiv.addEventListener('dragover', handleDragOver);
-                itemDiv.addEventListener('drop', handleDrop);
-                itemDiv.addEventListener('dragleave', handleDragLeave);
+                if (editingIndex === index) {
+                    // Show input field for editing
+                    itemDiv.innerHTML = `
+                        <span class="drag-handle" style="opacity: 0.3;">☰</span>
+                        <input type="text" 
+                               id="edit-input-${index}" 
+                               class="list-item-input" 
+                               value="${item.replace(/"/g, '&quot;')}"
+                               onkeydown="if(event.key === 'Enter') saveEdit(${index}); if(event.key === 'Escape') cancelEdit();"
+                               autofocus>
+                        <button onclick="saveEdit(${index})" class="success small">Save</button>
+                        <button onclick="cancelEdit()" class="small">Cancel</button>
+                    `;
+                } else {
+                    // Show normal item
+                    itemDiv.innerHTML = `
+                        <span class="drag-handle">☰</span>
+                        <span class="list-item-content" onclick="startEdit(${index})" title="Click to edit">${escapedItem}</span>
+                        <button onclick="removeItem(${index})" class="danger">Remove</button>
+                    `;
+                    
+                    // Drag and drop handlers
+                    itemDiv.addEventListener('dragstart', handleDragStart);
+                    itemDiv.addEventListener('dragend', handleDragEnd);
+                    itemDiv.addEventListener('dragover', handleDragOver);
+                    itemDiv.addEventListener('drop', handleDrop);
+                    itemDiv.addEventListener('dragleave', handleDragLeave);
+                }
                 
                 container.appendChild(itemDiv);
             });
+
+            // Focus on the input if we're editing
+            if (editingIndex !== null) {
+                setTimeout(() => {
+                    const input = document.querySelector(`#edit-input-${editingIndex}`);
+                    if (input) {
+                        input.focus();
+                        input.select();
+                    }
+                }, 0);
+            }
         }
 
         // Drag and drop functionality
@@ -616,6 +705,7 @@ The Golden Goblet</textarea>
             if (state.listItems.length > 0 && confirm('Are you sure you want to clear the list?')) {
                 state.listItems = [];
                 state.suggestions = [];
+                editingIndex = null;
                 saveState();
                 renderListItems();
                 renderSuggestions();
@@ -630,6 +720,7 @@ The Golden Goblet</textarea>
                     listItems: [],
                     suggestions: []
                 };
+                editingIndex = null;
                 document.getElementById('listPrompt').value = '';
                 document.getElementById('initialItems').value = '';
                 saveState();
