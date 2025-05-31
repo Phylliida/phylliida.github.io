@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Base Model List Generator</title>
+    <style>
+        :root {
+            --bg-primary: #1a1a1a;
+            --bg-secondary: #2d2d2d;
+            --bg-tertiary: #3a3a3a;
+            --text-primary: #e0e0e0;
+            --text-secondary: #b0b0b0;
+            --border-color: #444;
+            --accent-primary: #4a9eff;
+            --accent-hover: #357abd;
+            --success: #52c41a;
+            --success-hover: #389e0d;
+            --danger: #ff4d4f;
+            --danger-hover: #cf1322;
+            --suggestion-bg: #1e3a5f;
+            --suggestion-border: #2a4a7f;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+        }
+        
+        .container {
+            background-color: var(--bg-secondary);
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            color: var(--text-primary);
+            margin-bottom: 30px;
+        }
+
+        h3 {
+            color: var(--text-primary);
+            margin-bottom: 15px;
+        }
+        
+        .input-section {
+            margin-bottom: 30px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: var(--text-secondary);
+        }
+        
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        input[type="text"]:focus, textarea:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+        }
+        
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        
+        button {
+            background-color: var(--accent-primary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+            margin-top: 10px;
+            transition: background-color 0.2s;
+        }
+        
+        button:hover {
+            background-color: var(--accent-hover);
+        }
+        
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+
+        button.success {
+            background-color: var(--success);
+        }
+
+        button.success:hover {
+            background-color: var(--success-hover);
+        }
+
+        button.danger {
+            background-color: var(--danger);
+        }
+
+        button.danger:hover {
+            background-color: var(--danger-hover);
+        }
+        
+        .list-items {
+            background-color: var(--bg-tertiary);
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            min-height: 50px;
+        }
+
+        .empty-state {
+            color: var(--text-secondary);
+            text-align: center;
+            padding: 20px;
+            font-style: italic;
+        }
+        
+        .list-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            background-color: var(--bg-secondary);
+            margin-bottom: 5px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            transition: border-color 0.2s;
+        }
+
+        .list-item:hover {
+            border-color: var(--accent-primary);
+        }
+        
+        .list-item-content {
+            flex: 1;
+            margin-left: 10px;
+            color: var(--text-primary);
+        }
+        
+        .list-item button {
+            margin: 0 2px;
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        
+        .suggestion-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            background-color: var(--suggestion-bg);
+            margin-bottom: 5px;
+            border-radius: 4px;
+            border: 1px solid var(--suggestion-border);
+            transition: border-color 0.2s;
+        }
+
+        .suggestion-item:hover {
+            border-color: var(--accent-primary);
+        }
+        
+        .suggestion-item-content {
+            flex: 1;
+            color: var(--text-primary);
+        }
+        
+        .suggestion-item button {
+            margin-left: 10px;
+        }
+        
+        .loading {
+            text-align: center;
+            color: var(--text-secondary);
+            padding: 20px;
+        }
+        
+        .error {
+            color: #ff7875;
+            padding: 10px;
+            background-color: rgba(255, 77, 79, 0.1);
+            border: 1px solid rgba(255, 77, 79, 0.3);
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        
+        .drag-handle {
+            cursor: move;
+            color: var(--text-secondary);
+            font-size: 20px;
+            margin-right: 10px;
+            user-select: none;
+        }
+        
+        .dragging {
+            opacity: 0.5;
+        }
+        
+        .drag-over {
+            border-top: 2px solid var(--accent-primary);
+        }
+
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .section {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: var(--bg-tertiary);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Base Model List Generator</h1>
+        
+        <div class="input-section">
+            <label for="listPrompt">List Prompt:</label>
+            <textarea id="listPrompt" placeholder="Enter your list prompt here...">Generate creative names for a fantasy tavern:</textarea>
+        </div>
+        
+        <div class="input-section">
+            <label for="initialItems">Initial List Items (one per line):</label>
+            <textarea id="initialItems" placeholder="Enter initial list items, one per line...">The Drunken Dragon
+The Wizard's Rest
+The Golden Goblet</textarea>
+            <button onclick="loadInitialItems()" class="success">Load Initial Items to List</button>
+        </div>
+        
+        <div class="section">
+            <h3>Current List:</h3>
+            <div id="listItemsContainer" class="list-items"></div>
+            <div class="button-group">
+                <button onclick="generateSuggestions()" id="generateBtn">Generate Suggestions</button>
+                <button onclick="clearList()" class="danger">Clear List</button>
+                <button onclick="clearAll()" class="danger">Clear Everything</button>
+            </div>
+        </div>
+        
+        <div id="suggestions" class="section" style="display: none;">
+            <h3>Suggestions:</h3>
+            <div id="suggestionsContainer"></div>
+            <button onclick="regenerate()" id="regenerateBtn">Regenerate Suggestions</button>
+        </div>
+        
+        <div id="error" class="error" style="display: none;"></div>
+    </div>
+
+    <script>
+        // Configuration
+        const OPENAI_API_KEY = "EMPTY";
+        const OPENAI_API_BASE = "https://ijk32fp7fxde8f-8889.proxy.runpod.net/v1";
+        const MODEL = "/workspace/GLM-4-32B-Base-0414-8bit";
+
+        // State management
+        let state = {
+            listPrompt: '',
+            listItems: [],
+            suggestions: []
+        };
+
+        // Initialize on page load
+        window.addEventListener('load', () => {
+            loadStateFromHash();
+            loadStateFromLocalStorage();
+            updateUI();
+        });
+
+        // URL-safe base64 encoding/decoding
+        function base64UrlEncode(str) {
+            return btoa(str)
+                .replace(/\+/g, '-')
+                .replace(/\//g, '_')
+                .replace(/=/g, '');
+        }
+
+        function base64UrlDecode(str) {
+            str = (str + '===').slice(0, str.length + (str.length % 4));
+            return atob(str.replace(/-/g, '+').replace(/_/g, '/'));
+        }
+
+        // Save state to hash and localStorage whenever it changes
+        function saveState() {
+            try {
+                // Save to localStorage first (more reliable)
+                localStorage.setItem('listGeneratorState', JSON.stringify(state));
+                
+                // Try to save to hash, but use compression for large states
+                const stateString = JSON.stringify(state);
+                
+                // If state is too large, only save essential data in hash
+                if (stateString.length > 2000) {
+                    const essentialState = {
+                        listPrompt: state.listPrompt,
+                        listItems: state.listItems
+                        // Skip suggestions in hash if too large
+                    };
+                    const encodedState = base64UrlEncode(JSON.stringify(essentialState));
+                    window.location.hash = encodedState;
+                } else {
+                    const encodedState = base64UrlEncode(stateString);
+                    window.location.hash = encodedState;
+                }
+            } catch (e) {
+                console.error('Failed to save state:', e);
+                // At least save to localStorage
+                localStorage.setItem('listGeneratorState', JSON.stringify(state));
+            }
+        }
+
+        // Load state from hash
+        function loadStateFromHash() {
+            if (window.location.hash) {
+                try {
+                    const stateString = window.location.hash.substring(1);
+                    const decodedString = base64UrlDecode(stateString);
+                    const loadedState = JSON.parse(decodedString);
+                    state = { ...state, ...loadedState };
+                } catch (e) {
+                    console.error('Failed to load state from hash:', e);
+                }
+            }
+        }
+
+        // Load state from localStorage (lower priority than hash)
+        function loadStateFromLocalStorage() {
+            const savedState = localStorage.getItem('listGeneratorState');
+            if (savedState && !window.location.hash) {
+                try {
+                    const loadedState = JSON.parse(savedState);
+                    state = { ...state, ...loadedState };
+                } catch (e) {
+                    console.error('Failed to load state from localStorage:', e);
+                }
+            }
+        }
+
+        // Update UI based on current state
+        function updateUI() {
+            document.getElementById('listPrompt').value = state.listPrompt || '';
+            document.getElementById('initialItems').value = '';  // Keep initial items field clear
+            renderListItems();
+            renderSuggestions();
+        }
+
+        // Load initial items to list
+        function loadInitialItems() {
+            const itemsText = document.getElementById('initialItems').value.trim();
+            if (!itemsText) {
+                showError('Please enter some initial items');
+                return;
+            }
+            
+            const newItems = itemsText.split('\n').map(item => item.trim()).filter(item => item);
+            
+            // Add new items that aren't already in the list
+            newItems.forEach(item => {
+                if (!state.listItems.includes(item)) {
+                    state.listItems.push(item);
+                }
+            });
+            
+            saveState();
+            renderListItems();
+            document.getElementById('initialItems').value = ''; // Clear the textarea after loading
+            hideError();
+        }
+
+        // Render current list items
+        function renderListItems() {
+            const container = document.getElementById('listItemsContainer');
+            container.innerHTML = '';
+            
+            if (state.listItems.length === 0) {
+                container.innerHTML = '<div class="empty-state">No items in list. Load initial items or generate suggestions to get started.</div>';
+                return;
+            }
+            
+            state.listItems.forEach((item, index) => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'list-item';
+                itemDiv.draggable = true;
+                itemDiv.dataset.index = index;
+                
+                // Escape the item text to prevent XSS
+                const escapedItem = item.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                
+                itemDiv.innerHTML = `
+                    <span class="drag-handle">☰</span>
+                    <span class="list-item-content">${escapedItem}</span>
+                    <button onclick="removeItem(${index})" class="danger">Remove</button>
+                `;
+                
+                // Drag and drop handlers
+                itemDiv.addEventListener('dragstart', handleDragStart);
+                itemDiv.addEventListener('dragend', handleDragEnd);
+                itemDiv.addEventListener('dragover', handleDragOver);
+                itemDiv.addEventListener('drop', handleDrop);
+                itemDiv.addEventListener('dragleave', handleDragLeave);
+                
+                container.appendChild(itemDiv);
+            });
+        }
+
+        // Drag and drop functionality
+        let draggedElement = null;
+        let draggedIndex = null;
+
+        function handleDragStart(e) {
+            draggedElement = this;
+            draggedIndex = parseInt(this.dataset.index);
+            this.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        }
+
+        function handleDragEnd(e) {
+            this.classList.remove('dragging');
+        }
+
+        function handleDragOver(e) {
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+            e.dataTransfer.dropEffect = 'move';
+            
+            const afterElement = getDragAfterElement(e.currentTarget.parentNode, e.clientY);
+            if (afterElement == null) {
+                e.currentTarget.classList.add('drag-over');
+            }
+            
+            return false;
+        }
+
+        function handleDrop(e) {
+            if (e.stopPropagation) {
+                e.stopPropagation();
+            }
+            
+            const dropIndex = parseInt(this.dataset.index);
+            this.classList.remove('drag-over');
+            
+            if (draggedIndex !== dropIndex) {
+                const draggedItem = state.listItems[draggedIndex];
+                state.listItems.splice(draggedIndex, 1);
+                
+                if (draggedIndex < dropIndex) {
+                    state.listItems.splice(dropIndex - 1, 0, draggedItem);
+                } else {
+                    state.listItems.splice(dropIndex, 0, draggedItem);
+                }
+                
+                saveState();
+                renderListItems();
+            }
+            
+            return false;
+        }
+
+        function handleDragLeave(e) {
+            this.classList.remove('drag-over');
+        }
+
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('.list-item:not(.dragging)')];
+            
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        // Remove item from list
+        function removeItem(index) {
+            state.listItems.splice(index, 1);
+            saveState();
+            renderListItems();
+        }
+
+        // Render suggestions
+        function renderSuggestions() {
+            const container = document.getElementById('suggestionsContainer');
+            const suggestionsDiv = document.getElementById('suggestions');
+            
+            if (state.suggestions.length === 0) {
+                suggestionsDiv.style.display = 'none';
+                return;
+            }
+            
+            suggestionsDiv.style.display = 'block';
+            container.innerHTML = '';
+            
+            state.suggestions.forEach((suggestion, index) => {
+                const suggestionDiv = document.createElement('div');
+                suggestionDiv.className = 'suggestion-item';
+                
+                // Escape the suggestion text to prevent XSS
+                const escapedSuggestion = suggestion.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                
+                suggestionDiv.innerHTML = `
+                    <span class="suggestion-item-content">${escapedSuggestion}</span>
+                    <button onclick="addSuggestion(${index})" class="success">Add to List</button>
+                `;
+                container.appendChild(suggestionDiv);
+            });
+        }
+
+        // Add suggestion to list
+        function addSuggestion(index) {
+            const suggestion = state.suggestions[index];
+            if (!state.listItems.includes(suggestion)) {
+                state.listItems.push(suggestion);
+                // Remove from suggestions
+                state.suggestions.splice(index, 1);
+                saveState();
+                renderListItems();
+                renderSuggestions();
+            }
+        }
+
+        // Generate suggestions
+        async function generateSuggestions() {
+            const prompt = document.getElementById('listPrompt').value.trim();
+            
+            if (!prompt) {
+                showError('Please enter a list prompt');
+                return;
+            }
+            
+            state.listPrompt = prompt;
+            
+            const generateBtn = document.getElementById('generateBtn');
+            const regenerateBtn = document.getElementById('regenerateBtn');
+            const suggestionsContainer = document.getElementById('suggestionsContainer');
+            
+            generateBtn.disabled = true;
+            regenerateBtn.disabled = true;
+            suggestionsContainer.innerHTML = '<div class="loading">Generating suggestions...</div>';
+            document.getElementById('suggestions').style.display = 'block';
+            hideError();
+            
+            try {
+                const fullPrompt = state.listPrompt + "\n" + 
+                    state.listItems.map(item => " - " + item).join("\n") + 
+                    "\n -";
+                
+                const response = await fetch(`${OPENAI_API_BASE}/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${OPENAI_API_KEY}`
+                    },
+                    body: JSON.stringify({
+                        model: MODEL,
+                        prompt: fullPrompt,
+                        n: 50,
+                        stop: ["\n"],
+                        max_tokens: 200
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`API request failed: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                state.suggestions = data.choices
+                    .map(choice => choice.text.trim())
+                    .filter(text => text && !state.listItems.includes(text));
+                
+                saveState();
+                renderSuggestions();
+                
+            } catch (error) {
+                showError(`Failed to generate suggestions: ${error.message}`);
+                console.error('Error:', error);
+            } finally {
+                generateBtn.disabled = false;
+                regenerateBtn.disabled = false;
+            }
+        }
+
+        // Regenerate suggestions
+        function regenerate() {
+            generateSuggestions();
+        }
+
+        // Clear list only
+        function clearList() {
+            if (state.listItems.length > 0 && confirm('Are you sure you want to clear the list?')) {
+                state.listItems = [];
+                state.suggestions = [];
+                saveState();
+                renderListItems();
+                renderSuggestions();
+            }
+        }
+
+        // Clear all data
+        function clearAll() {
+            if (confirm('Are you sure you want to clear everything (prompt, list, and suggestions)?')) {
+                state = {
+                    listPrompt: '',
+                    listItems: [],
+                    suggestions: []
+                };
+                document.getElementById('listPrompt').value = '';
+                document.getElementById('initialItems').value = '';
+                saveState();
+                updateUI();
+            }
+        }
+
+        // Error handling
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('error').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
