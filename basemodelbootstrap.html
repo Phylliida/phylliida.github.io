@@ -327,9 +327,27 @@ The Golden Goblet</textarea>
                 .replace(/=/g, '');
         }
 
-        function base64UrlDecode(str) {
-            str = (str + '===').slice(0, str.length + (str.length % 4));
-            return atob(str.replace(/-/g, '+').replace(/_/g, '/'));
+       function base64UrlDecode(str) {
+            try {
+                // Handle padding
+                const padding = 4 - (str.length % 4);
+                if (padding !== 4) {
+                    str += '='.repeat(padding);
+                }
+                
+                // Replace URL-safe characters with standard base64 characters
+                str = str.replace(/-/g, '+').replace(/_/g, '/');
+                
+                return atob(str);
+            } catch (e) {
+                // If that fails, try as-is (might already be standard base64)
+                try {
+                    return atob(str);
+                } catch (e2) {
+                    console.error('Base64 decode failed:', e, e2);
+                    throw new Error('Invalid base64 string');
+                }
+            }
         }
 
         // Save state to hash and localStorage whenever it changes
