@@ -612,6 +612,7 @@ a{color:#3498db;text-decoration:none;font-weight:bold;margin-right:.6rem;}
 
     <script>
     async function fetchJsonGz(url) {
+       url = url.replace("/chonkers/refusalvsbai/", "/mergedbailswapped/").replace(".pkl", ".json.gz")
       var res;
       var numRetries = 5;
       for (var retryIter = 0; retryIter < numRetries; retryIter++) {
@@ -620,7 +621,7 @@ a{color:#3498db;text-decoration:none;font-weight:bold;margin-right:.6rem;}
         if (retryIter == numRetries-1) {
             throw new Error(res.status);
         } else {
-            await sleep(1); // rate limit
+            await new Promise(r => setTimeout(r, 1000));
         }
       }
 
