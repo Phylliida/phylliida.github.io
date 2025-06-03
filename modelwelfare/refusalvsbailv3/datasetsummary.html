@@ -17,6 +17,12 @@ a:hover{text-decoration:underline;}
         --green:#2ecc71;   /* other (new “pretty green”)    */
     }
 
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f7fa;
+        }
     /* Layout */
     #bees{
         margin:0;
@@ -80,6 +86,10 @@ a:hover{text-decoration:underline;}
         border-radius:3px;
         display:inline-block;
     }
+    .hidden{display:none;}
+.ctrl-row{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:.3rem;}
+a{color:#3498db;text-decoration:none;font-weight:bold;margin-right:.6rem;}
+a:hover{text-decoration:underline;}
 </style>
 </head>
 
@@ -109,6 +119,7 @@ a:hover{text-decoration:underline;}
 <!-- ─── SCRIPTS ───────────────────────────────────────────────────── -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+Chart.defaults.animation = false;
 /* ── Utility to build a pie + legend ─────────────────────────────── */
 function makePieChart({canvasId, legendId, counts}){
     const labels = [
