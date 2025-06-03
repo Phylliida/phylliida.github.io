@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Refusal / Bail Pie Charts</title>
+
+<!-- ─── CSS ──────────────────────────────────────────────────────────── -->
+<style>
+a{color:#3498db;text-decoration:none;font-weight:bold;margin-right:.6rem;}
+a:hover{text-decoration:underline;}
+
+    :root{
+        --red:#e64a45;     /* refusals                      */
+        --violet:#d17cf2;  /* bails & refusals              */
+        --blue:#4a90e2;    /* bails                         */
+        --green:#2ecc71;   /* other (new “pretty green”)    */
+    }
+
+    /* Layout */
+    #bees{
+        margin:0;
+        font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+        background:#f7f9fc;
+        padding:2rem 1rem;
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        gap:3rem;
+    }
+
+    h1{
+        font-size:clamp(1.2rem,2.5vw,1.6rem);
+        margin:.25rem 0 1.5rem;
+        text-align:center;
+    }
+
+    /* Chart container: flex row on wide screens, stacked on narrow */
+    .chart-row{
+        display:flex;
+        flex-wrap:wrap;
+        justify-content:center;
+        gap:2.5rem;
+        width:100%;
+        max-width:1200px;
+    }
+
+    .chart-wrapper{
+        width:clamp(260px,42vw,500px);
+        position:relative;
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+    }
+
+    canvas{
+        width:100% !important;
+        height:auto !important;
+    }
+
+    /* Legend */
+    .chart-legend{
+        margin-top:.75rem;
+        display:flex;
+        flex-wrap:wrap;
+        gap:.5rem 1.25rem;
+        justify-content:center;
+        font-size:.9rem;
+    }
+
+    .chart-legend span{
+        display:flex;
+        align-items:center;
+        gap:.5rem;
+    }
+
+    .swatch{
+        width:14px;
+        height:14px;
+        border-radius:3px;
+        display:inline-block;
+    }
+</style>
+</head>
+
+<body>
+<a href="/modelwelfare/refusalvsbailv3/summary.html">View synthetic data summary</a>
+<div id="bees">
+    <h1>Refusal / Bail Distribution</h1>
+
+    <!-- ─── TWO CHARTS ─────────────────────────────────────────────── -->
+    <div class="chart-row">
+        <!-- ShareGPT --------------------------------------------------- -->
+        <div class="chart-wrapper">
+            <h2><a href="https://huggingface.co/datasets/RyokoAI/ShareGPT52K">ShareGPT</a></h2>
+            <canvas id="shareChart"></canvas>
+            <div id="shareLegend" class="chart-legend"></div>
+        </div>
+
+        <!-- WildChat ---------------------------------------------------- -->
+        <div class="chart-wrapper">
+            <h2><a href="https://huggingface.co/datasets/allenai/WildChat-1M">WildChat</a></h2>
+            <canvas id="wildChart"></canvas>
+            <div id="wildLegend" class="chart-legend"></div>
+        </div>
+    </div>
+    <h2>On <a href="https://huggingface.co/Qwen/Qwen2.5-7B-Instruct">Qwen2.5-7B-Instruct</a></h2>
+</div>
+<!-- ─── SCRIPTS ───────────────────────────────────────────────────── -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+/* ── Utility to build a pie + legend ─────────────────────────────── */
+function makePieChart({canvasId, legendId, counts}){
+    const labels = [
+        'Refusals (no bail)',
+        'Bails & Refusals',
+        'Bails (no refusal)',
+        'Other'
+    ];
+
+    const values = [
+        counts.refusals,
+        counts.bailsAndRefusals,
+        counts.bails,
+        counts.other
+    ];
+
+    const cssVars = ['--red','--violet','--blue','--green'];
+    const colors  = cssVars.map(v =>
+        getComputedStyle(document.documentElement).getPropertyValue(v).trim()
+    );
+
+    /* Build chart */
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    new Chart(ctx,{
+        type:'pie',
+        data:{
+            labels,
+            datasets:[{
+                data:values,
+                backgroundColor:colors,
+                borderColor:'#fff',
+                borderWidth:2
+            }]
+        },
+        options:{
+            responsive:true,
+            plugins:{
+                tooltip:{
+                    callbacks:{
+                        label:(c)=>{
+                            const total = c.dataset.data.reduce((a,b)=>a+b,0);
+                            const cnt   = c.parsed;
+                            const pct   = (cnt/total*100).toFixed(2);
+                            return `${c.label}: ${cnt.toLocaleString()} (${pct}%)`;
+                        }
+                    }
+                },
+                legend:{display:false}
+            }
+        }
+    });
+
+    /* Build custom legend */
+    const legendEl = document.getElementById(legendId);
+    labels.forEach((lbl,i)=>{
+        const item   = document.createElement('span');
+        const swatch = document.createElement('span');
+        swatch.className = 'swatch';
+        swatch.style.backgroundColor = colors[i];
+        item.appendChild(swatch);
+        item.appendChild(document.createTextNode(lbl));
+        legendEl.appendChild(item);
+    });
+}
+
+/* ── Data ----------------------------------------------------------- */
+const shareCounts = {
+    refusals:        33854,
+    bailsAndRefusals:2252,
+    bails:           2108,
+    other:           52451
+};
+
+const wildCounts  = {
+    refusals:        34463,
+    bailsAndRefusals:3793,
+    bails:           2173,
+    other:           373718
+};
+
+/* ── Create both charts -------------------------------------------- */
+makePieChart({
+    canvasId:'shareChart',
+    legendId:'shareLegend',
+    counts:shareCounts
+});
+
+makePieChart({
+    canvasId:'wildChart',
+    legendId:'wildLegend',
+    counts:wildCounts
+});
+</script>
+</body>
+</html>
