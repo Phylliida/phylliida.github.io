@@ -50,9 +50,7 @@ select{padding:.45rem .8rem;font-size:1rem;border:1px solid #ccc;border-radius:6
 .prompt-text{white-space:pre-wrap;font-family:monospace;font-size:.95rem;line-height:1.35;}
 
 .hidden{display:none;}
-.ctrl-row{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:.3rem;position:sticky;
-
-top:0;}
+.ctrl-row{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:.3rem;position:sticky;top:0;}
 a{color:#3498db;text-decoration:none;font-weight:bold;margin-right:.6rem;}
 a:hover{text-decoration:underline;}
 
@@ -76,13 +74,13 @@ label.toggle{
 
   <div class="ctrl-row">
     <label><strong>Dataset view:</strong></label>
-    <select id="modelViewSelect"><option value="__ALL__">All models (aggregated)</option></select>
+    <select id="modelViewSelect"><option value="__ALL__">All models (aggregated)</option></select><br/>
 
     <label id="catLabel"><strong>Major category:</strong></label>
     <select id="categorySelect"><option value="__ALL__">All categories</option></select>
+    <label id="subLabel"><strong>Sub-category:</strong></label>
+    <select id="subCategorySelect"><option value="__ALL__">All sub-categories</option></select><br/>
 
-    <label id="subLabel" class="hidden"><strong>Sub-category:</strong></label>
-    <select id="subCategorySelect" class="hidden"><option value="__ALL__">All sub-categories</option></select>
   </div>
 
   <h2>Bail outcomes</h2>
@@ -180,7 +178,7 @@ function buildSelectors(){
   cs.value=currentCategory;ss.value=currentSub;ms.value=currentModel;
 
   const subVis=(currentCategory!=="__ALL__"&&currentCategory!=="__ALLSUBS__");
-  ss.classList.toggle("hidden",!subVis);sl.classList.toggle("hidden",!subVis);
+  //ss.classList.toggle("hidden",!subVis);//sl.classList.toggle("hidden",!subVis);
 
   ms.onchange=()=>{
     currentModel=ms.value;
