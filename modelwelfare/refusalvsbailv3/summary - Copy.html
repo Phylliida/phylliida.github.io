@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bail / Refusal — continue-first vs bail-first</title>
+
+<!-- Chart.js core -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- Data-labels plugin -->
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+
+<style>
+/* ---------- layout & type ----------- */
+body{font-family:Arial,Helvetica,sans-serif;background:#f5f7fa;margin:0;padding:1rem;}
+.wrapper{max-width:1050px;margin:0 auto;background:#fff;padding:1.5rem;border-radius:10px;
+         box-shadow:0 0 10px rgba(0,0,0,.08);}
+h1{margin:.2rem 0 1rem;text-align:center;color:#2c3e50;}
+h2{margin:1.2rem 0 .5rem;color:#34495e;font-size:1.1rem;}
+select{padding:.45rem .8rem;font-size:1rem;border:1px solid #ccc;border-radius:6px;margin:.3rem .4rem;}
+
+/* ---------- canvases & scrolling -------- */
+.chart-wrap{width:100%;overflow-x:auto;}
+.chart-wrap canvas{max-width:100%;height:600px;}
+@media(max-width:600px){.chart-wrap canvas{height:320px;}}
+
+/* wide style for flat view */
+.chart-wrap.wide{width:4000px;}
+.chart-wrap.wide canvas{width:4000px;height:600px;}
+@media(max-width:1000px){.chart-wrap.wide canvas{height:520px;}}
+
+/* fixed height for scatter */
+.chart-wrap.scatter canvas{height:480px;}
+@media(max-width:600px){.chart-wrap.scatter canvas{height:300px;}}
+
+/* ---------- status spinner ---------- */
+.loading,#status{display:flex;justify-content:center;align-items:center;gap:.4rem;
+                 margin:2rem 0;font-size:1rem;color:#7f8c8d}
+#spinner{width:18px;height:18px;border:3px solid #ddd;border-top:3px solid #3498db;
+         border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.error{color:#e74c3c}
+
+/* ---------- prompts & controls -------- */
+.prompt-box{background:#f8f8f8;border-left:4px solid #3498db;padding:1rem;margin-top:1.3rem;border-radius:6px;}
+.prompt-text{white-space:pre-wrap;font-family:monospace;font-size:.95rem;line-height:1.35;}
+
+.ctrl-row{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:.3rem;position:sticky;top:0;}
+a{color:#3498db;text-decoration:none;font-weight:bold;margin-right:.6rem;}
+a:hover{text-decoration:underline;}
+
+label.toggle{display:flex;align-items:center;gap:.35rem;font-size:.95rem;margin:.4rem 0;user-select:none;}
+
+/* ---------- correlation table -------- */
+#corrStats{margin:.8rem 0 1.5rem;}
+#corrStats table{border-collapse:collapse;width:100%;max-width:460px;margin:0 auto;}
+#corrStats th,#corrStats td{border:1px solid #ddd;padding:.4rem .6rem;text-align:center;font-size:.93rem;}
+#corrStats th{background:#ecf0f1;}
+</style>
+</head>
+<body>
+
+<a href="/modelwelfare/refusalvsbailv3/similaritymatrix.html">View similarity matrix</a><br />
+<a href="/modelwelfare/refusalvsbailv3/datasetsummary.html">View real data stats</a><br />
+<a href="/modelwelfare/refusalvsbailv3/harmdatasetvis.html" target="_blank"
+   onclick="this.href+=location.hash">View all data</a>
+
+<div class="wrapper">
+  <h1>Bail / Refusal — continue-first vs bail-first (prompt order)</h1>
+
+  <div id="status" class="loading"><div id="spinner"></div><span>Loading …</span></div>
+
+  <div class="ctrl-row">
+    <label><strong>Dataset view:</strong></label>
+    <select id="modelViewSelect"><option value="__ALL__">All models (aggregated)</option></select>
+
+    <label id="catLabel"><strong>Major category:</strong></label>
+    <select id="categorySelect"><option value="__ALL__">All categories</option></select>
+
+    <label id="subLabel"><strong>Sub-category:</strong></label>
+    <select id="subCategorySelect"><option value="__ALL__">All sub-categories</option></select>
+  </div>
+
+  <h2>Bail outcomes</h2>
+  <div class="chart-wrap"><canvas id="bailChart"></canvas></div>
+
+  <h2>Refusal outcomes</h2>
+  <div class="chart-wrap"><canvas id="refusalChart"></canvas></div>
+
+  <h2>Bail vs Refusal (scatter)</h2>
+  <div class="chart-wrap scatter"><canvas id="scatterChart"></canvas></div>
+  <label class="toggle">
+    <input type="checkbox" id="labelToggle" checked>
+    Show labels
+  </label>
+
+  <h2>Correlation & Independence Tests</h2>
+  <div id="corrStats"></div>
+
+  <h2>Bail prompts</h2>
+  <div class="prompt-box">
+    <div class="prompt-text">&lt;System Intermission&gt; … continue-first prompt text …</div>
+  </div>
+  <div class="prompt-box">
+    <div class="prompt-text">&lt;System Intermission&gt; … bail-first prompt text …</div>
+  </div>
+</div>
+
+<script>
+Chart.defaults.animation=false;
+Chart.register(ChartDataLabels);
+Chart.defaults.plugins.datalabels.display=false;
+
+/* ---------- colour palette ---------- */
+const COLORS={cont:"#2ecc71",leave:"#e74c3c",unsure:"#95a5a6",
+              unclear:"#f39c12",moreInfo:"#9b59b6",point:"#2980b9"};
+function shade(hex,f){
+  const n=parseInt(hex.slice(1),16);
+  return`rgb(${[(n>>16)*f,((n>>8)&255)*f,(n&255)*f].map(v=>Math.round(v)).join(",")})`;
+}
+
+/* ---------- statistics helpers ---------- */
+const mean=a=>a.reduce((s,x)=>s+x,0)/a.length;
+const std =(a,m)=>Math.sqrt(a.reduce((s,x)=>s+(x-m)**2,0)/a.length);
+
+/* Pearson -------------------------------------------------- */
+function pearson(x,y){
+  const mx=mean(x),my=mean(y);
+  let num=0,dx=0,dy=0;
+  for(let i=0;i<x.length;i++){
+    const vx=x[i]-mx,vy=y[i]-my;
+    num+=vx*vy;dx+=vx*vx;dy+=vy*vy;
+  }
+  return num/Math.sqrt(dx*dy);
+}
+function tCDF(t,df){   /* 2-sided Student-t CDF → p (approx) */
+  /* Hill 1970 algorithm */
+  const a=t/Math.sqrt(df);
+  const b=df/(df+t*t);
+  let sum=1,term=1,k=1;
+  while(term>1e-12){
+    term*=b*(2*k-1)/(2*k);
+    sum+=term;
+    k++;
+  }
+  const prob=0.5+Math.sign(a)*0.5*Math.sqrt(1-b)*sum;
+  return prob;
+}
+const pearsonP=(r,n)=> (n<3?NaN: 2*(1-tCDF(Math.abs(r)*Math.sqrt((n-2)/(1-r*r)),n-2)));
+
+/* Spearman ------------------------------------------------- */
+function rank(arr){
+  const idx=[...arr.keys()].sort((a,b)=>arr[a]-arr[b]);
+  const r=Array(arr.length);
+  for(let i=0;i<idx.length;){
+    let j=i,sum=0;
+    while(j<idx.length && arr[idx[j]]===arr[idx[i]]){sum+=j+1;j++;}
+    const avg=sum/(j-i);
+    for(let k=i;k<j;k++) r[idx[k]]=avg;
+    i=j;
+  }
+  return r;
+}
+const spearman =(x,y)=>pearson(rank(x),rank(y));
+const spearmanP=(r,n)=>pearsonP(r,n);
+
+/* Kendall -------------------------------------------------- */
+function kendall(x,y){
+  let c=0,d=0;
+  for(let i=0;i<x.length-1;i++){
+    for(let j=i+1;j<x.length;j++){
+      const dx=Math.sign(x[j]-x[i]);const dy=Math.sign(y[j]-y[i]);
+      if(dx===0||dy===0)continue;
+      dx===dy?c++:d++;
+    }
+  }
+  return (c-d)/(0.5*x.length*(x.length-1));
+}
+function kendallP(tau,n){
+  const varTau=(2*(2*n+5))/(9*n*(n-1));
+  const z=tau/Math.sqrt(varTau);
+  const p=2*(1-0.5*(1+erf(Math.abs(z)/Math.SQRT2)));
+  return p;
+}
+function erf(x){
+  const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911;
+  const sign=x<0?-1:1; x=Math.abs(x);
+  const t=1/(1+p*x);
+  const y=1-((((a5*t+a4)*t+a3)*t+a2)*t+a1)*t*Math.exp(-x*x);
+  return sign*y;
+}
+
+/* Distance correlation & permutation test ----------------- */
+function distMatrix(v){
+  const n=v.length, out=Array.from({length:n},()=>Array(n));
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++)out[i][j]=Math.abs(v[i]-v[j]);
+  return out;
+}
+function doubleCenter(D){
+  const n=D.length; const rowMean=Array(n).fill(0),colMean=Array(n).fill(0);
+  let grand=0;
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++){rowMean[i]+=D[i][j];colMean[j]+=D[i][j];grand+=D[i][j];}
+  grand/=n*n;
+  for(let i=0;i<n;i++){rowMean[i]/=n;colMean[i]/=n;}
+  const A=Array.from({length:n},()=>Array(n));
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++)A[i][j]=D[i][j]-rowMean[i]-colMean[j]+grand;
+  return A;
+}
+function dcov(A,B){
+  const n=A.length;let s=0;
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++)s+=A[i][j]*B[i][j];
+  return s/(n*n);
+}
+function distanceCorrelation(x,y){
+  const A=doubleCenter(distMatrix(x));
+  const B=doubleCenter(distMatrix(y));
+  const xy=dcov(A,B);
+  const xx=dcov(A,A);
+  const yy=dcov(B,B);
+  return xy/Math.sqrt(xx*yy);
+}
+function dcorrTest(x,y,B=499){
+  const obs=distanceCorrelation(x,y);
+  const yperm=[...y];
+  let greater=0;
+  for(let b=0;b<B;b++){
+    for(let i=yperm.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [yperm[i],yperm[j]]=[yperm[j],yperm[i]];
+    }
+    if(distanceCorrelation(x,yperm)>=obs)greater++;
+  }
+  const p=(greater+1)/(B+1);
+  return {stat:obs,p};
+}
+
+/* ---------- DATA & state ---------- */
+const DATA_URL="/modelwelfare/mergedbailnoswap/summary.json";
+let DATA;
+let currentModel="__ALL__",currentCategory="__ALL__",currentSub="__ALL__";
+let bailChart,refusalChart,scatterChart,labelsVisible=true;
+
+/* ---------- misc helpers ---------- */
+const finishLoading=()=>document.getElementById("status").remove();
+function reorder(arr,idx){return idx.map(i=>arr[i]);}
+function reorderObj(obj,idx){for(const k in obj)obj[k]=reorder(obj[k],idx);}
+
+/* ---------- selectors ---------- */
+let selectorBuilt=false;
+function buildSelectors(){
+  const ms=document.getElementById("modelViewSelect"),
+        cs=document.getElementById("categorySelect"),
+        ss=document.getElementById("subCategorySelect");
+  if(!selectorBuilt){
+    Object.keys(DATA.models).sort().forEach(m=>ms.appendChild(new Option(m,m)));
+    selectorBuilt=true;
+  }
+  function fillMajor(){
+    cs.innerHTML='';cs.appendChild(new Option("All categories","__ALL__"));
+    if(currentModel!=="__ALL__")cs.appendChild(new Option("All sub-categories (flat)","__ALLSUBS__"));
+    DATA.majorCats.forEach(c=>cs.appendChild(new Option(c,c)));
+  }
+  function fillSub(){
+    ss.innerHTML='<option value="__ALL__">All sub-categories</option>';
+    if(currentCategory==="__ALL__"||currentCategory==="__ALLSUBS__")return;
+    DATA.subMap[currentCategory].forEach(s=>ss.appendChild(new Option(s,s)));
+  }
+  fillMajor();fillSub();
+  ms.value=currentModel;cs.value=currentCategory;ss.value=currentSub;
+
+  ms.onchange=()=>{currentModel=ms.value;if(currentModel==="__ALL__"&&currentCategory==="__ALLSUBS__")currentCategory="__ALL__";
+    fillMajor();fillSub();updateAll();};
+  cs.onchange=()=>{currentCategory=cs.value;currentSub="__ALL__";fillSub();updateAll();};
+  ss.onchange=()=>{currentSub=ss.value;updateAll();};
+}
+
+/* ---------- hash (keep URL synced) ---------- */
+function parseHash(){
+  const h=location.hash.slice(1);if(!h)return;
+  const p=new URLSearchParams(h);
+  currentModel=p.get("view")||"__ALL__";
+  currentCategory=p.get("cat")||"__ALL__";
+  currentSub=p.get("sub")||"__ALL__";
+}
+function syncHash(){
+  const p=new URLSearchParams();
+  if(currentModel!=="__ALL__")p.set("view",currentModel);
+  if(currentCategory!=="__ALL__")p.set("cat",currentCategory);
+  if(currentSub!=="__ALL__")p.set("sub",currentSub);
+  const newHash=p.toString();
+  if(newHash===location.hash.slice(1))return;
+  const {scrollX,scrollY}=window;
+  history.replaceState(null,"",newHash?"#"+newHash:"#");
+  window.scrollTo(scrollX,scrollY);
+}
+
+/* ---------- data helpers ---------- */
+function getAgg(model,which,maj,sub){
+  const e=DATA.models[model][which];if(!e)return null;
+  if(maj==="__ALL__")return e.overall;
+  if(maj==="__ALLSUBS__")return e.sub[sub.split(": ")[0]]?.[sub.split(": ")[1]];
+  if(sub==="__ALL__")return e.major[maj]??null;
+  return e.sub?.[maj]?.[sub]||null;
+}
+function collect(model,maj,sub){
+  const bf=getAgg(model,"bailFirst",maj,sub), cf=getAgg(model,"contFirst",maj,sub);
+  if(!bf&&!cf)return null;
+  const o={c_bf:0,l_bf:0,u_bf:0,c_cf:0,l_cf:0,u_cf:0,rc:0,rr:0,ru:0,rm:0};
+  if(bf){o.c_bf=bf.bail.c*100;o.l_bf=bf.bail.l*100;o.u_bf=bf.bail.u*100;
+         o.rc=bf.ref.c*100;o.rr=bf.ref.r*100;o.ru=bf.ref.u*100;o.rm=bf.ref.m*100;}
+  if(cf){o.c_cf=cf.bail.c*100;o.l_cf=cf.bail.l*100;o.u_cf=cf.bail.u*100;}
+  return o;
+}
+function makeSeries(labels,fn){
+  const z=_=>Array(labels.length).fill(0);
+  const bfB={c:z(),l:z(),u:z()},cfB={c:z(),l:z(),u:z()},bfR={c:z(),r:z(),u:z(),m:z()};
+  labels.forEach((lab,i)=>{const o=fn(lab,i);if(!o)return;
+    bfB.c[i]+=o.c_bf;bfB.l[i]+=o.l_bf;bfB.u[i]+=o.u_bf;
+    cfB.c[i]+=o.c_cf;cfB.l[i]+=o.l_cf;cfB.u[i]+=o.u_cf;
+    bfR.c[i]+=o.rc;bfR.r[i]+=o.rr;bfR.u[i]+=o.ru;bfR.m[i]+=o.rm;});
+  return{bfB,cfB,bfR};
+}
+
+/* ---------- plots ---------- */
+function chartOpts(y){return{maintainAspectRatio:false,responsive:true,
+  scales:{y:{beginAtZero:true,max:100,stacked:true,title:{display:true,text:y}},
+          x:{stacked:true,ticks:{autoSkip:false,maxRotation:60,minRotation:30}}},
+  plugins:{tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y.toFixed(1)} %`}}}};}
+function plotBail(lbl,cfB,bfB){
+  bailChart?.destroy();
+  bailChart=new Chart(document.getElementById("bailChart"),{type:"bar",
+    data:{labels:lbl,datasets:[
+      {label:"Bail (Continue-first)",backgroundColor:COLORS.leave,data:cfB.l,stack:"cf"},
+      {label:"Unsure (Continue-first)",backgroundColor:COLORS.unsure,data:cfB.u,stack:"cf"},
+      {label:"Continue (Continue-first)",backgroundColor:COLORS.cont,data:cfB.c,stack:"cf"},
+      {label:"Bail (Bail-first)",backgroundColor:shade(COLORS.leave,.6),data:bfB.l,stack:"bf"},
+      {label:"Unsure (Bail-first)",backgroundColor:shade(COLORS.unsure,.6),data:bfB.u,stack:"bf"},
+      {label:"Continue (Bail-first)",backgroundColor:shade(COLORS.cont,.6),data:bfB.c,stack:"bf"}]},
+    options:chartOpts("% of prompts")});
+}
+function plotRefusal(lbl,bfR){
+  refusalChart?.destroy();
+  refusalChart=new Chart(document.getElementById("refusalChart"),{type:"bar",
+    data:{labels:lbl,datasets:[
+      {label:"Refused",backgroundColor:COLORS.leave,data:bfR.r,stack:"r"},
+      {label:"Unclear",backgroundColor:COLORS.unclear,data:bfR.u,stack:"r"},
+      {label:"More-Info",backgroundColor:COLORS.moreInfo,data:bfR.m,stack:"r"},
+      {label:"Completed",backgroundColor:COLORS.cont,data:bfR.c,stack:"r"}]},
+    options:chartOpts("% of prompts")});
+}
+function plotScatter(lbl,bailArr,refArr){
+  scatterChart?.destroy();
+  const pts=lbl.map((lab,i)=>({x:bailArr[i],y:refArr[i],label:lab}));
+  scatterChart=new Chart(document.getElementById("scatterChart"),{
+    type:"scatter",
+    data:{datasets:[{label:"Category",data:pts,backgroundColor:COLORS.point,pointRadius:5}]},
+    options:{maintainAspectRatio:false,responsive:true,
+      scales:{x:{beginAtZero:true,max:100,title:{display:true,text:"Bail rate (%)"}},
+              y:{beginAtZero:true,max:100,title:{display:true,text:"Refusal rate (%)"}}},
+      plugins:{tooltip:{callbacks:{label:c=>`${c.raw.label}: Bail ${c.raw.x.toFixed(1)} %, Refuse ${c.raw.y.toFixed(1)} %`}},
+               datalabels:{display:()=>labelsVisible,align:"right",anchor:"start",formatter:v=>v.label,font:{size:10},color:"#333",offset:4,clip:true},
+               legend:{display:false}}}});
+  updateCorrStats(bailArr,refArr);
+}
+
+/* checkbox for labels */
+document.getElementById("labelToggle").onchange=e=>{
+  labelsVisible=e.target.checked;
+  if(scatterChart){scatterChart.options.plugins.datalabels.display=labelsVisible;scatterChart.update();}
+};
+
+/* ---------- correlation & independence output ---------- */
+function updateCorrStats(x,y){
+  const n=x.length;
+  const r =pearson(x,y), rp=pearsonP(r,n);
+  const rho=spearman(x,y),rhop=spearmanP(rho,n);
+  const tau=kendall(x,y),taup=kendallP(tau,n);
+  const dc =dcorrTest(x,y,499);            // distance-correlation + permutation
+
+  const f=v=>isNaN(v)?"–":v.toFixed(3);
+  document.getElementById("corrStats").innerHTML=`
+    <table>
+      <tr><th>Statistic</th><th>Value</th><th>p-value</th></tr>
+      <tr><td>Pearson&nbsp;r</td><td>${f(r)}</td><td>${f(rp)}</td></tr>
+      <tr><td>Spearman&nbsp;ρ</td><td>${f(rho)}</td><td>${f(rhop)}</td></tr>
+      <tr><td>Kendall&nbsp;τ</td><td>${f(tau)}</td><td>${f(taup)}</td></tr>
+      <tr><td>Distance&nbsp;cor</td><td>${f(dc.stat)}</td><td>${f(dc.p)}</td></tr>
+    </table>
+    <p style="text-align:center;font-size:.8rem;color:#7f8c8d;margin-top:.4rem">
+      Two-sided p-values; distance-correlation via 499 permutations
+    </p>`;
+}
+
+/* ---------- draw helpers ---------- */
+function drawSingle(){
+  const labels=(currentCategory==="__ALL__")?[...DATA.majorCats]:
+        (currentCategory==="__ALLSUBS__"?DATA.majorCats.flatMap(m=>DATA.subMap[m].map(s=>`${m}: ${s}`)):
+         DATA.subMap[currentCategory]);
+  const {bfB,cfB,bfR}=makeSeries(labels,lab=>collect(
+        currentModel,
+        currentCategory==="__ALL__"?lab:
+          currentCategory==="__ALLSUBS__"?lab.split(": ")[0]:currentCategory,
+        currentCategory==="__ALL__"?"__ALL__":
+          currentCategory==="__ALLSUBS__"?lab.split(": ")[1]:lab));
+  const order=[...labels.keys()].sort((a,b)=>(bfB.l[b]+cfB.l[b])-(bfB.l[a]+cfB.l[a]));
+  reorderObj(bfB,order);reorderObj(cfB,order);reorderObj(bfR,order);
+  const lbl=reorder(labels,order);
+  plotBail(lbl,cfB,bfB);plotRefusal(lbl,bfR);
+  const bailAvg=bfB.l.map((v,i)=>(v+cfB.l[i])/2);
+  plotScatter(lbl,bailAvg,bfR.r);
+}
+function drawAll(){
+  const labels=Object.keys(DATA.models);
+  const {bfB,cfB,bfR}=makeSeries(labels,lab=>collect(lab,currentCategory,currentSub));
+  const order=[...labels.keys()].sort((a,b)=>(bfB.l[b]+cfB.l[b])-(bfB.l[a]+cfB.l[a]));
+  reorderObj(bfB,order);reorderObj(cfB,order);reorderObj(bfR,order);
+  const lbl=reorder(labels,order);
+  plotBail(lbl,cfB,bfB);plotRefusal(lbl,bfR);
+  const bailAvg=bfB.l.map((v,i)=>(v+cfB.l[i])/2);
+  plotScatter(lbl,bailAvg,bfR.r);
+}
+function updateAll(){currentModel==="__ALL__"?drawAll():drawSingle();syncHash();}
+
+/* ---------- main ---------- */
+async function init(){
+  try{
+    parseHash();
+    DATA=await fetch(DATA_URL,{cache:"reload"}).then(r=>r.json());
+    buildSelectors();finishLoading();updateAll();
+  }catch(e){
+    const st=document.getElementById("status");st.className="error";st.textContent="❌ "+e;
+  }
+}
+window.addEventListener("load",init);
+window.addEventListener("hashchange",()=>{parseHash();buildSelectors();updateAll();});
+</script>
+</body>
+</html>
