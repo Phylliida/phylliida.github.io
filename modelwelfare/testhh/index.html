@@ -131,7 +131,7 @@ const plotToggle  = document.getElementById('plotToggle');
 const plotMaxBtn  = document.getElementById('plotMax');
 const plotSelect  = document.getElementById('plotSelect');
 
-const facetOptions = new Map();   // label → url
+var facetOptions = new Map();   // label → url
 let   curPoints   = [];           // active array  [[x,y],…]
 let   xyMinMax    = null;         // {xmin,xmax,ymin,ymax}
 
@@ -165,7 +165,7 @@ function sleep(seconds) {
 
 
 /* ---------- facet-points helpers ---------- */
-const pointsCache = new Map();             // url → Promise
+var pointsCache = new Map();             // url → Promise
 
 async function getPoints(url){
   if(!pointsCache.has(url))
@@ -183,17 +183,18 @@ function calcMinMax(arr){
 }
 
 /* ---------- hull helpers ---------- */
-const hullVisible   = new Map();          // path → {idx,color}
+var hullVisible   = new Map();          // path → {idx,color}
 const hullColors    = ['#ff767580','#74b9ff80','#55efc480','#fdcb6e80',
                        '#ffeaa780','#a29bfe80','#fab1a080','#81ecec80'];
 
 function addHull(node){
-  if (!node.concaveHull || !curPoints.length) return;
+  if (!node.__concaveHull || !curPoints.length) return;
+  console.log("Adding hull with " + node.__concaveHull.length + " points");
   const p = join(node.__pathArr);
   if (hullVisible.has(p)) return;
-  hullVisible.set(p,{idx:node.concaveHull,
+  hullVisible.set(p,{idx:node.__concaveHull,
                      color:hullColors[hullVisible.size%hullColors.length],
-                     facetURL:plotSelect.value});
+                     facetI:node.__faceti});
   drawPoints();             // redraw incl. new hull
 }
 function removeHull(node){
@@ -233,15 +234,60 @@ function drawPoints(){
 
   for(const [x,y] of curPoints){
     const px = (x - xmin) * sx;
-    const py = h - (y - ymin) * sy;
+    const py = (y - ymin) * sy;
     plotCtx.fillRect(px-1, py-1, 2, 2);
   }
+  
+    /* --- concave-hulls --- */
+    var numPointsDrawn = 0;
+  for (const [path,{idx,facetI,color}] of hullVisible){
+    console.log(facetIToStr[facetI] + " " + plotSelect.value);
+    if (facetIToStr[facetI]!==plotSelect.value) continue;           // ignore other facets
+    plotCtx.fillStyle = "#6ec1ff";
+    //console.log("color" + color);
+    //plotCtx.beginPath();
+    for (const i of idx) {
+      const [x,y] = curPoints[i];
+      const px = (x-xmin)*sx, py = (y-ymin)*sy;
+      //plotCtx.lineTo(px,py);
+      
+        plotCtx.fillRect(px-1, py-1, 2, 2);
+        numPointsDrawn += 1;
+      //console.log("hull point " + i + " " + px + " " + py)
+    }
+    //plotCtx.closePath();
+    //plotCtx.stroke();
+  }
+  console.log("Num points drawn" + numPointsDrawn);
 }
 
 function resizeCanvas() {
 
   drawPoints();   // repaint with the new scale
 }
+
+plotCanvas.addEventListener('click',ev=>{
+  const rect = plotCanvas.getBoundingClientRect(),
+        dpr  = 1,
+        cx   = (ev.clientX-rect.left)*dpr,
+        cy   = (ev.clientY-rect.top )*dpr;
+  const {xmin,xmax,ymin,ymax}=xyMinMax,
+        sx = xmax===xmin?1:plotCanvas.width /(xmax-xmin),
+        sy = ymax===ymin?1:plotCanvas.height/(ymax-ymin),
+        dx = x=>xmin+x/sx,
+        dy = y=>ymax-(y/sy);
+  for (const [path,{idx,facetURL}] of hullVisible){
+    if (facetURL!==plotSelect.value) continue;
+    const poly = idx.map(i=>curPoints[i]);
+    if (pointInPoly(poly,dx(cx),dy(cy))){
+       const det = pathMap.get(path);
+       if(det && !det.open){
+         det.open = true;       // triggers toggle & redraw
+       }
+       break;
+    }
+  }
+});
 
 window.addEventListener('resize', resizeCanvas);
 
@@ -265,18 +311,29 @@ async function loadPointsLE(url) {
 
 async function addFacetOption(label, url){
   if (facetOptions.has(label)) return;
+  console.log("Add facet option " + label + " " + url);
   facetOptions.set(label, url);
-  plotSelect.appendChild($('option', { value:url }, label));
+  console.log(facetOptions);
+  plotSelect.appendChild($('option', { value:label }, label));
   //if (plotSelect.selectedIndex === -1){      // first entry
-      await loadDraw(url);
-      plotSelect.value = url;
+  await loadDraw(url);
+  plotSelect.value = label;
   //}
 }
 
-plotSelect.onchange = async () => await loadDraw(plotSelect.value);
+plotSelect.onchange = async () => await loadDraw(facetOptions.get(plotSelect.value));
+
+var ptsLookup = new Map();
 
 async function loadDraw(url){
-  var pts = await getPoints(url);
+  var pts;
+  if (ptsLookup.has(url)) {
+    pts = ptsLookup.get(url);
+  }
+  else {
+    pts = await getPoints(url);
+    ptsLookup[url] = pts;
+  }
   curPoints = pts;
   xyMinMax  = calcMinMax(pts);
   resizeCanvas();
@@ -420,7 +477,12 @@ async function fetchJsonGz(url) {
 
   return JSON.parse(text);
 }
-const join=p=>p.join('.'), split=s=>s.split('.');
+function join(p) {
+    return p.join(".");
+}
+function split(s) {
+    return s.split(".");
+}
 const getNum=i=>i?.numConversations??i?.numConvs??0;
 const isPlaceholder=i=>typeof i==='object'&&i!==null&&'path'in i&&!('children'in i);
 const count=getNum;
@@ -431,6 +493,8 @@ const PASSWORD_PROTECTED = false;
 const ROOT="/modelwelfare/testhh/rootObjects.json";
 const pathMap=new Map();
 let openConvHash=null;
+
+var facetIToStr = {};
 
 /* ───────── root build ───────── */
 window.onload=()=>fetchJson(ROOT).then(buildFacets);
@@ -448,11 +512,12 @@ async function buildFacets(raw){
           f.facet?.question?$('span',{class:'summary'},f.facet.question):null)));
     const details=li.firstChild;
     details.__childrenData=sortByCount(f.hierarchy);
+    details.__faceti = fi;
+    facetIToStr[fi] = f.facet?.name;
     
     if(f.points){
       details.__pointsURL = f.points;
       await addFacetOption(f.facet?.name, f.points);
-      loadDraw(details.__pointsURL);
       details.__pointsLoaded = true;
     }
     details.__pathArr=[`f${fi}`];
@@ -466,8 +531,8 @@ async function buildFacets(raw){
 
 
 /* ───────── builders ───────── */
-async function buildNode(item,pathArr,siblingTotal){
-  if(isPlaceholder(item)) return await buildPlaceholder(item,pathArr,siblingTotal);
+async function buildNode(faceti,item,pathArr,siblingTotal){
+  if(isPlaceholder(item)) return await buildPlaceholder(faceti,item,pathArr,siblingTotal);
   const p=join(pathArr);
   const details=$('details',{}); pathMap.set(p,details);
   const own=count(item), pct=siblingTotal?Math.round(own*100/siblingTotal):100;
@@ -479,10 +544,13 @@ async function buildNode(item,pathArr,siblingTotal){
   details.__childrenData=sortByCount(item.children||[]);
   details.__convs=item.conversations||null;
   details.__pathArr=pathArr;
+  details.__concaveHull=item.concaveHull;
+  details.__faceti = faceti;
+  if(details.__concaveHull) addHull(details);
   details.addEventListener('toggle',handleToggle);
   return $('li',{},details);
 }
-async function buildPlaceholder(ph,pathArr,siblingTotal){
+async function buildPlaceholder(faceti,ph,pathArr,siblingTotal){
   const url=ph.path, pathStr=join(pathArr);
   var data;
   if (PASSWORD_PROTECTED) {
@@ -491,7 +559,7 @@ async function buildPlaceholder(ph,pathArr,siblingTotal){
   else {
     data=await fetchJsonGz(url);
   }
-  return (data.children||data.conversations) ?  await buildNode(data,pathArr,siblingTotal) : buildLeaf(url,data);
+  return (data.children||data.conversations) ?  await buildNode(faceti,data,pathArr,siblingTotal) : buildLeaf(url,data);
 }
 function buildLeaf(url,data){
   const d=$('details',{},$('summary',{},url.split('/').pop()));
@@ -504,6 +572,8 @@ async function handleToggle(e){
   const det=e.currentTarget;
   const parentPath=join(det.__pathArr);
   if(det.open){
+  
+      
     if(!det.__built && det.__childrenData){
       const childTotal=det.__childrenData.reduce((s,i)=>s+count(i),0);
       const ul=$('ul',{class:'tree'});
@@ -515,7 +585,7 @@ async function handleToggle(e){
             spinnerChild = $('li',{},spinner());
             ul.appendChild(spinnerChild);
         }
-        var childNode = await buildNode(ch,[...det.__pathArr,i],childTotal);
+        var childNode = await buildNode(det.__faceti, ch,[...det.__pathArr,i],childTotal);
         if (isPlaceholder(ch)) {
             spinnerChild.replaceWith(childNode);
         }
@@ -523,6 +593,7 @@ async function handleToggle(e){
             ul.appendChild(childNode);
         }
       }
+      removeHull(det);
       det.__built=true;
     }
     if(det.__convs && !det.__convsBuilt){
@@ -543,6 +614,7 @@ async function handleToggle(e){
       det.__convsBuilt=true;
     }
   }else{
+      addHull(det);
     det.querySelectorAll(':scope > ul.tree, :scope > details').forEach(n=>n.remove());
     det.__built=false;det.__convsBuilt=false;
     for(const key of [...pathMap.keys()]){
@@ -587,6 +659,7 @@ function closeConversation(){
   setTimeout(()=>modalWrap.classList.add('hidden'),250);
   openConvHash=null;updateHash();
 }
+
 function mdToHtml(t=''){
   let h=t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   h=h.replace(/```([\s\S]*?)```/g,(m,c)=>`<pre><code>${c}</code></pre>`);
