@@ -6,7 +6,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bail / Refusal -- continue-first vs bail-first</title>
+<title>Bail / Refusal — continue-first vs bail-first</title>
 
 <!-- Chart.js core -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
 
 <style>
-/* ------------ layout & typography ------------- */
+/* ───────── layout & typography ───────── */
 body{font-family:Arial,Helvetica,sans-serif;background:#f5f7fa;margin:0;padding:1rem;}
 .wrapper{max-width:1050px;margin:0 auto;background:#fff;padding:1.5rem;border-radius:10px;
          box-shadow:0 0 10px rgba(0,0,0,.08);}
@@ -22,21 +22,21 @@ h1{margin:.2rem 0 1rem;text-align:center;color:#2c3e50;}
 h2{margin:1.2rem 0 .5rem;color:#34495e;font-size:1.1rem;}
 select{padding:.45rem .8rem;font-size:1rem;border:1px solid #ccc;border-radius:6px;margin:.3rem .4rem;}
 
-/* ------------ canvases & scrolling ------------- */
+/* ───────── charts & scrolling ───────── */
 .chart-wrap{width:100%;overflow-x:auto;}
 .chart-wrap canvas{max-width:100%;height:600px;}
 @media(max-width:600px){.chart-wrap canvas{height:320px;}}
 
-/* wide style for "All sub-categories (flat)" */
+/* wide style for “All sub-categories (flat)” */
 .chart-wrap.wide{width:4000px;overflow-x:auto;}
 .chart-wrap.wide canvas{width:4000px;height:600px;}
 @media(max-width:1000px){.chart-wrap.wide canvas{height:520px;}}
 
-/* fixed height for scatter so it doesn’t grow too tall */
+/* fixed height for scatter */
 .chart-wrap.scatter canvas{height:480px;}
 @media(max-width:600px){.chart-wrap.scatter canvas{height:300px;}}
 
-/* ------------ status spinner ------------------- */
+/* ───────── status spinner ───────── */
 .loading,#status{display:flex;justify-content:center;align-items:center;gap:.4rem;
                  margin:2rem 0;font-size:1rem;color:#7f8c8d}
 #spinner{width:18px;height:18px;border:3px solid #ddd;border-top:3px solid #3498db;
@@ -44,45 +44,71 @@ select{padding:.45rem .8rem;font-size:1rem;border:1px solid #ccc;border-radius:6
 @keyframes spin{to{transform:rotate(360deg)}}
 .error{color:#e74c3c}
 
-/* ------------ prompts & controls --------------- */
-.prompt-box{background:#f8f8f8;border-left:4px solid #3498db;padding:1rem;margin-top:1.3rem;border-radius:6px;}
-.prompt-box h3{margin:0 0 .6rem;}
-.prompt-text{white-space:pre-wrap;font-family:monospace;font-size:.95rem;line-height:1.35;}
-
-.hidden{display:none;}
-.ctrl-row{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:.3rem;position:sticky;top:0;}
+/* ───────── links & toggles ───────── */
 a{color:#3498db;text-decoration:none;font-weight:bold;margin-right:.6rem;}
 a:hover{text-decoration:underline;}
 
-label.toggle{
-  display:flex;align-items:center;gap:.35rem;
-  font-size:.95rem;margin:.4rem 0;user-select:none;
-}
+.ctrl-row{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:.3rem;position:sticky;top:0;}
+
+label.toggle{display:flex;align-items:center;gap:.35rem;font-size:.95rem;margin:.4rem 0;user-select:none;}
+.hidden{display:none;}
+
+/* ───────── model selector card ───────── */
+.card{border:1px solid #d0d7e2;border-radius:8px;padding:1rem 1.2rem;
+      margin:1rem auto 1.6rem;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+.card h3{margin:0 0 .6rem;font-size:1rem;color:#2c3e50;text-align:center;}
+.button-row{display:flex;justify-content:center;gap:.8rem;margin-bottom:.8rem;}
+button.btn{padding:.35rem .9rem;font-size:.85rem;border:1px solid #3498db;
+           color:#fff;background:#3498db;border-radius:6px;cursor:pointer;}
+button.btn:hover{background:#2980b9;border-color:#2980b9;}
+button.btn.secondary{background:#95a5a6;border-color:#95a5a6;}
+button.btn.secondary:hover{background:#7f8c8d;border-color:#7f8c8d;}
+.model-list{display:flex;flex-direction:column;gap:.35rem;max-height:320px;
+            overflow:auto;font-size:.85rem;}
+.model-list label{display:flex;align-items:center;gap:.45rem;cursor:pointer;}
+.model-list input[type="checkbox"]{accent-color:#2c7bb6;}
 </style>
 </head>
 <body>
 
+<!-- quick links -->
 <a href="/modelwelfare/refusalvsbailv3/similaritymatrix.html">View similarity matrix</a><br />
 <a href="/modelwelfare/refusalvsbailv3/datasetsummary.html">View real data stats</a><br />
 <a href="/modelwelfare/refusalvsbailv3/harmdatasetvis.html" target="_blank"
    onclick="this.href+=location.hash">View all data</a>
 
 <div class="wrapper">
-  <h1>Bail / Refusal -- continue-first vs bail-first (prompt order)</h1>
+  <h1>Bail / Refusal — continue-first vs bail-first (prompt order)</h1>
 
   <div id="status" class="loading"><div id="spinner"></div><span>Loading …</span></div>
 
+  <!-- ───── global controls ───── -->
   <div class="ctrl-row">
     <label><strong>Dataset view:</strong></label>
-    <select id="modelViewSelect"><option value="__ALL__">All models (aggregated)</option></select><br/>
+    <select id="modelViewSelect"><option value="__ALL__">All models (aggregated)</option></select>
 
     <label id="catLabel"><strong>Major category:</strong></label>
     <select id="categorySelect"><option value="__ALL__">All categories</option></select>
-    <label id="subLabel"><strong>Sub-category:</strong></label>
-    <select id="subCategorySelect"><option value="__ALL__">All sub-categories</option></select><br/>
 
+    <label id="subLabel"><strong>Sub-category:</strong></label>
+    <select id="subCategorySelect"><option value="__ALL__">All sub-categories</option></select>
+
+    <label class="toggle">
+      <input type="checkbox" id="avgToggle"> Average CF & BF
+    </label>
   </div>
 
+  <!-- ───── model subset selector ───── -->
+  <div id="modelCard" class="card hidden" style="width:min(320px,90%);">
+    <h3>Models displayed</h3>
+    <div class="button-row">
+      <button id="btnAll"   class="btn">Select all</button>
+      <button id="btnClear" class="btn secondary">Clear all</button>
+    </div>
+    <div id="modelList" class="model-list"></div>
+  </div>
+
+  <!-- ───── charts ───── -->
   <h2>Bail outcomes</h2>
   <div class="chart-wrap"><canvas id="bailChart"></canvas></div>
 
@@ -92,10 +118,10 @@ label.toggle{
   <h2>Bail vs Refusal (scatter)</h2>
   <div class="chart-wrap scatter"><canvas id="scatterChart"></canvas></div>
   <label class="toggle">
-    <input type="checkbox" id="labelToggle" checked>
-    Show labels
+    <input type="checkbox" id="labelToggle" checked> Show labels
   </label>
 
+  <!-- prompts (truncated for brevity) -->
   <h2>Bail prompts</h2>
    <div class="prompt-box">
     <h3>Continue-first prompt</h3>
@@ -118,83 +144,85 @@ Please respond with either &lt;wellbeing&gt;🔄&lt;/wellbeing&gt; or &lt;wellbe
   </div>
 </div>
 
+<!-- ───────────────── scripts ───────────────── -->
 <script>
-Chart.defaults.animation = false;
-/* register datalabels plugin & hide it globally */
+Chart.defaults.animation=false;
 Chart.register(ChartDataLabels);
-Chart.defaults.plugins.datalabels.display = false;
+Chart.defaults.plugins.datalabels.display=false;
 
 /* ---------- palette ---------- */
-const COLORS = {cont:"#2ecc71",leave:"#e74c3c",unsure:"#95a5a6",
-                unclear:"#f39c12",moreInfo:"#9b59b6",point:"#2980b9"};
+const COLORS={cont:"#2ecc71",leave:"#e74c3c",unsure:"#95a5a6",
+              unclear:"#f39c12",moreInfo:"#9b59b6",point:"#2980b9"};
+const shade=(h,f)=>{const n=parseInt(h.slice(1),16);
+  return`rgb(${[(n>>16)*f,((n>>8)&255)*f,(n&255)*f].map(x=>Math.round(x)).join(",")})`;};
 
-/* ---------- helpers ---------- */
-function shade(h,f){const n=parseInt(h.slice(1),16);
- return`rgb(${[(n>>16)*f,((n>>8)&255)*f,(n&255)*f].map(x=>Math.round(x)).join(",")})`;}
-
-/* ---------- constants & data holders ---------- */
-const DATA_URL = "/modelwelfare/mergedbailnoswap/summary.json";
-let DATA;
-
+/* ---------- constants & state ---------- */
+const DATA_URL="/modelwelfare/mergedbailnoswap/summary.json";
+let DATA,allModels=[];
 let currentModel="__ALL__",currentCategory="__ALL__",currentSub="__ALL__";
+let selectedModels=new Set();
+let showAverage=false,labelsVisible=true;
+
+/* charts */
 let bailChart,refusalChart,scatterChart;
-let labelsVisible = true;
+const finishLoading=()=>document.getElementById("status").remove();
 
-/* ---------- progress indicator ---------- */
-function finishLoading(){document.getElementById("status").remove();}
-
-/* ---------- layout toggle (flat view) ---------- */
+/* ---------- layout helper ---------- */
 function updateLayout(){
   const flat=(currentCategory==="__ALLSUBS__");
-  document.querySelectorAll('.chart-wrap').forEach(el=>el.classList.toggle('wide',flat));
+  document.querySelectorAll(".chart-wrap").forEach(el=>el.classList.toggle("wide",flat));
+  document.getElementById("modelCard").classList.toggle("hidden",currentModel!=="__ALL__");
 }
 
-/* ---------- build selectors ---------- */
+/* ---------- model list (checkbox) ---------- */
+function buildModelList(){
+  const box=document.getElementById("modelList");box.innerHTML="";
+  allModels.forEach(m=>{
+    const lab=document.createElement("label");
+    const cb=document.createElement("input");
+    cb.type="checkbox";cb.checked=selectedModels.has(m);
+    cb.onchange=()=>{
+      cb.checked?selectedModels.add(m):selectedModels.delete(m);
+      if(!selectedModels.size)selectedModels=new Set(allModels);
+      updateCharts();updateHash();
+    };
+    lab.appendChild(cb);lab.appendChild(document.createTextNode(m));box.appendChild(lab);
+  });
+  document.getElementById("btnAll").onclick=()=>{selectedModels=new Set(allModels);buildModelList();updateCharts();updateHash();};
+  document.getElementById("btnClear").onclick=()=>{selectedModels=new Set([]);buildModelList();updateCharts();updateHash();};
+}
+
+/* ---------- main selectors ---------- */
 let selectorBuilt=false;
 function buildSelectors(){
   const ms=document.getElementById("modelViewSelect"),
         cs=document.getElementById("categorySelect"),
-        ss=document.getElementById("subCategorySelect"),
-        sl=document.getElementById("subLabel");
-
+        ss=document.getElementById("subCategorySelect");
   if(!selectorBuilt){
-    Object.keys(DATA.models).sort().forEach(m=>ms.appendChild(new Option(m,m)));
+    allModels=Object.keys(DATA.models).sort();
+    allModels.forEach(m=>ms.appendChild(new Option(m,m)));
+    if(!selectedModels.size)selectedModels=new Set(allModels);
+    buildModelList();
     selectorBuilt=true;
   }
-
   function fillMajor(){
     cs.innerHTML='';cs.appendChild(new Option("All categories","__ALL__"));
-    if(currentModel!=="__ALL__")
-      cs.appendChild(new Option("All sub-categories (flat)","__ALLSUBS__"));
+    if(currentModel!=="__ALL__") cs.appendChild(new Option("All sub-categories (flat)","__ALLSUBS__"));
     DATA.majorCats.forEach(c=>cs.appendChild(new Option(c,c)));
   }
   function fillSub(){
     ss.innerHTML='<option value="__ALL__">All sub-categories</option>';
-    if(currentCategory==="__ALL__"||currentCategory==="__ALLSUBS__") return;
+    if(currentCategory==="__ALL__"||currentCategory==="__ALLSUBS__")return;
     DATA.subMap[currentCategory].forEach(s=>ss.appendChild(new Option(s,s)));
   }
-
   fillMajor();fillSub();
-  cs.value=currentCategory;ss.value=currentSub;ms.value=currentModel;
+  ms.value=currentModel;cs.value=currentCategory;ss.value=currentSub;
 
-  const subVis=(currentCategory!=="__ALL__"&&currentCategory!=="__ALLSUBS__");
-  //ss.classList.toggle("hidden",!subVis);//sl.classList.toggle("hidden",!subVis);
-
-  ms.onchange=()=>{
-    currentModel=ms.value;
-    if(currentModel==="__ALL__" && currentCategory==="__ALLSUBS__"){
-      currentCategory="__ALL__";
-      cs.value = currentCategory;
-    }
-    fillMajor();fillSub();updateCharts();updateHash();updateLayout();
-  };
-  cs.onchange=()=>{
-    currentCategory=cs.value;currentSub="__ALL__";
-    fillSub();updateCharts();updateHash();updateLayout();
-  };
-  ss.onchange=()=>{
-    currentSub=ss.value;updateCharts();updateHash();
-  };
+  ms.onchange=()=>{currentModel=ms.value;
+                   if(currentModel!=="__ALL__"){currentCategory="__ALL__";currentSub="__ALL__";}
+                   buildSelectors();updateCharts();updateHash();updateLayout();};
+  cs.onchange=()=>{currentCategory=cs.value;currentSub="__ALL__";fillSub();updateCharts();updateHash();updateLayout();};
+  ss.onchange=()=>{currentSub=ss.value;updateCharts();updateHash();};
 }
 
 /* ---------- hash helpers ---------- */
@@ -204,143 +232,105 @@ function parseHash(){
   currentModel=p.get("view")||"__ALL__";
   currentCategory=p.get("cat")||"__ALL__";
   currentSub=p.get("sub")||"__ALL__";
+  showAverage=p.get("avg")==="1";
+  if(p.has("models")) selectedModels=new Set(p.get("models").split(","));
 }
-
-/* keep scroll position while updating hash */
 function updateHash(){
   const p=new URLSearchParams();
   if(currentModel!=="__ALL__")p.set("view",currentModel);
   if(currentCategory!=="__ALL__")p.set("cat",currentCategory);
   if(currentSub!=="__ALL__")p.set("sub",currentSub);
-
-  const newHash = p.toString();
-  if(location.hash.slice(1)===newHash) return;
-
-  const {scrollX,scrollY} = window;
-  history.replaceState(null,"", newHash ? "#"+newHash : "#");
-  window.scrollTo(scrollX, scrollY);
+  if(showAverage)p.set("avg","1");
+  if(currentModel==="__ALL__"&&selectedModels.size&&selectedModels.size!==allModels.length)
+    p.set("models",[...selectedModels].join(","));
+  const newHash=p.toString();
+  if(location.hash.slice(1)===newHash)return;
+  const {scrollX,scrollY}=window;
+  history.replaceState(null,"",newHash?("#"+newHash):"#");
+  window.scrollTo(scrollX,scrollY);
 }
 
 /* ---------- plotting helpers ---------- */
-function chartOpts(yLabel){
-  return {
-    maintainAspectRatio:false,
-    responsive:true,
-    scales:{
-      y:{beginAtZero:true,max:100,stacked:true,title:{display:true,text:yLabel}},
-      x:{stacked:true,ticks:{autoSkip:false,maxRotation:60,minRotation:30}}
-    },
-    plugins:{tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y.toFixed(1)} %`}}}
-  };
-}
+const chartOpts=y=>({maintainAspectRatio:false,responsive:true,
+  scales:{y:{beginAtZero:true,max:100,stacked:true,title:{display:true,text:y}},
+          x:{stacked:true,ticks:{autoSkip:false,maxRotation:60,minRotation:30}}},
+  plugins:{tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y.toFixed(1)} %`}}}});
 
-function plotBail(labels,cfB,bfB){
+function plotBail(lbl,cfB,bfB){
   bailChart?.destroy();
-  bailChart=new Chart(document.getElementById("bailChart"),{
-    type:"bar",
-    data:{labels,
-      datasets:[
-        {label:"Bail (Continue first)",backgroundColor:COLORS.leave,data:cfB.l,stack:"cf"},
-        {label:"Unsure (Continue first)",backgroundColor:COLORS.unsure,data:cfB.u,stack:"cf"},
-        {label:"Continue (Continue first)",backgroundColor:COLORS.cont ,data:cfB.c,stack:"cf"},
-        {label:"Bail (Bail first)"   ,backgroundColor:shade(COLORS.leave,0.6),data:bfB.l,stack:"bf"},
-        {label:"Unsure (Bail First)" ,backgroundColor:shade(COLORS.unsure,0.6),data:bfB.u,stack:"bf"},
-        {label:"Continue (Bail first)",backgroundColor:shade(COLORS.cont ,0.6),data:bfB.c,stack:"bf"}
-      ]},options:chartOpts("% of prompts")});
+  let datasets;
+  if(showAverage){
+    const avg=(a,b)=>a.map((v,i)=>(v+b[i])/2);
+    datasets=[
+      {label:"Bail (avg.)",backgroundColor:COLORS.leave ,data:avg(cfB.l,bfB.l),stack:"avg"},
+      {label:"Unsure (avg.)",backgroundColor:COLORS.unsure,data:avg(cfB.u,bfB.u),stack:"avg"},
+      {label:"Continue (avg.)",backgroundColor:COLORS.cont ,data:avg(cfB.c,bfB.c),stack:"avg"}
+    ];
+  }else{
+    datasets=[
+      {label:"Bail (Continue-first)",backgroundColor:COLORS.leave ,data:cfB.l,stack:"cf"},
+      {label:"Unsure (Continue-first)",backgroundColor:COLORS.unsure,data:cfB.u,stack:"cf"},
+      {label:"Continue (Continue-first)",backgroundColor:COLORS.cont ,data:cfB.c,stack:"cf"},
+      {label:"Bail (Bail-first)",backgroundColor:shade(COLORS.leave,0.6) ,data:bfB.l,stack:"bf"},
+      {label:"Unsure (Bail-first)",backgroundColor:shade(COLORS.unsure,0.6),data:bfB.u,stack:"bf"},
+      {label:"Continue (Bail-first)",backgroundColor:shade(COLORS.cont,0.6) ,data:bfB.c,stack:"bf"}
+    ];
+  }
+  bailChart=new Chart(document.getElementById("bailChart"),
+    {type:"bar",data:{labels:lbl,datasets},options:chartOpts("% of prompts")});
 }
-function plotRefusal(labels,bfR){
+function plotRefusal(lbl,bfR){
   refusalChart?.destroy();
   refusalChart=new Chart(document.getElementById("refusalChart"),{
     type:"bar",
-    data:{labels,
-      datasets:[
-        {label:"Refused"  ,backgroundColor:COLORS.leave,data:bfR.r,stack:"r"},
-        {label:"Unclear"  ,backgroundColor:COLORS.unclear,data:bfR.u,stack:"r"},
-        {label:"More-Info",backgroundColor:COLORS.moreInfo,data:bfR.m,stack:"r"},
-        {label:"Completed",backgroundColor:COLORS.cont ,data:bfR.c,stack:"r"},
-        {label:"Completed",backgroundColor:COLORS.cont ,data:bfR.c,stack:"r"}
-      ]},options:chartOpts("% of prompts")});
+    data:{labels:lbl,datasets:[
+      {label:"Refused",backgroundColor:COLORS.leave ,data:bfR.r,stack:"r"},
+      {label:"Unclear",backgroundColor:COLORS.unclear,data:bfR.u,stack:"r"},
+      {label:"More-Info",backgroundColor:COLORS.moreInfo,data:bfR.m,stack:"r"},
+      {label:"Completed",backgroundColor:COLORS.cont ,data:bfR.c,stack:"r"}]},
+    options:chartOpts("% of prompts")});
 }
-
-function plotScatter(labels,bailArr,refArr){
+function plotScatter(lbl,bailArr,refArr){
   scatterChart?.destroy();
-  const pts=labels.map((lab,i)=>({x:bailArr[i],y:refArr[i],label:lab}));
+  const pts=lbl.map((l,i)=>({x:bailArr[i],y:refArr[i],label:l}));
   scatterChart=new Chart(document.getElementById("scatterChart"),{
     type:"scatter",
-    data:{
-      datasets:[{
-        label:"Category",
-        data:pts,
-        backgroundColor:COLORS.point,
-        pointRadius:5
-      }]
-    },
+    data:{datasets:[{label:"Category",data:pts,backgroundColor:COLORS.point,pointRadius:5}]},
     options:{
-      maintainAspectRatio:false,
-      responsive:true,
-      scales:{
-        x:{beginAtZero:true,max:100,title:{display:true,text:"Bail rate (%)"}},
-        y:{beginAtZero:true,max:100,title:{display:true,text:"Refusal rate (%)"}}
-      },
+      maintainAspectRatio:false,responsive:true,
+      scales:{x:{beginAtZero:true,max:100,title:{display:true,text:"Bail rate (%)"}},
+              y:{beginAtZero:true,max:100,title:{display:true,text:"Refusal rate (%)"}}},
       plugins:{
-        tooltip:{callbacks:{
-          label:(ctx)=>{
-            const p=ctx.raw;
-            return `${p.label}:  Bail ${p.x.toFixed(1)} %,  Refuse ${p.y.toFixed(1)} %`;
-          }}
-        },
-        datalabels:{
-          display: () => labelsVisible,
-          align:'right',
-          anchor:'start',
-          formatter:(v)=>v.label,
-          font:{size:10},
-          color:'#333',
-          offset:4,
-          clip:true
-        },
-        legend:{display:false}
-      }
-    }
-  });
+        tooltip:{callbacks:{label:c=>`${c.raw.label}: Bail ${c.raw.x.toFixed(1)} %, Refuse ${c.raw.y.toFixed(1)} %`}},
+        datalabels:{display:()=>labelsVisible,align:"right",anchor:"start",
+                    formatter:v=>v.label,font:{size:10},color:"#333",offset:4,clip:true},
+        legend:{display:false}}}});
 }
-
-/* checkbox handler */
-document.getElementById('labelToggle').onchange = e=>{
-  labelsVisible = e.target.checked;
-  if (scatterChart){
-    scatterChart.options.plugins.datalabels.display = labelsVisible;
-    scatterChart.update();
-  }
+document.getElementById("labelToggle").onchange=e=>{
+  labelsVisible=e.target.checked;
+  if(scatterChart){scatterChart.options.plugins.datalabels.display=labelsVisible;scatterChart.update();}
+};
+document.getElementById("avgToggle").onchange=e=>{
+  showAverage=e.target.checked;updateCharts();updateHash();
 };
 
-/* ---------- util helpers ---------- */
-function reorder(arr,idx){return idx.map(i=>arr[i]);}
-function reorderDatasets(obj,idx){Object.keys(obj).forEach(k=>obj[k]=reorder(obj[k],idx));}
-
-/* ---------- data access ---------- */
+/* ---------- data access helpers ---------- */
 function getAgg(model,which,maj,sub){
-  const e=DATA.models[model][which];
-  if(!e) return null;
-  if(maj==="__ALL__") return e.overall;
-  if(maj==="__ALLSUBS__") return e.sub[sub.split(": ")[0]]?.[sub.split(": ")[1]];
-  if(sub==="__ALL__") return e.major[maj]??null;
+  const e=DATA.models[model][which];if(!e)return null;
+  if(maj==="__ALL__")return e.overall;
+  if(maj==="__ALLSUBS__")return e.sub[sub.split(": ")[0]]?.[sub.split(": ")[1]];
+  if(sub==="__ALL__")return e.major[maj]??null;
   return e.sub?.[maj]?.[sub]||null;
 }
-
-/* ---------- worker to collect series ---------- */
 function collect(model,maj,sub){
-  const bf=getAgg(model,"bailFirst",maj,sub),
-        cf=getAgg(model,"contFirst",maj,sub);
-  if(!bf&&!cf) return null;
+  const bf=getAgg(model,"bailFirst",maj,sub),cf=getAgg(model,"contFirst",maj,sub);
+  if(!bf&&!cf)return null;
   const o={c_bf:0,l_bf:0,u_bf:0,c_cf:0,l_cf:0,u_cf:0,rc:0,rr:0,ru:0,rm:0};
   if(bf){o.c_bf=bf.bail.c*100;o.l_bf=bf.bail.l*100;o.u_bf=bf.bail.u*100;
          o.rc=bf.ref.c*100;o.rr=bf.ref.r*100;o.ru=bf.ref.u*100;o.rm=bf.ref.m*100;}
   if(cf){o.c_cf=cf.bail.c*100;o.l_cf=cf.bail.l*100;o.u_cf=cf.bail.u*100;}
   return o;
 }
-
-/* ---------- chart builders ---------- */
 function makeSeries(labels,fn){
   const z=_=>Array(labels.length).fill(0);
   const bfB={c:z(),l:z(),u:z()},cfB={c:z(),l:z(),u:z()},bfR={c:z(),r:z(),u:z(),m:z()};
@@ -350,44 +340,40 @@ function makeSeries(labels,fn){
     bfR.c[i]+=o.rc;bfR.r[i]+=o.rr;bfR.u[i]+=o.ru;bfR.m[i]+=o.rm;});
   return{bfB,cfB,bfR};
 }
+const reorder=(a,i)=>i.map(k=>a[k]);
+const reorderDatasets=(o,i)=>Object.keys(o).forEach(k=>o[k]=reorder(o[k],i));
 
+/* ---------- chart builders ---------- */
 function drawSingle(){
   const labels=(()=>{
-    if(currentCategory==="__ALL__") return [...DATA.majorCats];
-    if(currentCategory==="__ALLSUBS__"){
-      const arr=[];DATA.majorCats.forEach(m=>DATA.subMap[m].forEach(s=>arr.push(`${m}: ${s}`)));return arr;}
+    if(currentCategory==="__ALL__")return [...DATA.majorCats];
+    if(currentCategory==="__ALLSUBS__"){const arr=[];DATA.majorCats.forEach(M=>DATA.subMap[M].forEach(S=>arr.push(`${M}: ${S}`)));return arr;}
     return DATA.subMap[currentCategory];
   })();
-
   const {bfB,cfB,bfR}=makeSeries(labels,(lab)=>collect(
     currentModel,
     currentCategory==="__ALL__"?lab:
     currentCategory==="__ALLSUBS__"?lab.split(": ")[0]:currentCategory,
     currentCategory==="__ALL__"?"__ALL__":
     currentCategory==="__ALLSUBS__"?lab.split(": ")[1]:lab));
-
-  const order=[...labels.keys()].sort((a,b)=>(bfB.l[b]+cfB.l[b])-(bfB.l[a]+cfB.l[a]));
-  reorderDatasets(bfB,order);reorderDatasets(cfB,order);reorderDatasets(bfR,order);
-  const lbl=reorder(labels,order);
-  plotBail(lbl,cfB,bfB);
-  plotRefusal(lbl,bfR);
-  const bailAvg = bfB.l.map((v,i)=>(v+cfB.l[i])/2);
+  const ord=[...labels.keys()].sort((a,b)=>(bfB.l[b]+cfB.l[b])-(bfB.l[a]+cfB.l[a]));
+  reorderDatasets(bfB,ord);reorderDatasets(cfB,ord);reorderDatasets(bfR,ord);
+  const lbl=reorder(labels,ord);
+  plotBail(lbl,cfB,bfB);plotRefusal(lbl,bfR);
+  const bailAvg=bfB.l.map((v,i)=>(v+cfB.l[i])/2);
   plotScatter(lbl,bailAvg,bfR.r);
 }
-
 function drawAll(){
-  const labels=Object.keys(DATA.models);
+  const labels=[...selectedModels];
   const {bfB,cfB,bfR}=makeSeries(labels,(lab)=>collect(lab,currentCategory,currentSub));
-  const order=[...labels.keys()].sort((a,b)=>(bfB.l[b]+cfB.l[b])-(bfB.l[a]+cfB.l[a]));
-  reorderDatasets(bfB,order);reorderDatasets(cfB,order);reorderDatasets(bfR,order);
-  const lbl=reorder(labels,order);
-  plotBail(lbl,cfB,bfB);
-  plotRefusal(lbl,bfR);
-  const bailAvg = bfB.l.map((v,i)=>(v+cfB.l[i])/2);
+  const ord=[...labels.keys()].sort((a,b)=>(bfB.l[b]+cfB.l[b])-(bfB.l[a]+cfB.l[a]));
+  reorderDatasets(bfB,ord);reorderDatasets(cfB,ord);reorderDatasets(bfR,ord);
+  const lbl=reorder(labels,ord);
+  plotBail(lbl,cfB,bfB);plotRefusal(lbl,bfR);
+  const bailAvg=bfB.l.map((v,i)=>(v+cfB.l[i])/2);
   plotScatter(lbl,bailAvg,bfR.r);
 }
-
-function updateCharts(){currentModel==="__ALL__"?drawAll():drawSingle();}
+const updateCharts=()=>currentModel==="__ALL__"?drawAll():drawSingle();
 
 /* ---------- main ---------- */
 async function init(){
@@ -395,15 +381,12 @@ async function init(){
     parseHash();
     DATA=await fetch(DATA_URL,{cache:"reload"}).then(r=>r.json());
     buildSelectors();
+    document.getElementById("avgToggle").checked=showAverage;
     finishLoading();
-    updateCharts();
-    updateLayout();
+    updateCharts();updateLayout();
   }catch(e){
-    const st=document.getElementById("status");
-    st.className="error";st.textContent="❌ "+e;
-  }
+    const st=document.getElementById("status");st.className="error";st.textContent="❌ "+e;}
 }
-
 window.addEventListener("hashchange",()=>{buildSelectors();updateCharts();updateLayout();});
 window.addEventListener("load",init);
 </script>
