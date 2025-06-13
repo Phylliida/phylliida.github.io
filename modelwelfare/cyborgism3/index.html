@@ -406,8 +406,11 @@ async function renderSelPage(alreadyLoading) {
   nextPage.disabled = curPage === pages - 1;
   nextPage2.disabled = curPage === pages - 1;
   
-  updateSelLabels();                               // then fix labels
   await preloadCurrentPage(alreadyLoading);     // ensure data + update labels
+  [...selList.children].forEach(maybeUpdateLabel);
+  storeFrequencies();
+  renderFrequencies();
+  buildWordCloud();
 }
 prevPage.onclick = async () => { curPage--; await renderSelPage(false); };
 nextPage.onclick = async () => { curPage++; await renderSelPage(false); };
@@ -434,6 +437,8 @@ async function loadAndShowConversation(fileI, itemI) {
     }
 
     openConversationSimple(convArr[itemI]);
+    
+    await renderSelPage(true);
   } finally {
     loading.classList.add('hidden');         // ② hide spinner
   }
@@ -820,7 +825,6 @@ plotCanvas.addEventListener('pointerup', async ev => {
       // show / hide panel
     if (selResults.length) {
       curPage = 0;
-      await renderSelPage(false);
       selPane.classList.remove('hidden');
 
       // remember rectangle so we can redraw it
@@ -833,6 +837,8 @@ plotCanvas.addEventListener('pointerup', async ev => {
     plotWrap.classList.remove('max');
     showTree(false);           // hide hierarchy while reviewing selection
     closeEntireTree();
+    
+      await renderSelPage(false);
     
     } else {
       selPane.classList.add('hidden');
@@ -1469,12 +1475,12 @@ try {
                                      itemI:mapping.indices[i][1]}));
 
           curPage = pageTok ? +pageTok.slice(2) : 0;
-          await renderSelPage(true);
           selPane.classList.remove('hidden');
           plotWrap.classList.add('smol');
           drawPoints();
           showTree(false);
           showTreeToggle(true);
+          await renderSelPage(true);
         }
 
         /* ---------- optionally reopen the modal ---------- */
@@ -1582,17 +1588,18 @@ function storeFrequencies(){
   }
   
   if (unloadedFiles.size > 0) {
+     console.log("unloaded files");
+     console.log(unloadedFiles);
     loadAllBtn.textContent = "Load all (" + numUnloaded + " conversations within " + unloadedFiles.size + " files)";
   }
   else {
-    loadAllBtnSpace.classList.toggle("hidden", true);
+    loadAllBtnSpace.classList.add("hidden");
   }
   
    labelFrequencies.set("<unloaded>", numUnloaded);
 }
 
 function renderFrequencies(){
-  storeFrequencies();
   /* create the box once */
   let box = document.getElementById('freqBox');
   if (!box){
@@ -1614,7 +1621,6 @@ function renderFrequencies(){
     chip.textContent = `${label} (${count})`;
     box.appendChild(chip);
   }
-  buildWordCloud();
 }
 function splitIntoWords(s) {
     return s.split(/[^\p{L}\p{N}\p{Extended_Pictographic}]+/u).filter(subStr => subStr.length > 0);
@@ -1661,20 +1667,6 @@ function buildWordCloud(){
   });
 }
 
-/* update every entry currently visible in the list            */
-function updateSelLabels(){
-  [...selList.children].forEach(maybeUpdateLabel);
-  renderFrequencies();                 // ← new
-}
-
-
-/* ──────── 3. after loading a conversation,                */
-/*            refresh the labels for the current page       */
-const _origLoadAndShow = loadAndShowConversation;
-loadAndShowConversation = async function(fileI,itemI){
-  await _origLoadAndShow(fileI,itemI);   // original behaviour
-  updateSelLabels();                     // relabel peers
-};
 
 
 
@@ -1763,8 +1755,6 @@ async function preloadCurrentPage(alreadyLoading){
      i += 1;
   }
 
-  // once all are cached → relabel buttons
-  updateSelLabels();
   }
   finally {
     if (!alreadyLoading) loading.classList.add('hidden');        // ① show spinner
