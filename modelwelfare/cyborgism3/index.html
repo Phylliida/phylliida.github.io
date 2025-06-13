@@ -1727,10 +1727,11 @@ async function preloadAllSelectedFiles() {
     setLoad(`loading files … ${++done}/${fileSet.size}`);
   }
 
+  /* now every conversation is in RAM → update labels & chips */
+  await renderSelPage(false);
+  
   loading.classList.add('hidden');
 
-  /* now every conversation is in RAM → update labels & chips */
-  renderSelPage(false);
 }
 
 /* ──────────────────────────────────────────────────────────────
