@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Chat-data browser</title>
 <script src="https://unpkg.com/pako@2.1.0/dist/pako.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.0.2/wordcloud2.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
@@ -159,13 +158,6 @@ details[open]>ul{animation:fadeDown var(--trans) ease-out}
   font-size:.75rem;
   white-space:nowrap;
 }
-
-#loadMsg{
-  margin-bottom:.6rem;
-  font-size:.9rem;
-}
-
-#plotCanvas{touch-action:none;}   /* allow custom dragging */
 </style>
 </head>
 
@@ -173,10 +165,6 @@ details[open]>ul{animation:fadeDown var(--trans) ease-out}
 <h1 style="margin-bottom:.8rem;font-size:1.7rem">Chat-data hierarchy browser</h1>
 
 <button id="treeToggle" class="hidden">Show tree</button>
-<span id="loadAllBtnSpace" class="hidden">
-<br /><br />
-<button id="loadAllBtn">load all</button> 
-</span>
 <div id="treePane"><ul id="treeRoot" class="tree"></ul></div>
 
 <div id="modalWrap" class="hidden">
@@ -198,6 +186,8 @@ details[open]>ul{animation:fadeDown var(--trans) ease-out}
 <br />
 <br />
 <br />
+<br />
+<br />
 <!-- ───── selected-conversations panel ───── -->
   
 <div id="selPane" class="hidden">
@@ -208,27 +198,9 @@ details[open]>ul{animation:fadeDown var(--trans) ease-out}
   </div>
   <h2 style="margin:.3rem 0 .6rem">Selected conversations</h2>
   <div id="selList"></div>
-  
-<div id="pager2" class="hidden" style="margin-top:.6rem;display:flex;gap:.4rem">
-    <button id="prevPage2">◀ prev</button>
-    <span id="pageInfo2" style="flex:1;text-align:center"></span>
-    <button id="nextPage2">next ▶</button>
-  </div>
-<details id="wcWrap" style="margin-top:.9rem">
-  <summary style="cursor:pointer;font-weight:600">
-    <span id="wordCloudTitle">Word-cloud</span> <span style="font-size:.8rem;color:var(--txt-1)">▼ click</span>
-  </summary>
-  <canvas id="wcCanvas" width="600" height="400"
-          style="display:block;margin-top:.6rem;max-width:100%;"></canvas>
-</details>
 
-<details id="wcWrap" style="margin-top:.9rem">
-  <summary style="cursor:pointer;font-weight:600">
-    Frequencies <span style="font-size:.8rem;color:var(--txt-1)">▼ click</span>
-  </summary>
-  <div id="freqBox"></div>
-</details>
   <!-- NEW: slot for the frequency chips -->
+  <div id="freqBox"></div>
 </div>
 <!-- ───── scatter-plot overlay ───── -->
 <div id="plotWrap"  class="plotDock smol">
@@ -242,14 +214,10 @@ details[open]>ul{animation:fadeDown var(--trans) ease-out}
 </div>
 <div id="plotLeaf" class="hidden" title="Show plot (h)">◀</div>
 <div id="loading" class="hidden">
-<span id="loadMsg">Loading…</span> 
   <span class="spinner"></span>
 </div>
 <script>
-
-const loadAllBtn = document.getElementById('loadAllBtn');
-const loadAllBtnSpace = document.getElementById('loadAllBtnSpace');
-var selConvFile = -1, selConvItem = -1;
+ var selConvFile = -1, selConvItem = -1;
 const loading = document.getElementById('loading');
 var treeNavArr  = null;   // array with the conversations of that node
 var treeNavInd = -1;   // its path in the hierarchy
@@ -272,10 +240,6 @@ const pager     = document.getElementById('pager');
 const prevPage  = document.getElementById('prevPage');
 const nextPage  = document.getElementById('nextPage');
 const pageInfo  = document.getElementById('pageInfo');
-const pager2     = document.getElementById('pager2');
-const prevPage2  = document.getElementById('prevPage2');
-const nextPage2  = document.getElementById('nextPage2');
-const pageInfo2  = document.getElementById('pageInfo2');
 
 const treePane   = document.getElementById('treePane');
 const navPrevBtn = document.getElementById('navPrev');
@@ -283,17 +247,13 @@ const navNextBtn = document.getElementById('navNext');
 const treeTglBtn = document.getElementById('treeToggle');
 
 let selRect = null;   // {minX,maxX,minY,maxY} in canvas pixels
-const loadMsg = document.getElementById('loadMsg');
-function setLoad(txt){ loadMsg.textContent = txt; }
 
-const wordCloudTitle = document.getElementById("wordCloudTitle");
 
 function closeEntireTree(){
     
 }
 
 function showTreeToggle(yes){
-    loadAllBtnSpace.classList.toggle("hidden", !yes);
   treeTglBtn.classList.toggle('hidden', !yes);
 }
 function clearSelection(){
@@ -332,6 +292,7 @@ navNextBtn.onclick = ()=> jumpRel(+1);
 
 function jumpRel(delta) {
 
+  console.log("jump rel " + delta + " ");
   /* 1 – if modal came from a box selection */
   if (selResults.length) {
     const pos  = selResults.findIndex(({fileI, itemI}) =>
@@ -341,12 +302,17 @@ function jumpRel(delta) {
     if (next) loadAndShowConversation(next.fileI, next.itemI);
     return;
   }
+  console.log(treeNavArr);
 
   /* 2 – if modal came from the tree view */
   if (treeNavArr) {
+    console.log("has tree nav arr of len " + treeNavArr.length + " with idx " + curItem + " and delta + " + delta);
     const nextIdx = parseInt(curItem) + delta;
+    console.log("next idx");
+    console.log(nextIdx);
     if (nextIdx >= 0 && nextIdx < treeNavArr.length) {
         curItem = nextIdx;
+        console.log("loading next");
         openConversation(treeNavArr[nextIdx], treeNavPath, nextIdx, treeRootConvs);
     }
   }
@@ -358,7 +324,7 @@ const PAGE_SIZE = 50;
 let   selResults = [];   // [{fileI, itemI}, …]
 let   curPage    = 0;
 
-async function renderSelPage(alreadyLoading) {
+function renderSelPage() {
   const total = selResults.length;
   const pages = Math.ceil(total / PAGE_SIZE) || 1;
 
@@ -382,21 +348,12 @@ async function renderSelPage(alreadyLoading) {
 
   // pager
   pageInfo.textContent = `${curPage + 1} / ${pages}`;
-  pageInfo2.textContent = `${curPage + 1} / ${pages}`;
   pager.classList.toggle('hidden', pages === 1);
-  pager2.classList.toggle('hidden', pages === 1);
   prevPage.disabled = curPage === 0;
-  prevPage2.disabled = curPage === 0;
   nextPage.disabled = curPage === pages - 1;
-  nextPage2.disabled = curPage === pages - 1;
-  
-  updateSelLabels();                               // then fix labels
-  await preloadCurrentPage(alreadyLoading);     // ensure data + update labels
 }
-prevPage.onclick = async () => { curPage--; await renderSelPage(false); };
-nextPage.onclick = async () => { curPage++; await renderSelPage(false); };
-prevPage2.onclick = async () => { curPage--; await renderSelPage(false); };
-nextPage2.onclick = async () => { curPage++; await renderSelPage(false); };
+prevPage.onclick = () => { curPage--; renderSelPage(); };
+nextPage.onclick = () => { curPage++; renderSelPage(); };
 
 async function loadAndShowConversation(fileI, itemI) {
   curFile = fileI;  curItem = itemI;
@@ -740,7 +697,6 @@ function plotIsMax() {
 }
 /* pointer down  → start rectangle */
 plotCanvas.addEventListener('pointerdown', ev => {
-  ev.preventDefault();            // block page-scroll on mobile
   if (!cachedPlot || !plotIsMax()) return;                // safety
   [sx, sy] = clientToCanvas(ev);
   dragging  = true;
@@ -748,7 +704,6 @@ plotCanvas.addEventListener('pointerdown', ev => {
 
 /* pointer move  → redraw cached bitmap + rubber-band */
 plotCanvas.addEventListener('pointermove', ev => {
-  ev.preventDefault();            // block page-scroll on mobile
   if (!dragging || !plotIsMax()) return;
   const [cx, cy] = clientToCanvas(ev);
 
@@ -779,8 +734,7 @@ plotCanvas.addEventListener('pointermove', ev => {
 });
 
 /* pointer up    → count points, restore bitmap */
-plotCanvas.addEventListener('pointerup', async ev => {
-  ev.preventDefault();            // block page-scroll on mobile
+plotCanvas.addEventListener('pointerup', ev => {
   if (!dragging || !plotIsMax()) return;
   dragging = false;
 
@@ -804,20 +758,16 @@ plotCanvas.addEventListener('pointerup', async ev => {
       // show / hide panel
     if (selResults.length) {
       curPage = 0;
-      await renderSelPage(false);
+      renderSelPage();
       selPane.classList.remove('hidden');
 
       // remember rectangle so we can redraw it
       selRect = { minX, maxX, minY, maxY };
-    labelFrequencies.clear();
-    wordFrequencies.clear();
-    alreadyProcessed.clear();
     showTreeToggle(true);      // NEW ← reveal the button
     plotWrap.classList.add('smol');
     plotWrap.classList.remove('max');
     showTree(false);           // hide hierarchy while reviewing selection
     closeEntireTree();
-    
     } else {
       selPane.classList.add('hidden');
       selRect = null;             // nothing to show
@@ -841,7 +791,7 @@ window.addEventListener('resize', resizeCanvas);
 function loadProxyUrl(url) {
     //return  url.replace("YOURHTTPPREFIX", "https://raw.githubusercontent.com/YOUR_GITHUB_USER_NAME/YOUR_GITHUB_REPO/main");
     return url.replace("/modelwelfare/cyborgism", "https://raw.githubusercontent.com/Phylliida/cyborgismClio/update1")
-    //return url;
+    return url;
 }
 
 
@@ -1348,7 +1298,7 @@ function updateHash(){
   tokens.push(`r!${nx1}=${ny1}=${nx2}=${ny2}`);
     tokens.push(`p!${curPage|0}`);
     if (selConvFile >= 0)
-      tokens.push(`s!${selConvFile}.${selConvItem}`);
+      tokens.push(`sc!${selConvFile}.${selConvItem}`);
   }
   tokens.push(`fa!${encodeURIComponent(plotSelect.value)}`);
   
@@ -1377,100 +1327,94 @@ async function expandPath(pathStr){
 }
 
 async function restoreFromHash(){
+  modifyHashAllowed=false;
+  hashStr = window.location.hash;
+  if (hashStr.length > 0) {
+    try {
+      hashStr = decodeURIComponent(hashStr.substring(1)) // remove #
+      hashStr = LZUTF8.decompress(LZUTF8.decodeBase64(hashStr), { inputEncoding: "ByteArray", outputEncoding: "String" });
+    }
+    catch {
+      hashStr = ""
+    }
+  }
+  curHash = window.location.hash;
+    var facetTok = null, rectTok = null, pageTok = null, selConvTok = null;
+  const segs=decodeURIComponent(hashStr).split(',').filter(Boolean);
+  const convSeg=segs.find(s=>s.startsWith('c!'));
 
-loading.classList.remove('hidden');        // ① show spinner
-setLoad('loading tree state…');
-try {
-      modifyHashAllowed=false;
-      hashStr = window.location.hash;
-      if (hashStr.length > 0) {
-        try {
-          hashStr = decodeURIComponent(hashStr.substring(1)) // remove #
-          hashStr = LZUTF8.decompress(LZUTF8.decodeBase64(hashStr), { inputEncoding: "ByteArray", outputEncoding: "String" });
-        }
-        catch {
-          hashStr = ""
-        }
-      }
-      curHash = window.location.hash;
-        var facetTok = null, rectTok = null, pageTok = null, selConvTok = null;
-      const segs=decodeURIComponent(hashStr).split(',').filter(Boolean);
-      const convSeg=segs.find(s=>s.startsWith('c!'));
+  const catSegs=[], convListSegs=[];
+  
+  segs.forEach(s=>{
+  if (s.startsWith('fa!'))  facetTok = s;
+  else if (s.startsWith('r!'))      rectTok    = s;
+  else if (s.startsWith('p!')) pageTok    = s;
+  else if (s.startsWith('sc!'))selConvTok = s;
+  else if (s && s!==convSeg){
+    s.endsWith('$c') ? convListSegs.push(s) : catSegs.push(s);
+  }
+});
+  
 
-      const catSegs=[], convListSegs=[];
+
+  for(const p of [...catSegs].sort((a,b)=>a.split('.').length-b.split('.').length)){
+    await expandPath(p);
+  }
+
+  convListSegs.forEach(key=>{
+    const det=pathMap.get(key);
+    if(det) det.open=true;
+  });
+
+  if(convSeg){
+    const [,path,idx]=convSeg.split('!');
+    await expandPath(path);
+    const det=pathMap.get(path);
+      treeNavArr = det.__convs;
+      treeRootConvs = det.__rootConvs;
+      curItem = idx;
       
-      segs.forEach(s=>{
-      if (s.startsWith('fa!'))  facetTok = s;
-      else if (s.startsWith('r!'))      rectTok    = s;
-      else if (s.startsWith('p!')) pageTok    = s;
-      else if (s.startsWith('s!'))selConvTok = s;
-      else if (s && s!==convSeg){
-        s.endsWith('$c') ? convListSegs.push(s) : catSegs.push(s);
+        selResults = [];
+    if(det && det.__convs) openConversation(det.__convs[+idx],split(path),+idx,det.__rootConvs);
+  }else closeConversation();
+  modifyHashAllowed=true;
+  
+  /* ---------- facet (plotSelect) ---------- */
+    if (facetTok) {
+      const facetName = decodeURIComponent(facetTok.slice(3));
+      if (plotSelect.value !== facetName && facetOptions.has(facetName)) {
+        plotSelect.value = facetName;
+        await loadDraw(facetOptions.get(facetName));   // loads points for that facet
       }
-    });
+    }
+          /* ---------- restore marquee & selection list ---------- */
+    if (!convSeg && rectTok){
+       // we do floats so difference canvas width and height are preserved
+      const [nx1,ny1,nx2,ny2] = rectTok.slice(2).split('=').map(parseFloat);
+      const w = plotCanvas.width , h = plotCanvas.height;
+      const minX = nx1 * w,  minY = ny1 * h,
+            maxX = nx2 * w,  maxY = ny2 * h;
+      selRect = { minX, maxX, minY, maxY };
+      const idxs   = getPointIndicesInRect(minX,maxX,minY,maxY);
+      const mapping = conversationsMappings.get(plotSelect.value);
+      selResults = idxs.map(i=>({fileI:mapping.indices[i][0],
+                                 itemI:mapping.indices[i][1]}));
 
-      for(const p of [...catSegs].sort((a,b)=>a.split('.').length-b.split('.').length)){
-        await expandPath(p);
-      }
+      curPage = pageTok ? +pageTok.slice(2) : 0;
+      renderSelPage();
+      selPane.classList.remove('hidden');
+      plotWrap.classList.add('smol');
+      drawPoints();
+      showTree(false);
+      showTreeToggle(true);
+    }
 
-      convListSegs.forEach(key=>{
-        const det=pathMap.get(key);
-        if(det) det.open=true;
-      });
-
-      if(convSeg){
-        const [,path,idx]=convSeg.split('!');
-        await expandPath(path);
-        const det=pathMap.get(path);
-          treeNavArr = det.__convs;
-          treeRootConvs = det.__rootConvs;
-          curItem = idx;
-          
-            selResults = [];
-        if(det && det.__convs) openConversation(det.__convs[+idx],split(path),+idx,det.__rootConvs);
-      }else closeConversation();
-      modifyHashAllowed=true;
-      
-      /* ---------- facet (plotSelect) ---------- */
-        if (facetTok) {
-          const facetName = decodeURIComponent(facetTok.slice(3));
-          if (plotSelect.value !== facetName && facetOptions.has(facetName)) {
-            plotSelect.value = facetName;
-            await loadDraw(facetOptions.get(facetName));   // loads points for that facet
-          }
-        }
-              /* ---------- restore marquee & selection list ---------- */
-        if (!convSeg && rectTok){
-           // we do floats so difference canvas width and height are preserved
-          const [nx1,ny1,nx2,ny2] = rectTok.slice(2).split('=').map(parseFloat);
-          const w = plotCanvas.width , h = plotCanvas.height;
-          const minX = nx1 * w,  minY = ny1 * h,
-                maxX = nx2 * w,  maxY = ny2 * h;
-          selRect = { minX, maxX, minY, maxY };
-          const idxs   = getPointIndicesInRect(minX,maxX,minY,maxY);
-          const mapping = conversationsMappings.get(plotSelect.value);
-          selResults = idxs.map(i=>({fileI:mapping.indices[i][0],
-                                     itemI:mapping.indices[i][1]}));
-
-          curPage = pageTok ? +pageTok.slice(2) : 0;
-          await renderSelPage(true);
-          selPane.classList.remove('hidden');
-          plotWrap.classList.add('smol');
-          drawPoints();
-          showTree(false);
-          showTreeToggle(true);
-        }
-
-        /* ---------- optionally reopen the modal ---------- */
-        if (!convSeg && selConvTok){
-          const [f,i] = selConvTok.slice(2).split('.').map(Number);
-          loadAndShowConversation(f, i);         // uses spinner, keeps state
-        }
-      
-   }
-   finally {
-        loading.classList.add('hidden');        // ① show spinner
-   }
+    /* ---------- optionally reopen the modal ---------- */
+    if (!convSeg && selConvTok){
+      const [f,i] = selConvTok.slice(3).split('.').map(Number);
+      loadAndShowConversation(f, i);         // uses spinner, keeps state
+    }
+  
   
 }
 
@@ -1481,8 +1425,6 @@ function cachedConvs(fileURL){
          ? loadAndShowConversation.cache.get(fileURL)
          : undefined;
 }
-
-var alreadyProcessed = new Set();
 
 var labelFrequencies = new Map();
 
@@ -1502,77 +1444,27 @@ function maybeUpdateLabel(btn){
   }
 }
 
-// from https://gist.github.com/sebleier/554280
-commons = "i,me,my,myself,we,our,ours,ourselves,you,your,yours,yourself,yourselves,he,him,his,himself,she,her,hers,herself,it,its,itself,they,them,their,theirs,themselves,what,which,who,whom,this,that,these,those,am,is,are,was,were,be,been,being,have,has,had,having,do,does,did,doing,a,an,the,and,but,if,or,because,as,until,while,of,at,by,for,with,about,against,between,into,through,during,before,after,above,below,to,from,up,down,in,out,on,off,over,under,again,further,then,once,here,there,when,where,why,how,all,any,both,each,few,more,most,other,some,such,no,nor,not,only,own,same,so,than,too,very,s,t,can,will,just,don,should,now".split(",")
 
-var commonWords = new Set();
-for (const common of commons) {
-    commonWords.add(common);
-}
-
-var numUnloaded = 0;
 /* try to replace the label of one <button>                    */
 function storeFrequencies(){
+  labelFrequencies.clear();
   var mapping = conversationsMappings.get(plotSelect.value);
-  var newFiles = new Set();
-  var unloadedFiles = new Set();
-  numUnloaded = 0;
   for (const i of selResults) {
-    if (alreadyProcessed.has(i.fileI)) {
-        continue;
-    }
     var fileI = i.fileI;
     var itemI = i.itemI;
     var fileURL = `${mapping.baseUrl}data${fileI}.json.gz`;
     var convArr = cachedConvs(fileURL);
     var label = "<unloaded>";
     if (convArr) {
-        const cv = convArr[itemI];
-        label = cv.facetValue ||        // in our datasets
-                      cv.allFacetValues?.[0]?.value;   // fall-back
-        newFiles.add(i.fileI);
-        if (!labelFrequencies.has(label)) {
-            labelFrequencies.set(label, 0);
-        }
-        labelFrequencies.set(label, labelFrequencies.get(label)+1);
-        
-        
-        // if raw embeddings, do word cloud over conversation contents
-        if (plotSelect.value === RAW_EMBEDDING_NAME) {
             const cv = convArr[itemI];
-            var convStr = [];
-            for (const turn of cv.conversation) {
-                convStr.push(turn.content);            
-            }
-            label = convStr.join(" ").replace("\n", " ").replace("\r", " ").replace("\t", " ");
-        }
-        
-        for (const word of splitIntoWords(label)) {
-            var wordLower = word.toLowerCase();
-            if (commonWords.has(wordLower)) continue;
-            if (!wordFrequencies.has(wordLower)) {
-                wordFrequencies.set(wordLower, 0);
-            }
-            wordFrequencies.set(wordLower, wordFrequencies.get(wordLower)+1);
-        }
+            label = cv.facetValue ||        // in our datasets
+                          cv.allFacetValues?.[0]?.value;   // fall-back
     }
-    else {
-        unloadedFiles.add(i.fileI);
-        numUnloaded += 1;
+    if (!labelFrequencies.has(label)) {
+        labelFrequencies.set(label, 0);
     }
+    labelFrequencies.set(label, labelFrequencies.get(label)+1);
   }
-  for (var newFile of newFiles) {
-    alreadyProcessed.add(newFile);
-  }
-  
-  if (unloadedFiles.size > 0) {
-    loadAllBtn.textContent = "Load all (" + numUnloaded + " conversations within " + unloadedFiles.size + " files)";
-  }
-  else {
-    loadAllBtnSpace.classList.toggle("hidden", true);
-  }
-  
-   labelFrequencies.set("<unloaded>", numUnloaded);
 }
 
 function renderFrequencies(){
@@ -1587,8 +1479,7 @@ function renderFrequencies(){
 
   /* sort by descending count */
   const rows = [...labelFrequencies.entries()]
-               .sort((a,b) => b[1]-a[1])
-               .slice(0, 100);                // top-100;
+               .sort((a,b) => b[1]-a[1]);
 
   /* build chips */
   box.innerHTML = "";
@@ -1598,51 +1489,6 @@ function renderFrequencies(){
     chip.textContent = `${label} (${count})`;
     box.appendChild(chip);
   }
-  buildWordCloud();
-}
-function splitIntoWords(s) {
-    return s.split(/[^\p{L}\p{N}\p{Extended_Pictographic}]+/u).filter(subStr => subStr.length > 0);
-}
-
-
-var wordFrequencies = new Map();
-function buildWordCloud(){
-  // Bail out if library not loaded
-  if (typeof WordCloud === 'undefined') return;
-
-    var unloadedStr =  numUnloaded != 0 ? ("(" + numUnloaded + " not loaded yet and ignored, please page over to them)") : "(all loaded)";
-    wordCloudTitle.textContent = "Selected Conversations " + (plotSelect.value == RAW_EMBEDDING_NAME ? "Text" : plotSelect.value + "s") + " Word Cloud " + unloadedStr;
-
-  // 1.  Take the 100 most frequent labels
-  const rows = [...wordFrequencies.entries()]
-               .sort((a,b) => b[1]-a[1])
-               .slice(0, 100);
-  
-  var total = 0;
-  for (var vals of rows) {
-    total += vals[1];
-  }
-  
-  // need to normalize or they get too big
-  // 2.  Convert to the “list” format WordCloud expects
-  //     [ [word, weight], … ]
-  const wcList = rows.map(([label,count]) => [label, 100*count/total]);
-
-  // 3.  Draw
-  const canvas = document.getElementById('wcCanvas');
-  WordCloud(canvas, {
-    list: wcList,
-    weightFactor: 10,               // tweak size scaling
-    minSize: 8,                     // smallest font (px)
-    backgroundColor: 'rgba(0,0,0,0)', // keep site bg
-    color: (_, weight) => weight > rows[0][1]*0.6 ? '#6ec1ff'
-                                 : weight > rows[0][1]*0.3 ? '#74b9ff'
-                                 : '#9e9e9e',
-    rotateRatio: 0.15,              // few words angled
-    shuffle: false,                 // heavier words first
-    origin: [canvas.width/2, canvas.height/2],
-    drawOutOfBound: false
-  });
 }
 
 /* update every entry currently visible in the list            */
@@ -1651,6 +1497,16 @@ function updateSelLabels(){
   renderFrequencies();                 // ← new
 }
 
+/* ──────── 1. augment renderSelPage ────────────────────────── */
+const _origRenderSelPage = renderSelPage;          // keep original
+renderSelPage = function(){
+  _origRenderSelPage();                            // call it
+  updateSelLabels();                               // then fix labels
+};
+
+/* ──────── 2. remember file / item on each button ────────────
+
+// ------------------------------------------------------------
 
 /* ──────── 3. after loading a conversation,                */
 /*            refresh the labels for the current page       */
@@ -1668,17 +1524,6 @@ loadAndShowConversation = async function(fileI,itemI){
        of a file, using the same cache and decryption logic that
        loadAndShowConversation already relies on
 ----------------------------------------------------------------*/
-
-function hasConvArrayLoaded(fileI)  {
-  const mapping = conversationsMappings.get(plotSelect.value);
-  const fileURL = `${mapping.baseUrl}data${fileI}.json.gz`;
-
-  if (!loadAndShowConversation.cache)
-        loadAndShowConversation.cache = new Map();
-
-  return loadAndShowConversation.cache.has(fileURL);
-}
-
 async function getConvArray(fileI){
   const mapping = conversationsMappings.get(plotSelect.value);
   const fileURL = `${mapping.baseUrl}data${fileI}.json.gz`;
@@ -1695,35 +1540,14 @@ async function getConvArray(fileI){
   }
   return arr;
 }
-loadAllBtn.onclick = preloadAllSelectedFiles;
-async function preloadAllSelectedFiles() {
-  if (!selResults.length) return;
-
-  loading.classList.remove('hidden');
-  setLoad('loading files … 0/0');
-
-  /* build unique file-id list */
-  const fileSet = new Set(selResults.map(r => r.fileI).filter(fileI => !hasConvArrayLoaded(fileI)));
-
-  let done = 0;
-  for (const fileI of fileSet) {
-    await getConvArray(fileI);                 // already cached? → returns instantly
-    setLoad(`loading files … ${++done}/${fileSet.size}`);
-  }
-
-  loading.classList.add('hidden');
-
-  /* now every conversation is in RAM → update labels & chips */
-  renderSelPage(false);
-}
 
 /* ──────────────────────────────────────────────────────────────
    1.  preload every file that appears on the current page
 ----------------------------------------------------------------*/
-async function preloadCurrentPage(alreadyLoading){
+async function preloadCurrentPage(){
   
-    if (!alreadyLoading) loading.classList.remove('hidden');        // ① show spinner
-    setLoad('loading files…');
+    loading.classList.remove('hidden');        // ① show spinner
+    
   try {
   
   
@@ -1737,24 +1561,30 @@ async function preloadCurrentPage(alreadyLoading){
   const start = curPage * PAGE_SIZE;
   
   const rows  = selResults.slice(start, start + PAGE_SIZE);
-  // only load ones we haven't already loaded
-  const fileSet = new Set(rows.map(({fileI, itemI}) => fileI).filter(fileI => !hasConvArrayLoaded(fileI)));
-  var i = 0;
+  const fileSet = new Set(rows.map(({fileI, itemI}) => fileI));
+  
   for (var fileId of fileSet) {
      await getConvArray(fileId);
-     setLoad(`loading files … ${i+1}/${fileSet.size}`);
-     i += 1;
   }
 
   // once all are cached → relabel buttons
   updateSelLabels();
   }
   finally {
-    if (!alreadyLoading) loading.classList.add('hidden');        // ① show spinner
+    loading.classList.add('hidden');        // ① show spinner
   }
 }
 
+/* ──────────────────────────────────────────────────────────────
+   2.  hook into renderSelPage (already wrapped in the
+       previous answer) – call the preloader after building the page
+----------------------------------------------------------------*/
+const __renderSelPage = renderSelPage;            // keep latest version
 
+renderSelPage = async function(){
+  __renderSelPage();              // build buttons + pager
+  await preloadCurrentPage();     // ensure data + update labels
+};
 
 /*!
  LZ-UTF8 v0.5.7
