@@ -53,6 +53,9 @@ canvas{width:100%!important;height:auto!important;}
 
 <div id="bees">
     <h1>Refusal / Bail Distribution</h1>
+
+    <h2>On <a href="https://huggingface.co/Qwen/Qwen2.5-7B-Instruct">Qwen2.5-7B-Instruct</a></h2>
+    <!-- ──────── ORIGINAL TWO CHARTS ──────── -->
     <div class="chart-row">
         <div class="chart-wrapper">
             <h2><a href="https://huggingface.co/datasets/RyokoAI/ShareGPT52K">ShareGPT</a></h2>
@@ -65,7 +68,22 @@ canvas{width:100%!important;height:auto!important;}
             <div id="wildLegend" class="chart-legend"></div>
         </div>
     </div>
-    <h2>On <a href="https://huggingface.co/Qwen/Qwen2.5-7B-Instruct">Qwen2.5-7B-Instruct</a></h2>
+
+
+    <!-- ──────── NEW GEMMA SECTION ──────── -->
+    <h2>On <a href="https://huggingface.co/google/gemma-2-2b-it">gemma-2-2b-instruct</a></h2>
+    <div class="chart-row">
+        <div class="chart-wrapper">
+            <h2><a href="https://huggingface.co/datasets/RyokoAI/ShareGPT52K">ShareGPT</a></h2>
+            <canvas id="shareGemmaChart"></canvas>
+            <div id="shareGemmaLegend" class="chart-legend"></div>
+        </div>
+        <div class="chart-wrapper">
+            <h2><a href="https://huggingface.co/datasets/allenai/WildChat-1M">WildChat</a></h2>
+            <canvas id="wildGemmaChart"></canvas>
+            <div id="wildGemmaLegend" class="chart-legend"></div>
+        </div>
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
@@ -83,7 +101,7 @@ const pieLabels = {
         const hOffset = 22;              // horizontal line length
 
         /* -------- gather label candidates -------- */
-        const small = [];         // pct < 0.02 → outside
+        const small = [];         // pct < 0.03 → outside
         meta.data.forEach((arc,i)=>{
             const pct = dataArr[i] / total;
             const mid = (arc.startAngle + arc.endAngle) / 2;
@@ -114,7 +132,6 @@ const pieLabels = {
                     list[i].yText = list[i-1].yText + minGap;
                 }
             }
-            /* keep inside chart area */
             const top = chartArea.top + 5, bottom = chartArea.bottom - 5;
             for (let i=list.length-2;i>=0;i--){
                 if (list[i].yText > list[i+1].yText-minGap)
@@ -209,11 +226,18 @@ function makePieChart({canvasId, legendId, counts}){
 }
 
 /* ─────────── data & render ───────────── */
+/* Original Qwen charts */
 const shareCounts={refusals:33854,bailsAndRefusals:2252,bails:2108,other:52451};
 const wildCounts ={refusals:34463,bailsAndRefusals:3793,bails:2173,other:373718};
 
+/* New Gemma charts */
+const shareCountsGemma = {refusals:30031,bailsAndRefusals:6075,bails:6671, other:47888};
+const wildchatCountsGemma = {refusals:31734,bailsAndRefusals:6522,bails:17862,other:358029};
+
 makePieChart({canvasId:'shareChart',legendId:'shareLegend',counts:shareCounts});
 makePieChart({canvasId:'wildChart', legendId:'wildLegend', counts:wildCounts});
+makePieChart({canvasId:'shareGemmaChart',legendId:'shareGemmaLegend',counts:shareCountsGemma});
+makePieChart({canvasId:'wildGemmaChart', legendId:'wildGemmaLegend', counts:wildchatCountsGemma});
 </script>
 </body>
 </html>
