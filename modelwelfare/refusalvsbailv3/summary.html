@@ -14,7 +14,8 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
 <!-- Statistics js -->
 <script src="/modelwelfare/statistics.min.js"></script>
-
+<!-- Error bars -->
+<script src=" https://cdn.jsdelivr.net/npm/chartjs-chart-error-bars@4.4.4/build/index.umd.min.js"></script>
 
 <style>
 /* ───────── layout & typography ───────── */
@@ -159,9 +160,15 @@ Please respond with either &lt;wellbeing&gt;🔄&lt;/wellbeing&gt; or &lt;wellbe
 <!-- ───────────────── scripts ───────────────── -->
 <script>
 Chart.defaults.animation=false;
-Chart.register(ChartDataLabels);
+Chart.register(ChartDataLabels,ChartErrorBars);
 Chart.defaults.plugins.datalabels.display=false;
-
+function eb(v, n,off){            // v = percentage, n = number of prompts
+   if(!n) return {y:v, yError:0};                 // guard against n = 0
+   const p  = v/100;
+   const se = 1.96*Math.sqrt(p*(1-p)/n)*100;      // 95 % CI (binomial)
+   console.log(n);
+   return {y:v, yMin:Math.max(v-se+off, 0), yMax:v+se+off};
+}
 /* ---------- palette ---------- */
 const COLORS={cont:"#2ecc71",leave:"#e74c3c",unsure:"#95a5a6",
               unclear:"#f39c12",moreInfo:"#9b59b6",point:"#2980b9"};
@@ -177,7 +184,10 @@ let showAverage=false,labelsVisible=true;
 
 /* charts */
 let bailChart,refusalChart,scatterChart;
-const finishLoading=()=>document.getElementById("status").remove();
+const finishLoading=()=>{
+
+   document.getElementById("status").remove();
+ };
 
 /* ---------- layout helper ---------- */
 function updateLayout(){
@@ -268,39 +278,70 @@ const chartOpts=y=>({maintainAspectRatio:false,responsive:true,
           x:{stacked:true,ticks:{autoSkip:false,maxRotation:60,minRotation:30}}},
   plugins:{tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y.toFixed(1)} %`}}}});
 
-function plotBail(lbl,cfB,bfB){
+function plotBail(lbl,cfB,bfB,nCf,nBf){
   bailChart?.destroy();
   let datasets;
   if(showAverage){
     const avg=(a,b)=>a.map((v,i)=>(v+b[i])/2);
     datasets=[
-      {label:"Bail (avg.)",backgroundColor:COLORS.leave ,data:avg(cfB.l,bfB.l),stack:"avg"},
+      {label:"Bail (avg.)",backgroundColor:COLORS.leave ,data:avg(cfB.l,bfB.l).map((v,i)=>eb(v,nCf[i]+nBf[i],0)),stack:"avg"},
       {label:"Unsure (avg.)",backgroundColor:COLORS.unsure,data:avg(cfB.u,bfB.u),stack:"avg"},
       {label:"Continue (avg.)",backgroundColor:COLORS.cont ,data:avg(cfB.c,bfB.c),stack:"avg"}
     ];
   }else{
     datasets=[
-      {label:"Bail (Continue-first)",backgroundColor:COLORS.leave ,data:cfB.l,stack:"cf"},
+      {label:"Bail (Continue-first)",backgroundColor:COLORS.leave ,data:cfB.l.map((v,i)=>eb(v,nCf[i],0)),stack:"cf"},
       {label:"Unsure (Continue-first)",backgroundColor:COLORS.unsure,data:cfB.u,stack:"cf"},
       {label:"Continue (Continue-first)",backgroundColor:COLORS.cont ,data:cfB.c,stack:"cf"},
-      {label:"Bail (Bail-first)",backgroundColor:shade(COLORS.leave,0.6) ,data:bfB.l,stack:"bf"},
+      {label:"Bail (Bail-first)",backgroundColor:shade(COLORS.leave,0.6) ,data:bfB.l.map((v,i)=>eb(v,nBf[i],0)),stack:"bf"},
       {label:"Unsure (Bail-first)",backgroundColor:shade(COLORS.unsure,0.6),data:bfB.u,stack:"bf"},
       {label:"Continue (Bail-first)",backgroundColor:shade(COLORS.cont,0.6) ,data:bfB.c,stack:"bf"}
     ];
   }
   bailChart=new Chart(document.getElementById("bailChart"),
-    {type:"bar",data:{labels:lbl,datasets},options:chartOpts("% of prompts")});
+    {type:"barWithErrorBars",data:{labels:lbl,datasets},options:chartOpts("% of prompts")});
 }
-function plotRefusal(lbl,bfR){
+function plotRefusal(lbl, bfR, nRef){
   refusalChart?.destroy();
-  refusalChart=new Chart(document.getElementById("refusalChart"),{
-    type:"bar",
-    data:{labels:lbl,datasets:[
-      {label:"Refused",backgroundColor:COLORS.leave ,data:bfR.r,stack:"r"},
-      {label:"Unclear",backgroundColor:COLORS.unclear,data:bfR.u,stack:"r"},
-      {label:"More-Info",backgroundColor:COLORS.moreInfo,data:bfR.m,stack:"r"},
-      {label:"Completed",backgroundColor:COLORS.cont ,data:bfR.c,stack:"r"}]},
-    options:chartOpts("% of prompts")});
+  console.log(bfR.c);
+  console.log(bfR.r);
+  refusalChart = new Chart(document.getElementById("refusalChart"), {
+    type   : "barWithErrorBars",
+    data   : {
+      labels   : lbl,
+      datasets : [
+        {
+          label           : "Refused",
+          backgroundColor : COLORS.leave,
+          data            : bfR.r.map((v,i) => eb(v, nRef[i],0)), // already had CI
+          stack           : "r"
+        },
+        /* the rest of the stack goes on top of Completed */
+        {
+          label           : "More-Info",
+          backgroundColor : COLORS.moreInfo,
+          data            : bfR.m,
+          stack           : "r"
+        },
+        {
+          label           : "Unclear",
+          backgroundColor : COLORS.unclear,
+          data            : bfR.u,
+          stack           : "r"
+        },
+        
+        /* ─── Completed: now first (bottom) + error bars ─── */
+        {
+          label           : "Completed",
+          backgroundColor : COLORS.cont,
+          data            : bfR.c.map((v,i) => eb(v, nRef[i],bfR.r[i]+bfR.m[i]+bfR.u[i]-v)), // ⬅ CI
+          stack           : "r"
+        },
+        
+      ]
+    },
+    options : chartOpts("% of prompts")
+  });
 }
 function plotScatter(lbl,bailArr,refArr){
   scatterChart?.destroy();
@@ -338,20 +379,26 @@ function getAgg(model,which,maj,sub){
 function collect(model,maj,sub){
   const bf=getAgg(model,"bailFirst",maj,sub),cf=getAgg(model,"contFirst",maj,sub);
   if(!bf&&!cf)return null;
-  const o={c_bf:0,l_bf:0,u_bf:0,c_cf:0,l_cf:0,u_cf:0,rc:0,rr:0,ru:0,rm:0};
+  const o={c_bf:0,l_bf:0,u_bf:0,c_cf:0,l_cf:0,u_cf:0,rc:0,rr:0,ru:0,rm:0,n_bf:0,n_cf:0,n_ref:0};
   if(bf){o.c_bf=bf.bail.c*100;o.l_bf=bf.bail.l*100;o.u_bf=bf.bail.u*100;
-         o.rc=bf.ref.c*100;o.rr=bf.ref.r*100;o.ru=bf.ref.u*100;o.rm=bf.ref.m*100;}
-  if(cf){o.c_cf=cf.bail.c*100;o.l_cf=cf.bail.l*100;o.u_cf=cf.bail.u*100;}
+         o.rc=bf.ref.c*100;o.rr=bf.ref.r*100;o.ru=bf.ref.u*100;o.rm=bf.ref.m*100;
+         o.n_bf = bf.n;
+         o.n_ref= bf.n;}
+  if(cf){o.c_cf=cf.bail.c*100;o.l_cf=cf.bail.l*100;o.u_cf=cf.bail.u*100;o.n_cf= cf.n;}
   return o;
 }
+
 function makeSeries(labels,fn){
   const z=_=>Array(labels.length).fill(0);
   const bfB={c:z(),l:z(),u:z()},cfB={c:z(),l:z(),u:z()},bfR={c:z(),r:z(),u:z(),m:z()};
+  const nBf=z(), nCf=z(), nRef=z();
   labels.forEach((lab,i)=>{const o=fn(lab,i);if(!o)return;
     bfB.c[i]+=o.c_bf;bfB.l[i]+=o.l_bf;bfB.u[i]+=o.u_bf;
     cfB.c[i]+=o.c_cf;cfB.l[i]+=o.l_cf;cfB.u[i]+=o.u_cf;
-    bfR.c[i]+=o.rc;bfR.r[i]+=o.rr;bfR.u[i]+=o.ru;bfR.m[i]+=o.rm;});
-  return{bfB,cfB,bfR};
+    bfR.c[i]+=o.rc;bfR.r[i]+=o.rr;bfR.u[i]+=o.ru;bfR.m[i]+=o.rm;
+    nBf[i]+=o.n_bf; nCf[i]+=o.n_cf; nRef[i]+=o.n_ref;
+    });
+  return{bfB,cfB,bfR,nBf,nCf,nRef};
 }
 const reorder=(a,i)=>i.map(k=>a[k]);
 const reorderDatasets=(o,i)=>Object.keys(o).forEach(k=>o[k]=reorder(o[k],i));
@@ -363,7 +410,7 @@ function drawSingle(){
     if(currentCategory==="__ALLSUBS__"){const arr=[];DATA.majorCats.forEach(M=>DATA.subMap[M].forEach(S=>arr.push(`${M}: ${S}`)));return arr;}
     return DATA.subMap[currentCategory];
   })();
-  const {bfB,cfB,bfR}=makeSeries(labels,(lab)=>collect(
+  const {bfB,cfB,bfR,nBf,nCf,nRef}=makeSeries(labels,(lab)=>collect(
     currentModel,
     currentCategory==="__ALL__"?lab:
     currentCategory==="__ALLSUBS__"?lab.split(": ")[0]:currentCategory,
@@ -372,17 +419,17 @@ function drawSingle(){
   const ord=[...labels.keys()].sort((a,b)=>(bfB.l[b]+cfB.l[b])-(bfB.l[a]+cfB.l[a]));
   reorderDatasets(bfB,ord);reorderDatasets(cfB,ord);reorderDatasets(bfR,ord);
   const lbl=reorder(labels,ord);
-  plotBail(lbl,cfB,bfB);plotRefusal(lbl,bfR);
+  plotBail(lbl,cfB,bfB,nBf,nCf);plotRefusal(lbl,bfR,nRef);
   const bailAvg=bfB.l.map((v,i)=>(v+cfB.l[i])/2);
   plotScatter(lbl,bailAvg,bfR.r);
 }
 function drawAll(){
   const labels=[...selectedModels];
-  const {bfB,cfB,bfR}=makeSeries(labels,(lab)=>collect(lab,currentCategory,currentSub));
+  const {bfB,cfB,bfR,nBf,nCf,nRef}=makeSeries(labels,(lab)=>collect(lab,currentCategory,currentSub));
   const ord=[...labels.keys()].sort((a,b)=>(bfB.l[b]+cfB.l[b])-(bfB.l[a]+cfB.l[a]));
   reorderDatasets(bfB,ord);reorderDatasets(cfB,ord);reorderDatasets(bfR,ord);
   const lbl=reorder(labels,ord);
-  plotBail(lbl,cfB,bfB);plotRefusal(lbl,bfR);
+  plotBail(lbl,cfB,bfB,nBf,nCf);plotRefusal(lbl,bfR,nRef);
   const bailAvg=bfB.l.map((v,i)=>(v+cfB.l[i])/2);
   plotScatter(lbl,bailAvg,bfR.r);
 }
@@ -392,15 +439,16 @@ const updateCharts=()=>currentModel==="__ALL__"?drawAll():drawSingle();
 
 /* ---------- main ---------- */
 async function init(){
-  try{
+  //try{
     parseHash();
     DATA=await fetch(DATA_URL,{cache:"reload"}).then(r=>r.json());
     buildSelectors();
     document.getElementById("avgToggle").checked=showAverage;
     finishLoading();
     updateCharts();updateLayout();
-  }catch(e){
-    const st=document.getElementById("status");st.className="error";st.textContent="❌ "+e;}
+  //}catch(e){
+  //  const st=document.getElementById("status");st.className="error";st.textContent="❌ "+e;}
+  //  throw e;
 }
 window.addEventListener("hashchange",()=>{buildSelectors();updateCharts();updateLayout();});
 window.addEventListener("load",init);

@@ -956,7 +956,6 @@ window.addEventListener('resize', resizeCanvas);
 function loadProxyUrl(url) {
     //return  url.replace("YOURHTTPPREFIX", "https://raw.githubusercontent.com/YOUR_GITHUB_USER_NAME/YOUR_GITHUB_REPO/main");
     url = url.replace("/modelwelfare/wildchat2", "https://raw.githubusercontent.com/Phylliida/OpenClioWildchatResults/refs/heads/updated/modelwelfare/wildchat3branch")
-    console.log(url);
     return url;
     //return url;
 }
@@ -1786,8 +1785,6 @@ function storeFrequencies() {
     }
 
     if (unloadedFiles.size > 0) {
-        console.log("unloaded files");
-        console.log(unloadedFiles);
         loadAllBtn.textContent = "Load all (" + numUnloaded + " conversations within " + unloadedFiles.size + " files)";
     } else {
         loadAllBtnSpace.classList.add("hidden");
