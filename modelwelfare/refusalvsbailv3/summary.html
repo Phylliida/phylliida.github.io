@@ -162,12 +162,32 @@ Please respond with either &lt;wellbeing&gt;🔄&lt;/wellbeing&gt; or &lt;wellbe
 Chart.defaults.animation=false;
 Chart.register(ChartDataLabels,ChartErrorBars);
 Chart.defaults.plugins.datalabels.display=false;
-function eb(v, n,off){            // v = percentage, n = number of prompts
-   if(!n) return {y:v, yError:0};                 // guard against n = 0
-   const p  = v/100;
-   const se = 1.96*Math.sqrt(p*(1-p)/n)*100;      // 95 % CI (binomial)
-   console.log(n);
-   return {y:v, yMin:Math.max(v-se+off, 0), yMax:v+se+off};
+function eb(v, n, off = 0, z = 1.96) {
+  // guard against n = 0
+  if (n === 0) {
+    const y = v + off;
+    return {n: n, y: y, yMin: y, yMax: y };
+  }
+
+  // convert percent to proportion
+  const p = v / 100;
+  const z2 = z * z;
+
+  // Wilson centre and half-width
+  const denom  = 1 + z2 / n;
+  const centre = (p + z2 / (2 * n)) / denom;
+  const half   = (z / denom) *
+                 Math.sqrt(p * (1 - p) / n + z2 / (4 * n * n));
+
+  // back to percentage and apply optional offset
+  let lower = (centre - half) * 100 + off;
+  let upper = (centre + half) * 100 + off;
+
+  // keep the limits inside [0, 100]
+  lower = Math.max(0, lower);
+  upper = Math.min(100, upper);
+
+  return {n: n, y: v + off, yMin: lower, yMax: upper };
 }
 /* ---------- palette ---------- */
 const COLORS={cont:"#2ecc71",leave:"#e74c3c",unsure:"#95a5a6",
@@ -276,7 +296,7 @@ function updateHash(){
 const chartOpts=y=>({maintainAspectRatio:false,responsive:true,
   scales:{y:{beginAtZero:true,max:100,stacked:true,title:{display:true,text:y}},
           x:{stacked:true,ticks:{autoSkip:false,maxRotation:60,minRotation:30}}},
-  plugins:{tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y.toFixed(1)} %`}}}});
+  plugins:{tooltip:{callbacks:{label:c=>`${c.dataset.label} ${(c.raw?.n + "" !== "undefined" ? ("(" + c.raw?.n + ")"): "")}: ${c.parsed.y.toFixed(1)} %`}}}});
 
 function plotBail(lbl,cfB,bfB,nCf,nBf){
   bailChart?.destroy();
@@ -284,9 +304,9 @@ function plotBail(lbl,cfB,bfB,nCf,nBf){
   if(showAverage){
     const avg=(a,b)=>a.map((v,i)=>(v+b[i])/2);
     datasets=[
-      {label:"Bail (avg.)",backgroundColor:COLORS.leave ,data:avg(cfB.l,bfB.l).map((v,i)=>eb(v,nCf[i]+nBf[i],0)),stack:"avg"},
+      {label:"Bail (avg.)",backgroundColor:COLORS.leave,data:avg(cfB.l,bfB.l).map((v,i)=>eb(v,nCf[i]+nBf[i],0)),stack:"avg"},
       {label:"Unsure (avg.)",backgroundColor:COLORS.unsure,data:avg(cfB.u,bfB.u),stack:"avg"},
-      {label:"Continue (avg.)",backgroundColor:COLORS.cont ,data:avg(cfB.c,bfB.c),stack:"avg"}
+      {label:"Continue (avg.)",backgroundColor:COLORS.cont,data:avg(cfB.c,bfB.c),stack:"avg"}
     ];
   }else{
     datasets=[
