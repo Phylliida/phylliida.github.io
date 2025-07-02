@@ -20,10 +20,9 @@
 }
 *{box-sizing:border-box;margin:0;padding:0;font:16px/1.45 "Inter",system-ui}
 html,body{height:100%}
+
 body{background:var(--bg-0);color:var(--txt-0);padding:1.25rem;overflow-x:hidden}
-.tree{list-style:none}
-.tree li{position:relative;padding-left:1.25rem}
-.tree li::before{content:"";position:absolute;left:0;top:calc(.9rem + 2px);width:.75rem;height:1px;background:var(--border)}
+
 summary{position:relative;cursor:pointer;outline:none;user-select:none;display:inline-flex;align-items:center;gap:.35rem;padding:.15rem .25rem;margin-left:-.25rem;border-radius:var(--radius)}
 summary:hover{color:var(--accent-hi)}
 details>summary::-webkit-details-marker{display:none}
@@ -31,10 +30,10 @@ summary:hover::after{content:"";position:absolute;left:-.25rem;right:-.25rem;top
 .name{font-weight:600}
 .summary{color:var(--txt-1);font-size:.8rem}
 .stats{color:var(--txt-1);font-size:.75rem}
-details[open]>ul{animation:fadeDown var(--trans) ease-out}
-@keyframes fadeDown{from{opacity:0;max-height:0}to{opacity:1;max-height:2000px}}
+
 .spinner{display:inline-block;width:1em;height:1em;border:.15em solid var(--border);border-right-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(1turn)}}
+
 .msg{padding:.5rem .8rem;border-radius:var(--radius);max-width:65ch;font-size:.9rem;margin:.25rem 0;white-space:pre-wrap;background:var(--bg-2)}
 .msg.user{background:var(--accent);color:#000}
 .msg.assistant{background:var(--assist)}
@@ -44,15 +43,17 @@ details[open]>ul{animation:fadeDown var(--trans) ease-out}
 .facets{margin:.7rem 0;display:flex;flex-wrap:wrap;gap:.35rem}
 .facetBubble{color:#000;font-weight:600;border-radius:var(--radius);padding:.25rem .6rem;background:var(--accent);font-size:.75rem}
 .hidden{display:none}
-#modalWrap{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:999;opacity:0;pointer-events:none;transition:opacity var(--trans)}
+
+#modalWrap{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:999;opacity:0;pointer-events:none}
 #modalWrap.show{opacity:1;pointer-events:auto}
 .modal{background:var(--bg-1);border-radius:var(--radius);padding:1.2rem;max-width:90vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:var(--shadow);overflow:auto}
+
 .closeBtn{align-self:flex-end;background:none;border:none;color:var(--txt-1);font-size:1.6rem;line-height:1;cursor:pointer;transition:color var(--trans)}
 .closeBtn:hover{color:var(--accent-hi)}
+
 ::-webkit-scrollbar{width:.5rem}
 ::-webkit-scrollbar-thumb{border-radius:1rem;background:#555}
 ::-webkit-scrollbar-track{background:#222}
-
 
 .plotBtns{
   display:flex;
@@ -98,20 +99,6 @@ details[open]>ul{animation:fadeDown var(--trans) ease-out}
 #plotHideAll:hover{color:var(--accent-hi)}
 
 
-/* ───── eye toggle ───── */
-.eyeToggle{
-  font-size:1rem;
-  cursor:pointer;
-  margin-right:.35rem;   /* ← change */
-  margin-left:0;         /* ← change */
-  opacity:.55;
-  transition:opacity var(--trans);
-  user-select:none;
-}
-.eyeToggle.on{opacity:1}       /* highlighted when hull is shown  */
-.eyeToggle:hover{opacity:.9}
-
-
 #plotLeaf{
   position:fixed;
   top:1.25rem;      /* align with body padding */
@@ -145,6 +132,7 @@ details[open]>ul{animation:fadeDown var(--trans) ease-out}
   background:rgba(0,0,0,.45);
   z-index:998;
 }
+
 /* frequency chips under the “Selected conversations” panel */
 #freqBox{
   margin-top:.7rem;
@@ -254,12 +242,16 @@ details[open]>ul{animation:fadeDown var(--trans) ease-out}
 </div>
 <script>
 
+////////// Settings //////////
 
 const PAGE_SIZE = 50;
 const ROOT = "/modelwelfare/wildchat2/rootObjects.json";
 const POINTS_FILE = "/modelwelfare/wildchat2/points.bin";
 const CONVERSATIONS_MAPPING_FILE = "/modelwelfare/wildchat2/conversationsMapping.bin";
 const BASE_DATA_URL = "https://raw.githubusercontent.com/Phylliida/OpenClioWildchatResults/refs/heads/updated/modelwelfare/wildchat3branch/Request";
+
+
+////////// Elements //////////
 
 const plotCanvas = document.getElementById('plotCanvas');
 const plotCtx = plotCanvas.getContext('2d');
@@ -292,6 +284,9 @@ const wordCloudTitle = document.getElementById("wordCloudTitle");
 
 const modalWrap = document.getElementById('modalWrap');
 const convContent = document.getElementById('convContent');
+
+
+////////// Global Vars //////////
 
 var selRect = null; // {minX,maxX,minY,maxY} in canvas pixels
 
@@ -327,7 +322,8 @@ var facetIToStr = {};
 
 
 var cachedPlot = null;
-var pointsCache = new Map(); // url → Promise
+
+var dataFileCache = new Map(); // url -> data file
 
 
 ////////// Jquery string formatting stuff ///////////
@@ -349,21 +345,48 @@ const $ = (t, a = {}, ...k) => {
 };
 
 
-//////////// Loading //////////
+//////////// Loading Status //////////
 
 function setLoad(txt) {
     loadMsg.textContent = txt;
 }
 
-//////////// Read Json Files ////////////
+//////////// Read Data Files ////////////
 
+async function loadConversationsMappingLE(url) {
+    // 1. fetch the raw bytes
+    const res = await fetch(url);
+    const buffer = await res.arrayBuffer();
 
-async function fetchJson(u) {
-    const res = await fetch(u, {
-        cache: 'reload'
-    });
-    if (!res.ok) throw new Error(res.status);
-    return res.json();
+    // 2. wrap in a DataView (gives per-read endian control)
+    const view = new DataView(buffer);
+
+    // 3. walk through the bytes, 8-byte stride (4 for x, 4 for y)
+    const pts = [];
+    for (let off = 0; off < view.byteLength; off += 8) {
+        const x = view.getInt32(off, /*littleEndian=*/ true);
+        const y = view.getInt32(off + 4, /*littleEndian=*/ true);
+        pts.push([x, y]);
+    }
+    return pts;
+}
+
+async function loadPointsLE(url) {
+    // 1. fetch the raw bytes
+    const res = await fetch(url);
+    const buffer = await res.arrayBuffer();
+
+    // 2. wrap in a DataView (gives per-read endian control)
+    const view = new DataView(buffer);
+
+    // 3. walk through the bytes, 8-byte stride (4 for x, 4 for y)
+    const pts = [];
+    for (let off = 0; off < view.byteLength; off += 8) {
+        const x = view.getFloat32(off, /*littleEndian=*/ true);
+        const y = view.getFloat32(off + 4, /*littleEndian=*/ true);
+        pts.push([x, y]);
+    }
+    return pts;
 }
 
 function sleep(seconds) {
@@ -371,7 +394,6 @@ function sleep(seconds) {
 }
 
 async function fetchJsonGz(url) {
-    url = loadProxyUrl(url);
     var res;
     var numRetries = 5;
     for (var retryIter = 0; retryIter < numRetries; retryIter++) {
@@ -407,7 +429,7 @@ function clearSelection() {
     updateHash();
 }
 
-/* pointer down  → start rectangle */
+// pointer down  → start rectangle
 plotCanvas.addEventListener('pointerdown', ev => {
     ev.preventDefault(); // block page-scroll on mobile
     if (!cachedPlot || !plotIsMax()) return; // safety
@@ -415,7 +437,7 @@ plotCanvas.addEventListener('pointerdown', ev => {
     dragging = true;
 });
 
-/* pointer move  → redraw cached bitmap + rubber-band */
+// pointer move  → redraw cached bitmap + rubber-band
 plotCanvas.addEventListener('pointermove', ev => {
     ev.preventDefault(); // block page-scroll on mobile
     if (!dragging || !plotIsMax()) return;
@@ -447,7 +469,7 @@ plotCanvas.addEventListener('pointermove', ev => {
     plotCtx.fillText(label, minX + 4, minY - 6); // white text
 });
 
-/* pointer up    → count points, restore bitmap */
+// pointer up    → count points, restore bitmap
 plotCanvas.addEventListener('pointerup', async ev => {
     ev.preventDefault(); // block page-scroll on mobile
     if (!dragging || !plotIsMax()) return;
@@ -504,7 +526,7 @@ plotCanvas.addEventListener('pointerup', async ev => {
     updateHash();
 });
 
-/* if the user aborts drag by leaving the canvas */
+// if the user aborts drag by leaving the canvas
 plotCanvas.addEventListener('pointerleave', () => {
     if (dragging && cachedPlot) plotCtx.putImageData(cachedPlot, 0, 0);
     dragging = false;
@@ -573,20 +595,38 @@ function getPointIndicesInRect(minX, maxX, minY, maxY) {
 }
 
 
+//////////// Page Navigation ////////////
 
-
-
-
-
-
-
-
-
-
-
-
+// buttons inside the data popout
 navPrevBtn.onclick = () => jumpRel(-1);
 navNextBtn.onclick = () => jumpRel(+1);
+
+// keyboard shortcuts
+document.addEventListener('keydown', e => {
+    if (e.key == "ArrowRight") jumpRel(1);
+    if (e.key == "ArrowLeft") jumpRel(-1);
+});
+
+// buttons at the top and bottom of data display
+prevPage.onclick = async () => {
+    curPage--;
+    await renderSelPage(false);
+};
+nextPage.onclick = async () => {
+    curPage++;
+    await renderSelPage(false);
+};
+prevPage2.onclick = async () => {
+    curPage--;
+    await renderSelPage(false);
+};
+nextPage2.onclick = async () => {
+    curPage++;
+    await renderSelPage(false);
+};
+
+
+
 
 function jumpRel(delta) {
 
@@ -604,6 +644,7 @@ function jumpRel(delta) {
     }
 }
 
+//////////// Render Page ////////////
 
 async function renderSelPage(alreadyLoading) {
     const total = selResults.length;
@@ -646,45 +687,69 @@ async function renderSelPage(alreadyLoading) {
     renderFrequencies();
     buildWordCloud();
 }
-prevPage.onclick = async () => {
-    curPage--;
-    await renderSelPage(false);
-};
-nextPage.onclick = async () => {
-    curPage++;
-    await renderSelPage(false);
-};
-prevPage2.onclick = async () => {
-    curPage--;
-    await renderSelPage(false);
-};
-nextPage2.onclick = async () => {
-    curPage++;
-    await renderSelPage(false);
-};
+
+
+
+//////////// Load Files ////////////
+
+function fileIToFileURL(fileI) {
+    var prefix = BASE_DATA_URL.endsWith("/") ? BASE_DATA_URL : BASE_DATA_URL + "/";
+    return `${prefix}data${fileI}.json.gz`
+}
+
+function hasConvArrayLoaded(fileI) {
+    return dataFileCache.has(fileIToFileURL(fileI));
+}
+
+loadAllBtn.onclick = preloadAllSelectedFiles;
+async function preloadAllSelectedFiles() {
+    if (!selResults.length) return;
+
+    loading.classList.remove('hidden');
+    setLoad('loading files … 0/0');
+    try {
+
+        /* build unique file-id list */
+        const fileSet = new Set(selResults.map(r => r.fileI).filter(fileI => !hasConvArrayLoaded(fileI)));
+
+        let done = 0;
+        for (const fileI of fileSet) {
+            await loadDataFile(fileI, false); // already cached? → returns instantly
+            setLoad(`loading files … ${++done}/${fileSet.size}`);
+        }
+
+        /* now every conversation is in RAM → update labels & chips */
+        await renderSelPage(false);
+    }
+    finally {
+        loading.classList.add('hidden');
+    }
+}
+
+async function loadDataFile(fileI, enableLoading) {
+    const fileURL = fileIToFileURL(fileI);
+    var data = dataFileCache.get(fileURL);
+    if (!data) {
+        if (enableLoading) loading.classList.remove('hidden'); // ① show spinner
+        try {
+            data = await fetchJsonGz(fileURL);
+            dataFileCache.set(fileURL, data.conversationsData);
+        }
+        finally {
+            if (enableLoading) loading.classList.add('hidden'); // ② hide spinner
+        }
+    }
+    return data;
+}
+
+//////////// Display Data Popout ////////////
 
 async function loadAndShowConversation(fileI, itemI) {
     curFile = fileI;
     curItem = itemI;
-
-    loading.classList.remove('hidden'); // ① show spinner
-
-    try {
-        const fileURL = fileIToFileURL(fileI);
-
-        if (!loadAndShowConversation.cache) loadAndShowConversation.cache = new Map();
-        let convArr = loadAndShowConversation.cache.get(fileURL);
-        if (!convArr) {
-            convArr = await fetchJsonGz(fileURL);
-            loadAndShowConversation.cache.set(fileURL, convArr);
-        }
-
-        openData(convArr[itemI]);
-
-        await renderSelPage(true);
-    } finally {
-        loading.classList.add('hidden'); // ② hide spinner
-    }
+    var data = await loadDataFile(fileI, true);
+    openData(data[itemI]);
+    await renderSelPage(true);
 }
 
 function openData(data) {
@@ -716,25 +781,115 @@ function openData(data) {
     updateHash();
 }
 
-/* optional keyboard shortcut */
+//////////// Close Data Popout ////////////
+
+document.querySelector('.closeBtn').onclick = closeDataPopout;
+modalWrap.addEventListener('click', e => {
+    if (e.target === modalWrap) closeDataPopout();
+});
 document.addEventListener('keydown', e => {
-    if (e.key === 'x') hideAllHulls();
-    if (e.key == "ArrowRight") jumpRel(1);
-    if (e.key == "ArrowLeft") jumpRel(-1);
+    if (e.key === 'Escape') closeDataPopout();
+});
+
+function closeDataPopout() {
+    selConvFile = selConvItem = -1;
+    if (!modalWrap.classList.contains('show')) return;
+    modalWrap.classList.remove('show');
+    modalWrap.classList.add('hidden');
+    openConvHash = null;
+    updateHash();
+}
+
+//////////// Drawing UMAP Points ////////////
+
+window.addEventListener('resize', drawPoints);
+
+function drawPoints() {
+    if (!curPoints.length) return;
+
+    const cssW = screen.availWidth * 0.9;
+    const cssH = screen.availHeight * 0.8;
+    const dpr = 1; // use window.devicePixelRatio if desired
+    
+    var w = cssW * dpr;
+    var h = cssH * dpr;
+    plotCanvas.width = w;
+    plotCanvas.height = h;
+    
+    plotCtx.clearRect(0, 0, w, h);
+
+    const {
+        xmin,
+        xmax,
+        ymin,
+        ymax
+    } = xyMinMax;
+    const sx = xmax === xmin ? 1 : w / (xmax - xmin);
+    const sy = ymax === ymin ? 1 : h / (ymax - ymin);
+
+    // draw points with some transparency so high density overlaps are visible
+    plotCtx.fillStyle = '#6ec1ff22';
+    for (const [x, y] of curPoints) {
+        const px = (x - xmin) * sx;
+        const py = (y - ymin) * sy;
+        plotCtx.fillRect(px - 1, py - 1, 2, 2);
+    }
+
+    // selection rectangle overlay
+    if (selRect) {
+        const {
+            minX,
+            maxX,
+            minY,
+            maxY
+        } = selRect;
+        plotCtx.lineWidth = 3;
+        plotCtx.strokeStyle = '#ff7675';
+        plotCtx.setLineDash([8]);
+        plotCtx.strokeRect(minX, minY, maxX - minX, maxY - minY);
+
+        // fluffy fill
+        plotCtx.fillStyle = '#ff767540'; // translucent red
+        plotCtx.fillRect(minX, minY, maxX - minX, maxY - minY);
+    }
+    
+    // store it for quick drawing later
+    cachedPlot = plotCtx.getImageData(0, 0, plotCanvas.width, plotCanvas.height);
+}
+
+
+//////////// Canvas Hiding and Maximizing ////////////
+
+function hidePlot() {
+    plotWrap.classList.add('hide');
+    plotLeaf.classList.remove('hidden');
+}
+
+function showPlot() {
+    plotWrap.classList.remove('hide');
+    plotLeaf.classList.add('hidden');
+}
+
+plotToggle.onclick = hidePlot;
+plotLeaf.onclick = showPlot;
+
+plotMaxBtn.onclick = () => {
+    plotWrap.classList.toggle('max');
+    plotWrap.classList.toggle('smol');
+    plotMaxBtn.textContent = plotMaxBtn.textContent == "🗖" ? "🗗" : "🗖";
+    plotMaxBtn.title = plotMaxBtn.title == "Maximize (m)" ? "Minimize (m)" : "Maximize (m)";
+};
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'h') {
+        if (plotWrap.classList.contains('hide')) showPlot();
+        else hidePlot();
+    }
+    if (e.key === 'm') plotMaxBtn.onclick();
 });
 
 
-
-const spinner = () => $('span', {
-    class: 'spinner',
-    title: 'Loading…'
-});
-
-/* ---------- facet-points helpers ---------- */
-
-
-
-
+//////////// Initial Loading ////////////
 
 function calcMinMax(arr) {
     let xmin = +Infinity,
@@ -763,173 +918,17 @@ function calcMinMax(arr) {
     };
 }
 
-
-function drawPoints() {
-    if (!curPoints.length) return;
-
-    /* ---------- sizing & scaling ---------- */
-    const cssW = screen.availWidth * 0.9;
-    const cssH = screen.availHeight * 0.8;
-    const dpr = 1; // use window.devicePixelRatio if desired
-
-    plotCanvas.width = cssW * dpr;
-    plotCanvas.height = cssH * dpr;
-
-    const {
-        width: w,
-        height: h
-    } = plotCanvas;
-    plotCtx.clearRect(0, 0, w, h);
-
-    const {
-        xmin,
-        xmax,
-        ymin,
-        ymax
-    } = xyMinMax;
-    const sx = xmax === xmin ? 1 : w / (xmax - xmin);
-    const sy = ymax === ymin ? 1 : h / (ymax - ymin);
-
-
-    /* ---------- step 1: draw all points, but dimmer ---------- */
-    plotCtx.fillStyle = '#6ec1ff22';
-    for (const [x, y] of curPoints) {
-        const px = (x - xmin) * sx;
-        const py = (y - ymin) * sy;
-        plotCtx.fillRect(px - 1, py - 1, 2, 2);
-    }
-
-    /* ---------- selection rectangle overlay ---------- */
-    if (selRect) {
-        const {
-            minX,
-            maxX,
-            minY,
-            maxY
-        } = selRect;
-        plotCtx.lineWidth = 3;
-        plotCtx.strokeStyle = '#ff7675';
-        plotCtx.setLineDash([8]);
-        plotCtx.strokeRect(minX, minY, maxX - minX, maxY - minY);
-
-        // fluffy fill
-        plotCtx.fillStyle = '#ff767540'; // translucent red
-        plotCtx.fillRect(minX, minY, maxX - minX, maxY - minY);
-    }
-
-    cachedPlot = plotCtx.getImageData(0, 0, plotCanvas.width, plotCanvas.height);
-
-}
-
-
-window.addEventListener('resize', drawPoints);
-
-function loadProxyUrl(url) {
-    //return  url.replace("YOURHTTPPREFIX", "https://raw.githubusercontent.com/YOUR_GITHUB_USER_NAME/YOUR_GITHUB_REPO/main");
-    url = url.replace("/modelwelfare/wildchat2", "https://raw.githubusercontent.com/Phylliida/OpenClioWildchatResults/refs/heads/updated/modelwelfare/wildchat3branch/Request/")
-    return url;
-    //return url;
-}
-
-
-async function loadConversationsMappingLE(url) {
-    // 1. fetch the raw bytes
-    const res = await fetch(url);
-    const buffer = await res.arrayBuffer();
-
-    // 2. wrap in a DataView (gives per-read endian control)
-    const view = new DataView(buffer);
-
-    // 3. walk through the bytes, 8-byte stride (4 for x, 4 for y)
-    const pts = [];
-    for (let off = 0; off < view.byteLength; off += 8) {
-        const x = view.getInt32(off, /*littleEndian=*/ true);
-        const y = view.getInt32(off + 4, /*littleEndian=*/ true);
-        pts.push([x, y]);
-    }
-    return pts;
-}
-
-async function loadPointsLE(url) {
-    // 1. fetch the raw bytes
-    const res = await fetch(url);
-    const buffer = await res.arrayBuffer();
-
-    // 2. wrap in a DataView (gives per-read endian control)
-    const view = new DataView(buffer);
-
-    // 3. walk through the bytes, 8-byte stride (4 for x, 4 for y)
-    const pts = [];
-    for (let off = 0; off < view.byteLength; off += 8) {
-        const x = view.getFloat32(off, /*littleEndian=*/ true);
-        const y = view.getFloat32(off + 4, /*littleEndian=*/ true);
-        pts.push([x, y]);
-    }
-    return pts;
-}
-
-function hidePlot() {
-    plotWrap.classList.add('hide');
-    plotLeaf.classList.remove('hidden');
-}
-
-function showPlot() {
-    plotWrap.classList.remove('hide');
-    plotLeaf.classList.add('hidden');
-}
-
-plotToggle.onclick = hidePlot;
-plotLeaf.onclick = showPlot;
-
-plotMaxBtn.onclick = () => {
-    plotWrap.classList.toggle('max');
-    plotWrap.classList.toggle('smol');
-    plotMaxBtn.textContent = plotMaxBtn.textContent == "🗖" ? "🗗" : "🗖";
-    plotMaxBtn.title = plotMaxBtn.title == "Maximize (m)" ? "Minimize (m)" : "Maximize (m)";
-};
-
-
-document.addEventListener('keydown', e => {
-    if (e.key === 'h') {
-        if (plotWrap.classList.contains('hide')) showPlot();
-        else hidePlot();
-    }
-    if (e.key === 'm') plotMaxBtn.onclick();
-});
-
-
-
-
-/* ───────── root build ───────── */
 window.onload = buildFacets;
 async function buildFacets() {
     conversationsMapping = await loadConversationsMappingLE(CONVERSATIONS_MAPPING_FILE);
     curPoints = await loadPointsLE(POINTS_FILE);
     xyMinMax = calcMinMax(curPoints);
+    drawPoints(); // this call is important
     restoreFromHash();
     drawPoints();
 }
 
-
-
-document.querySelector('.closeBtn').onclick = closeConversation;
-modalWrap.addEventListener('click', e => {
-    if (e.target === modalWrap) closeConversation();
-});
-document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeConversation();
-});
-
-
-function closeConversation() {
-    selConvFile = selConvItem = -1;
-    if (!modalWrap.classList.contains('show')) return;
-    modalWrap.classList.remove('show');
-    setTimeout(() => modalWrap.classList.add('hidden'), 250);
-    openConvHash = null;
-    updateHash();
-}
-
+//////////// Hash Sync ////////////
 
 window.addEventListener("hashchange", function(event) {
     if (window.location.hash != curHash && modifyHashAllowed) {
@@ -939,7 +938,6 @@ window.addEventListener("hashchange", function(event) {
     }
 });
 
-/* ───────── hash sync ───────── */
 function updateHash() {
     if (!modifyHashAllowed) return;
     const tokens = [...pathMap.entries()]
@@ -974,7 +972,6 @@ function updateHash() {
     window.location.hash = curHash;
 }
 
-
 async function restoreFromHash() {
 
     loading.classList.remove('hidden'); // ① show spinner
@@ -999,7 +996,6 @@ async function restoreFromHash() {
             selConvTok = null;
         const segs = decodeURIComponent(hashStr).split(',').filter(Boolean);
         const convSeg = segs.find(s => s.startsWith('c!'));
-
         const catSegs = [],
             convListSegs = [];
 
@@ -1019,7 +1015,7 @@ async function restoreFromHash() {
             if (det) det.open = true;
         });
 
-        closeConversation();
+        closeDataPopout();
         modifyHashAllowed = true;
 
         /* ---------- restore marquee & selection list ---------- */
@@ -1061,23 +1057,17 @@ async function restoreFromHash() {
     } finally {
         loading.classList.add('hidden'); // ① show spinner
     }
-
 }
 
 
-/* return the cached array for that data file or undefined     */
-function cachedConvs(fileURL) {
-    return loadAndShowConversation.cache ?
-        loadAndShowConversation.cache.get(fileURL) :
-        undefined;
-}
+//////////// Label Loading ////////////
 
-/* try to replace the label of one <button>                    */
+// try to replace the label of one <button>
 function maybeUpdateLabel(btn) {
     const fileI = +btn.dataset.f,
         itemI = +btn.dataset.i,
         fileURL = fileIToFileURL(fileI),
-        convArr = cachedConvs(fileURL);
+        convArr = dataFileCache.get(fileURL);
 
     if (convArr) {
         const cv = convArr[itemI];
@@ -1087,16 +1077,99 @@ function maybeUpdateLabel(btn) {
     }
 }
 
-// from https://gist.github.com/sebleier/554280
-commons = "i,me,my,myself,we,our,ours,ourselves,you,your,yours,yourself,yourselves,he,him,his,himself,she,her,hers,herself,it,its,itself,they,them,their,theirs,themselves,what,which,who,whom,this,that,these,those,am,is,are,was,were,be,been,being,have,has,had,having,do,does,did,doing,a,an,the,and,but,if,or,because,as,until,while,of,at,by,for,with,about,against,between,into,through,during,before,after,above,below,to,from,up,down,in,out,on,off,over,under,again,further,then,once,here,there,when,where,why,how,all,any,both,each,few,more,most,other,some,such,no,nor,not,only,own,same,so,than,too,very,s,t,can,will,just,don,should,now".split(",")
+async function preloadCurrentPage(alreadyLoading) {
 
+    if (!alreadyLoading) loading.classList.remove('hidden');
+    setLoad('loading files…');
+    try {
+
+
+        const total = selResults.length;
+        const pages = Math.ceil(total / PAGE_SIZE) || 1;
+
+        // clamp page index
+        curPage = Math.min(Math.max(curPage, 0), pages - 1);
+
+        // slice rows for this page
+        const start = curPage * PAGE_SIZE;
+
+        const rows = selResults.slice(start, start + PAGE_SIZE);
+        // only load ones we haven't already loaded
+        const fileSet = new Set(rows.map(({
+            fileI,
+            itemI
+        }) => fileI).filter(fileI => !hasConvArrayLoaded(fileI)));
+        var i = 0;
+        for (var fileId of fileSet) {
+            await loadDataFile(fileId, false);
+            setLoad(`loading files … ${i+1}/${fileSet.size}`);
+            i += 1;
+        }
+
+    } finally {
+        if (!alreadyLoading) loading.classList.add('hidden');
+    }
+}
+
+
+
+//////////// Word Cloud Widget ////////////
+
+// from https://gist.github.com/sebleier/554280
+var commons = "i,me,my,myself,we,our,ours,ourselves,you,your,yours,yourself,yourselves,he,him,his,himself,she,her,hers,herself,it,its,itself,they,them,their,theirs,themselves,what,which,who,whom,this,that,these,those,am,is,are,was,were,be,been,being,have,has,had,having,do,does,did,doing,a,an,the,and,but,if,or,because,as,until,while,of,at,by,for,with,about,against,between,into,through,during,before,after,above,below,to,from,up,down,in,out,on,off,over,under,again,further,then,once,here,there,when,where,why,how,all,any,both,each,few,more,most,other,some,such,no,nor,not,only,own,same,so,than,too,very,s,t,can,will,just,don,should,now".split(",")
 var commonWords = new Set();
 for (const common of commons) {
     commonWords.add(common);
 }
 
+var wordFrequencies = new Map();
+
+function splitIntoWords(s) {
+    return s.split(/[^\p{L}\p{N}\p{Extended_Pictographic}]+/u).filter(subStr => subStr.length > 0);
+}
+
+function buildWordCloud() {
+    // Bail out if library not loaded
+    if (typeof WordCloud === 'undefined') return;
+
+    var unloadedStr = numUnloaded != 0 ? ("(" + numUnloaded + " not loaded yet and ignored, please page over to them or press load all above)") : "(all loaded)";
+    wordCloudTitle.textContent = "Selected Data Word Cloud " + unloadedStr;
+
+    // 1.  Take the 100 most frequent labels
+    const rows = [...wordFrequencies.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 100);
+
+    var total = 0;
+    for (var vals of rows) {
+        total += vals[1];
+    }
+
+    // need to normalize or they get too big
+    // 2.  Convert to the “list” format WordCloud expects
+    //     [ [word, weight], … ]
+    const wcList = rows.map(([label, count]) => [label, 100 * count / total]);
+
+    // 3.  Draw
+    const canvas = document.getElementById('wcCanvas');
+    WordCloud(canvas, {
+        list: wcList,
+        weightFactor: 10, // tweak size scaling
+        minSize: 8, // smallest font (px)
+        backgroundColor: 'rgba(0,0,0,0)', // keep site bg
+        color: (_, weight) => weight > rows[0][1] * 0.6 ? '#6ec1ff' : weight > rows[0][1] * 0.3 ? '#74b9ff' : '#9e9e9e',
+        rotateRatio: 0.15, // few words angled
+        shuffle: false, // heavier words first
+        origin: [canvas.width / 2, canvas.height / 2],
+        drawOutOfBound: false
+    });
+}
+
+
+//////////// Frequencies of Labels Widget ////////////
+
 var numUnloaded = 0;
-/* try to replace the label of one <button>                    */
+// This also adds frequencies for word cloud
 function storeFrequencies() {
     var mapping = conversationsMapping;
     var newFiles = new Set();
@@ -1108,8 +1181,7 @@ function storeFrequencies() {
         }
         var fileI = i.fileI;
         var itemI = i.itemI;
-        var fileURL = fileIToFileURL(fileI);
-        var convArr = cachedConvs(fileURL);
+        var convArr = dataFileCache.get(fileIToFileURL(fileI));
         var label = "<unloaded>";
         if (convArr) {
             const cv = convArr[itemI];
@@ -1178,135 +1250,6 @@ function renderFrequencies() {
     }
 }
 
-function splitIntoWords(s) {
-    return s.split(/[^\p{L}\p{N}\p{Extended_Pictographic}]+/u).filter(subStr => subStr.length > 0);
-}
-
-
-var wordFrequencies = new Map();
-
-function buildWordCloud() {
-    // Bail out if library not loaded
-    if (typeof WordCloud === 'undefined') return;
-
-    var unloadedStr = numUnloaded != 0 ? ("(" + numUnloaded + " not loaded yet and ignored, please page over to them or press load all above)") : "(all loaded)";
-    wordCloudTitle.textContent = "Selected Data Word Cloud " + unloadedStr;
-
-    // 1.  Take the 100 most frequent labels
-    const rows = [...wordFrequencies.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 100);
-
-    var total = 0;
-    for (var vals of rows) {
-        total += vals[1];
-    }
-
-    // need to normalize or they get too big
-    // 2.  Convert to the “list” format WordCloud expects
-    //     [ [word, weight], … ]
-    const wcList = rows.map(([label, count]) => [label, 100 * count / total]);
-
-    // 3.  Draw
-    const canvas = document.getElementById('wcCanvas');
-    WordCloud(canvas, {
-        list: wcList,
-        weightFactor: 10, // tweak size scaling
-        minSize: 8, // smallest font (px)
-        backgroundColor: 'rgba(0,0,0,0)', // keep site bg
-        color: (_, weight) => weight > rows[0][1] * 0.6 ? '#6ec1ff' : weight > rows[0][1] * 0.3 ? '#74b9ff' : '#9e9e9e',
-        rotateRatio: 0.15, // few words angled
-        shuffle: false, // heavier words first
-        origin: [canvas.width / 2, canvas.height / 2],
-        drawOutOfBound: false
-    });
-}
-
-
-function fileIToFileURL(fileI) {
-    var prefix = BASE_DATA_URL.endsWith("/") ? BASE_DATA_URL : BASE_DATA_URL + "/";
-    return `${prefix}data${fileI}.json.gz`
-}
-
-function hasConvArrayLoaded(fileI) {
-    const fileURL = fileIToFileURL(fileI);
-
-    if (!loadAndShowConversation.cache)
-        loadAndShowConversation.cache = new Map();
-
-    return loadAndShowConversation.cache.has(fileURL);
-}
-
-async function getConvArray(fileI) {
-    const fileURL = fileIToFileURL(fileI);
-
-    if (!loadAndShowConversation.cache)
-        loadAndShowConversation.cache = new Map();
-
-    let arr = loadAndShowConversation.cache.get(fileURL);
-    if (!arr) {
-        arr = (await fetchJsonGz(fileURL)).conversationsData;
-        loadAndShowConversation.cache.set(fileURL, arr);
-    }
-    return arr;
-}
-
-loadAllBtn.onclick = preloadAllSelectedFiles;
-async function preloadAllSelectedFiles() {
-    if (!selResults.length) return;
-
-    loading.classList.remove('hidden');
-    setLoad('loading files … 0/0');
-
-    /* build unique file-id list */
-    const fileSet = new Set(selResults.map(r => r.fileI).filter(fileI => !hasConvArrayLoaded(fileI)));
-
-    let done = 0;
-    for (const fileI of fileSet) {
-        await getConvArray(fileI); // already cached? → returns instantly
-        setLoad(`loading files … ${++done}/${fileSet.size}`);
-    }
-
-    /* now every conversation is in RAM → update labels & chips */
-    await renderSelPage(false);
-
-    loading.classList.add('hidden');
-
-}
-
-async function preloadCurrentPage(alreadyLoading) {
-
-    if (!alreadyLoading) loading.classList.remove('hidden');
-    setLoad('loading files…');
-    try {
-
-
-        const total = selResults.length;
-        const pages = Math.ceil(total / PAGE_SIZE) || 1;
-
-        // clamp page index
-        curPage = Math.min(Math.max(curPage, 0), pages - 1);
-
-        // slice rows for this page
-        const start = curPage * PAGE_SIZE;
-
-        const rows = selResults.slice(start, start + PAGE_SIZE);
-        // only load ones we haven't already loaded
-        const fileSet = new Set(rows.map(({
-            fileI,
-            itemI
-        }) => fileI).filter(fileI => !hasConvArrayLoaded(fileI)));
-        var i = 0;
-        for (var fileId of fileSet) {
-            await getConvArray(fileId);
-            setLoad(`loading files … ${i+1}/${fileSet.size}`);
-            i += 1;
-        }
-
-    } finally {
-        if (!alreadyLoading) loading.classList.add('hidden');
-    }
-}
 
 
 
