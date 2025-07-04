@@ -163,6 +163,7 @@ Please respond with either &lt;wellbeing&gt;🔄&lt;/wellbeing&gt; or &lt;wellbe
 <script>
 Chart.defaults.animation=false;
 Chart.register(ChartDataLabels,ChartErrorBars);
+Chart.defaults.color = '#000';
 Chart.defaults.plugins.datalabels.display=false;
 function eb(v, n, off = 0, z = 1.96) {
   // guard against n = 0
@@ -294,11 +295,28 @@ function updateHash(){
   window.scrollTo(scrollX,scrollY);
 }
 
+var chartFontSize = 20;
+
 /* ---------- plotting helpers ---------- */
 const chartOpts=y=>({maintainAspectRatio:false,responsive:true,
-  scales:{y:{beginAtZero:true,max:100,stacked:true,title:{display:true,text:y}},
-          x:{stacked:true,ticks:{autoSkip:false,maxRotation:60,minRotation:30}}},
-  plugins:{tooltip:{callbacks:{label:c=>`${c.dataset.label} ${(c.raw?.n + "" !== "undefined" ? ("(" + c.raw?.n + ")"): "")}: ${c.parsed.y.toFixed(1)} %`}}}});
+  scales:{y:{ticks : {
+        font : { size : chartFontSize }        // ⬅️ make the numbers bigger
+      },
+
+      /* axis title (“% of prompts”) */
+      title : {
+        display : true,
+        text    : y,
+        font    : { size : chartFontSize }      // ⬅️ make the title bigger
+      },beginAtZero:true,max:100,stacked:true},
+          x:{ stacked:true,ticks:{font : { size : chartFontSize },autoSkip:false,maxRotation:60,minRotation:30}}},
+  plugins:{ legend : {
+      labels : {
+        font : { size : chartFontSize },              // << bigger text in the key
+        // optional: make the little colour boxes taller
+        boxHeight : chartFontSize
+      }
+    },tooltip:{callbacks:{label:c=>`${c.dataset.label} ${(c.raw?.n + "" !== "undefined" ? ("(" + c.raw?.n + ")"): "")}: ${c.parsed.y.toFixed(1)} %`}}}});
 
 function plotBail(lbl,cfB,bfB,nCf,nBf){
   bailChart?.destroy();
@@ -450,7 +468,7 @@ function drawAll(){
   const {bfB,cfB,bfR,nBf,nCf,nRef}=makeSeries(labels,(lab)=>collect(lab,currentCategory,currentSub));
   const ord=[...labels.keys()].sort((a,b)=>(bfB.l[b]+cfB.l[b])-(bfB.l[a]+cfB.l[a]));
   reorderDatasets(bfB,ord);reorderDatasets(cfB,ord);reorderDatasets(bfR,ord);
-  const lbl=reorder(labels,ord);
+  const lbl=reorder(labels,ord).map(l => l.replace(/google_/g, 'google/').replace(/unsloth_/g, '').replace(/NousResearch\//g, ''));
   plotBail(lbl,cfB,bfB,nBf,nCf);plotRefusal(lbl,bfR,nRef);
   const bailAvg=bfB.l.map((v,i)=>(v+cfB.l[i])/2);
   plotScatter(lbl,bailAvg,bfR.r);
