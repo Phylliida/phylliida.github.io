@@ -870,7 +870,8 @@ function drawPoints() {
         const py = (y - ymin) * sy;
         plotCtx.fillRect(px - 1, py - 1, 5, 5);
         const lbl = getLabelForPoint(i);
-        if (lbl==="(unloaded)") continue;        // only draw when label known
+        i += 1;
+        if (lbl==="(unloaded)" || !(lbl.includes("bail tool") || lbl.includes("just prefer") || lbl.includes("sys"))) continue;        // only draw when label known
 
         plotCtx.font = '10px/1 sans-serif';
         const wTxt = plotCtx.measureText(lbl).width;
@@ -907,7 +908,6 @@ function drawPoints() {
         plotCtx.stroke();
 
         placed.push(rect);
-        i += 1;
     }
     
     // selection rectangle overlay
