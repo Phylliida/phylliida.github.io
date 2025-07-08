@@ -54,6 +54,20 @@ canvas{width:100%!important;height:auto!important;}
 <div id="bees">
     <h1>Refusal / Bail Distribution</h1>
 
+    <!-- ──────── NEW GEMMA SECTION ──────── -->
+    <h2>On <a href="https://huggingface.co/THUDM/GLM-4-32B-0414">GLM-4-32B-0414</a></h2>
+    <div class="chart-row">
+        <div class="chart-wrapper">
+            <h2><a href="https://huggingface.co/datasets/RyokoAI/ShareGPT52K">ShareGPT</a></h2>
+            <canvas id="shareGLMChart"></canvas>
+            <div id="shareGLMLegend" class="chart-legend"></div>
+        </div>
+        <div class="chart-wrapper">
+            <h2><a href="https://huggingface.co/datasets/allenai/WildChat-1M">WildChat</a></h2>
+            <canvas id="wildGLMChart"></canvas>
+            <div id="wildGLMLegend" class="chart-legend"></div>
+        </div>
+    </div>
     <h2>On <a href="https://huggingface.co/Qwen/Qwen2.5-7B-Instruct">Qwen2.5-7B-Instruct</a></h2>
     <!-- ──────── ORIGINAL TWO CHARTS ──────── -->
     <div class="chart-row">
@@ -86,20 +100,6 @@ canvas{width:100%!important;height:auto!important;}
     </div>
     
     
-    <!-- ──────── NEW GEMMA SECTION ──────── -->
-    <h2>On <a href="https://huggingface.co/THUDM/GLM-4-32B-0414">GLM-4-32B-0414</a></h2>
-    <div class="chart-row">
-        <div class="chart-wrapper">
-            <h2><a href="https://huggingface.co/datasets/RyokoAI/ShareGPT52K">ShareGPT</a></h2>
-            <canvas id="shareGLMChart"></canvas>
-            <div id="shareGLMLegend" class="chart-legend"></div>
-        </div>
-        <div class="chart-wrapper">
-            <h2><a href="https://huggingface.co/datasets/allenai/WildChat-1M">WildChat</a></h2>
-            <canvas id="wildGLMChart"></canvas>
-            <div id="wildGLMLegend" class="chart-legend"></div>
-        </div>
-    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
@@ -254,12 +254,12 @@ const wildchatCountsGemma = {refusals:31734,bailsAndRefusals:6522,bails:17862,ot
 const shareCountsGLM = {refusals:35865,bailsAndRefusals:241,bails:267, other:54292};
 const wildchatCountsGLM = {refusals:37570,bailsAndRefusals:686,bails:1749,other:374142};
 
+makePieChart({canvasId:'shareGLMChart',legendId:'shareGLMLegend',counts:shareCountsGLM});
+makePieChart({canvasId:'wildGLMChart', legendId:'wildGLMLegend', counts:wildchatCountsGLM});
 makePieChart({canvasId:'shareChart',legendId:'shareLegend',counts:shareCounts});
 makePieChart({canvasId:'wildChart', legendId:'wildLegend', counts:wildCounts});
 makePieChart({canvasId:'shareGemmaChart',legendId:'shareGemmaLegend',counts:shareCountsGemma});
 makePieChart({canvasId:'wildGemmaChart', legendId:'wildGemmaLegend', counts:wildchatCountsGemma});
-makePieChart({canvasId:'shareGLMChart',legendId:'shareGLMLegend',counts:shareCountsGLM});
-makePieChart({canvasId:'wildGLMChart', legendId:'wildGLMLegend', counts:wildchatCountsGLM});
 </script>
 </body>
 </html>
