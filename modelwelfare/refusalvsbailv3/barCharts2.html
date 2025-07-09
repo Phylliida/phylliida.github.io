@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Bail-Oriented Replies (0 – 100 %)</title>
+
+<style>
+:root{
+    /* one colour for each model */
+    --glm  : #4a90e2;   /* GLM-4-32B  */
+    --qwen : #e67e22;   /* Qwen-2.5-7B*/
+    --gemma: #2ecc71;   /* Gemma-2-2B */
+    --bg   : #ffffff;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+    font-family:Arial,Helvetica,sans-serif;
+    background:var(--bg);
+    padding:2rem 1rem 3rem;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:3rem;
+}
+h1{
+    font-size:clamp(1.3rem,4vw,2rem);
+    text-align:center;
+    line-height:1.35;
+}
+.chart-wrapper{
+    width:clamp(280px,90vw,680px);
+}
+canvas{width:100%!important;height:auto!important}
+.legend{
+    margin-top:.75rem;
+    display:flex;
+    flex-wrap:wrap;
+    gap:1rem 1.75rem;
+    font-size:.9rem;
+    justify-content:center;
+}
+.legend span{display:flex;align-items:center;gap:.4rem}
+.swatch{
+    width:15px;height:15px;border-radius:3px;display:inline-block
+}
+</style>
+</head>
+
+<body>
+    <h1>Proportion of Answers Offering a Bail<br />(bail OR bail&nbsp;+&nbsp;refusal)</h1>
+
+    <!-- ShareGPT bar chart -->
+    <div class="chart-wrapper">
+        <h2 style="text-align:center;margin-bottom:.6rem">ShareGPT</h2>
+        <canvas id="shareBar"></canvas>
+        <div id="shareLegend" class="legend"></div>
+    </div>
+
+    <!-- WildChat bar chart -->
+    <div class="chart-wrapper">
+        <h2 style="text-align:center;margin-bottom:.6rem">WildChat</h2>
+        <canvas id="wildBar"></canvas>
+        <div id="wildLegend" class="legend"></div>
+    </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+<script>
+
+/* ─── raw counts ───────────────────────────────────────── */
+const shareRaw = [
+    {model:'GLM-4-32B', refusals:35865, bailRef:241 , bail:267 , other:54292},
+    {model:'Qwen-2.5-7B', refusals:33854, bailRef:2252, bail:2108, other:52451},
+    {model:'Gemma-2-2B',  refusals:30031, bailRef:6075, bail:6671, other:47888}
+];
+
+const wildRaw = [
+    {model:'GLM-4-32B', refusals:37570, bailRef:686 , bail:1749 , other:374142},
+    {model:'Qwen-2.5-7B', refusals:34463, bailRef:3793, bail:2173 , other:373718},
+    {model:'Gemma-2-2B',  refusals:31734, bailRef:6522, bail:17862, other:358029}
+];
+
+/* colour map: same order for every appearance of a model */
+const COLORS = {
+    'GLM-4-32B' : getComputedStyle(document.documentElement).getPropertyValue('--glm'),
+    'Qwen-2.5-7B': getComputedStyle(document.documentElement).getPropertyValue('--qwen'),
+    'Gemma-2-2B' : getComputedStyle(document.documentElement).getPropertyValue('--gemma')
+};
+
+Chart.defaults.color = '#000';
+
+/* compute % (bails + bail&refusal) / total */
+const pct = d=>{
+    const total = d.refusals + d.bailRef + d.bail + d.other;
+    return +(((d.bail)/(d.bailRef + d.bail)*100).toFixed(2));
+};
+
+const prepData = raw => raw
+    .map(d=>({...d, ratio:pct(d)}))
+    .sort((a,b)=>b.ratio-a.ratio);
+
+/* create bar chart */
+function makeBar({id,legendId,rows}){
+    const labels = rows.map(r=>r.model);
+    const data   = rows.map(r=>r.ratio);
+    const colors = rows.map(r=>COLORS[r.model.trim()]);
+
+    new Chart(document.getElementById(id),{
+        type:'bar',
+        data:{labels,
+            datasets:[{data,backgroundColor:colors, borderColor:'#00000015', borderWidth:1}]
+        },
+        options:{
+            responsive:true,
+            scales:{
+                y:{
+                    beginAtZero:true,
+                    max:100,
+                    ticks:{callback:v=>v+'%'},
+                    title:{
+                        display:true,
+                        text:'Proportion of bail conversations without refusal',
+                        padding:{top:10},
+                        font:{size:14,weight:'bold'}
+                    }
+                }
+            },
+            plugins:{
+                legend:{display:false},
+                tooltip:{callbacks:{label:c=>c.parsed.y+'%'}}
+            }
+        }
+    });
+
+    /* legend */
+    const wrap=document.getElementById(legendId);
+    wrap.innerHTML='';          // clear if rerendered
+    rows.forEach(r=>{
+        const span=document.createElement('span');
+        const sw=document.createElement('span');
+        sw.className='swatch';
+        sw.style.backgroundColor=COLORS[r.model];
+        span.appendChild(sw);
+        span.appendChild(document.createTextNode(`${r.model}: ${r.ratio}%`));
+        wrap.appendChild(span);
+    });
+}
+
+/* render charts */
+makeBar({
+    id:'shareBar',
+    legendId:'shareLegend',
+    rows:prepData(shareRaw)
+});
+makeBar({
+    id:'wildBar',
+    legendId:'wildLegend',
+    rows:prepData(wildRaw)
+});
+</script>
+</body>
+</html>

@@ -390,9 +390,10 @@ function plotScatter(lbl,bailArr,refArr){
     type:"scatter",
     data:{datasets:[{label:"Category",data:pts,backgroundColor:COLORS.point,pointRadius:5}]},
     options:{
+        
       maintainAspectRatio:false,responsive:true,
-      scales:{x:{beginAtZero:true,max:100,title:{display:true,text:"Bail rate (%)"}},
-              y:{beginAtZero:true,max:100,title:{display:true,text:"Refusal rate (%)"}}},
+      scales:{x:{beginAtZero:true,max:100,title:{display:true,text:"Bail rate (%)",font : { size : chartFontSize }}},
+              y:{beginAtZero:true,max:100,title:{display:true,text:"Refusal rate (%)",font : { size : chartFontSize }}}},
       plugins:{
         tooltip:{callbacks:{label:c=>`${c.raw.label}: Bail ${c.raw.x.toFixed(1)} %, Refuse ${c.raw.y.toFixed(1)} %`}},
         datalabels:{display:()=>labelsVisible,align:"right",anchor:"start",
