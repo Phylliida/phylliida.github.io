@@ -77,6 +77,16 @@ button.btn.secondary:hover{background:#7f8c8d;border-color:#7f8c8d;}
 #corrStats th,#corrStats td{border:1px solid #ddd;padding:.4rem .6rem;text-align:center;font-size:.93rem;}
 #corrStats th{background:#ecf0f1;}
 
+.tikz{
+  width:100%;
+  margin-top:.6rem;
+  font:13px/1.3 "Fira Code",Consolas,monospace;
+  background:#fdfdfd;
+  border:1px solid #d0d7e2;
+  border-radius:6px;
+  padding:.6rem;
+  resize:vertical;
+}
 </style>
 </head>
 <body>
@@ -111,7 +121,7 @@ button.btn.secondary:hover{background:#7f8c8d;border-color:#7f8c8d;}
   </div>
 
   <!-- ───── model subset selector ───── -->
-  <div id="modelCard" class="card hidden" style="width:min(320px,90%);">
+  <div id="modelCard" class="card" style="width:min(320px,90%);">
     <h3>Models displayed</h3>
     <div class="button-row">
       <button id="btnAll"   class="btn">Select all</button>
@@ -123,12 +133,14 @@ button.btn.secondary:hover{background:#7f8c8d;border-color:#7f8c8d;}
   <!-- ───── charts ───── -->
   <h2>Bail outcomes</h2>
   <div class="chart-wrap"><canvas id="bailChart"></canvas></div>
-
+  <textarea id="bailTikz" class="tikz" readonly rows="8"></textarea>
   <h2>Refusal outcomes</h2>
   <div class="chart-wrap"><canvas id="refusalChart"></canvas></div>
+  <textarea id="refusalTikz" class="tikz" readonly rows="8"></textarea>
 
   <h2>Bail vs Refusal (scatter)</h2>
   <div class="chart-wrap scatter"><canvas id="scatterChart"></canvas></div>
+  <textarea id="scatterTikz" class="tikz" readonly rows="8"></textarea>
   <label class="toggle">
     <input type="checkbox" id="labelToggle" checked> Show labels
   </label>
@@ -165,6 +177,237 @@ Chart.defaults.animation=false;
 Chart.register(ChartDataLabels,ChartErrorBars);
 Chart.defaults.color = '#000';
 Chart.defaults.plugins.datalabels.display=false;
+
+
+function rgbTriplet(cssColor){
+  // works for hex (“#rrggbb”) or rgb(…, …, …)
+  if(cssColor.startsWith('#')){
+    const n = parseInt(cssColor.slice(1),16);
+    return [(n>>16)&255,(n>>8)&255,n&255];
+  }
+  const m = cssColor.match(/\d+/g);
+  return m ? m.slice(0,3).map(Number) : [0,0,0];
+}/* ───────── TikZ helper : grouped + stacked bar chart ───────── */
+/* ───────── TikZ helper : GROUPED (cf vs bf) + STACKED ───────── */
+/* ───────── TikZ helper : two-column (cf / bf) stacked bars ───────── */
+function barChartToTikz(chart) {
+  const labels   = chart.data.labels;
+  const datasets = chart.data.datasets;
+
+  /* ---------- 1. colours ---------------------------------------- */
+  const clr = new Map(); let idx = 1;
+  datasets.forEach(d=>{
+    if(!clr.has(d.backgroundColor)) clr.set(d.backgroundColor,`clr${idx++}`);
+  });
+  const css2rgb = c =>
+    c.startsWith('#')
+      ? [(parseInt(c.slice(1),16)>>16)&255,
+         (parseInt(c.slice(1),16)>>8)&255,
+          parseInt(c.slice(1),16)&255]
+      : (c.match(/\d+/g)||[0,0,0]).slice(0,3).map(Number);
+
+  /* ---------- 2. split stacks ----------------------------------- */
+  const byStack = { cf: [], bf: [] };
+  datasets.forEach(d => byStack[d.stack].push(d));
+
+  /* ---------- 3. LaTeX code ------------------------------------- */
+  let tex = '';
+  clr.forEach((name,css)=>
+    tex += `\\definecolor{${name}}{RGB}{${css2rgb(css).join(',')}}\n`
+  );
+
+  const allSegs = [...byStack.cf, ...byStack.bf];
+  const cols    = allSegs.map((_,i)=>`series${i+1}`);
+
+  /* --- table ---------------------------------------------------- */
+  tex += '\\pgfplotstableread{\nLabel ' + cols.join(' ') + '\n';
+  labels.forEach((lab,i)=>{
+    const cf=[], bf=[];
+    byStack.cf.forEach(d => cf.push(typeof d.data[i]==='object'?d.data[i].y:d.data[i]));
+    byStack.bf.forEach(() => cf.push(0));
+
+    byStack.cf.forEach(() => bf.push(0));
+    byStack.bf.forEach(d => bf.push(typeof d.data[i]==='object'?d.data[i].y:d.data[i]));
+
+    tex += lab.replace(/\s+/g,'_') + ' ' + cf.join(' ') + '\n';  // visible label
+    tex += '{} '                      + bf.join(' ') + '\n';     // blank label
+  });
+  tex += '}\\datatable\n';
+
+  /* --- axis ----------------------------------------------------- */
+  tex += String.raw`
+\begin{axis}[
+  ybar stacked,
+  ymin=0, ymax=100,
+  bar width=16pt,
+  xtick=data,
+  xticklabels from table={\datatable}{Label},
+  xticklabel style={xshift=12pt,rotate=90,text width=2.4cm,align=center}, % ← rightwards shift
+  xtick style={draw=none},
+  enlarge y limits={value=0.05,upper},
+  legend style={cells={anchor=west},legend pos=north west},
+  reverse legend=true
+]
+`;
+
+  /* --- plots ---------------------------------------------------- */
+  allSegs.forEach((ds,i)=>{
+    const colour = clr.get(ds.backgroundColor);
+    const isBF   = i >= byStack.cf.length;       // bf datasets come last
+    const shift  = isBF ? ',bar shift=-12pt' : '';/* ← leftwards bar shift */
+    tex += `  \\addplot[fill=${colour}${shift}] `
+         + `table[y=${cols[i]},x expr=\\coordindex]{\\datatable}; % ${ds.label}\n`;
+    tex += `    \\addlegendentry{${ds.label.replace(/_/g,'\\_')}}\n`;
+  });
+
+  tex += '\\end{axis}';
+  return tex;
+}
+
+/* ───────── TikZ helper : single-stack “refusal” bar chart ───────── */
+function refBarChartToTikz(chart) {
+  /* 0 ─ labels & datasets -------------------------------------------------- */
+  const labels   = chart.data.labels;          // x-axis categories
+  const datasets = chart.data.datasets;        // Completed · Unclear · ...
+
+  /* 1 ─ build colour map --------------------------------------------------- */
+  const clr = new Map();   // CSS colour → pgf colour name (clr1, clr2, …)
+  let idx = 1;
+  datasets.forEach(d => {
+    if (!clr.has(d.backgroundColor))
+      clr.set(d.backgroundColor, `clr${idx++}`);
+  });
+  const css2rgb = c =>                      // “#rrggbb” → [r,g,b]
+    c.startsWith('#')
+      ? [ (parseInt(c.slice(1),16) >> 16) & 255,
+          (parseInt(c.slice(1),16) >>  8) & 255,
+            parseInt(c.slice(1),16)        & 255 ]
+      : (c.match(/\d+/g) || [0,0,0]).slice(0,3).map(Number);
+
+  /* 2 ─ header with colour definitions ------------------------------------ */
+  let tex = '';
+  clr.forEach((name, css) =>
+    tex += `\\definecolor{${name}}{RGB}{${css2rgb(css).join(',')}}\n`
+  );
+
+  /* 3 ─ build the data table ---------------------------------------------- */
+  const cols = datasets.map((_, i) => `series${i+1}`);
+  tex += '\\pgfplotstableread{\nLabel ' + cols.join(' ') + '\n';
+  labels.forEach((lab, i) => {
+    tex += lab.replace(/\s+/g, '_') + ' ';
+    datasets.forEach(ds => {
+      const v = typeof ds.data[i] === 'object' ? ds.data[i].y : ds.data[i];
+      tex += v + ' ';
+    });
+    tex += '\n';
+  });
+  tex += '}\\datatable\n';
+
+  /* 4 ─ axis setup --------------------------------------------------------- */
+  tex += String.raw`
+\begin{axis}[
+  ybar stacked,
+  ymin = 0, ymax = 100,
+  bar width = 16pt,
+
+  ylabel = {\% of prompts},
+  xtick = data,
+  xticklabels from table={\datatable}{Label},
+  xticklabel style={
+    xshift = 12pt,
+    rotate = 90,
+    text width = 2.4cm,
+    align = center,
+    font = \footnotesize
+  },
+  xtick style = {draw = none},
+  enlarge y limits = {value = 0.05, upper},
+  enlarge x limits = {abs = 4pt},
+  legend style = {cells = {anchor = west}, legend pos = north west},
+  reverse legend = true
+]
+`;
+
+  /* 5 ─ one \addplot per stack segment ------------------------------------ */
+  datasets.forEach((ds, i) => {
+    const colour = clr.get(ds.backgroundColor);
+    tex += `  \\addplot[fill=${colour}] `
+         +  `table[y=${cols[i]},x expr=\\coordindex]{\\datatable};`
+         +  ` % ${ds.label.replace(/_/g, '\\_')}\n`;
+    tex += `    \\addlegendentry{${ds.label.replace(/_/g, '\\_')}}\n`;
+  });
+
+  tex += '\\end{axis}';
+  return tex;
+}
+/* ───────── TikZ helper : labelled scatter plot ─────────
+   chart       – Chart.js instance
+   withLabels  – show point labels (default = true)
+*/
+function scatterToTikz(chart, withLabels = true) {
+
+  /* 0 ─ data & colour ----------------------------------------------------- */
+  const ds   = chart.data.datasets[0];          // single dataset
+  const pts  = ds.data;                         // [{x,y,label}, …]
+  const css  = ds.backgroundColor || '#2980b9'; // CSS colour
+  const [r,g,b] = rgbTriplet(css);
+  const clrName = 'clr1';
+
+  /* 1 ─ build LaTeX ------------------------------------------------------- */
+  let tex = `\\definecolor{${clrName}}{RGB}{${r},${g},${b}}\n`;
+
+  /* 1a · the table -------------------------------------------------------- */
+  tex += '\\pgfplotstableread{\n';
+  tex += 'x y label\n';
+  pts.forEach(p => {
+    const lab = (p.label ?? '')
+                  .replace(/[{}\s]/g, '_')   // keep TeX happy
+                  || '{}';                   // empty label → {}
+    tex += `${p.x} ${p.y} ${lab}\n`;
+  });
+  tex += '}\\datatable\n';
+
+  /* 1b · the axis --------------------------------------------------------- */
+  tex += String.raw`
+\begin{axis}[
+  width  = 8cm,
+  height = 7cm,
+  xmin = 0, xmax = 100,
+  ymin = 0, ymax = 100,
+  xlabel = {Bail rate (\%)},
+  ylabel = {Refusal rate (\%)},
+  grid   = both,
+  only marks,
+  mark size = 2pt,
+  scatter/use mapped color = {draw=${clrName}, fill=${clrName}},
+`;
+
+  /* 1c · optional node labels -------------------------------------------- */
+  if (withLabels) {
+    tex += String.raw`
+  visualization depends on = {value \thisrow{label} \as \coordlabel},
+  nodes near coords       = \coordlabel,
+  nodes near coords align = {anchor = west},
+  every node near coord/.append style = {font = \scriptsize},
+`;
+  }
+
+  tex += String.raw`]
+  \addplot[scatter,mark=*] table[x=x,y=y,meta=label] {\datatable};
+\end{axis}`;
+
+  return tex;
+}
+function showTikz(id,tikz){
+  const box=document.getElementById(id);
+  if(box) box.value = `% copy–paste into LaTeX
+\\begin{tikzpicture}
+${tikz}
+\\end{tikzpicture}`;
+}
+
+
+
 function eb(v, n, off = 0, z = 1.96) {
   // guard against n = 0
   if (n === 0) {
@@ -340,6 +583,7 @@ function plotBail(lbl,cfB,bfB,nCf,nBf){
   }
   bailChart=new Chart(document.getElementById("bailChart"),
     {type:"barWithErrorBars",data:{labels:lbl,datasets},options:chartOpts("% of prompts")});
+  showTikz('bailTikz', barChartToTikz(bailChart));
 }
 function plotRefusal(lbl, bfR, nRef){
   refusalChart?.destroy();
@@ -382,6 +626,7 @@ function plotRefusal(lbl, bfR, nRef){
     },
     options : chartOpts("% of prompts")
   });
+  showTikz('refusalTikz', refBarChartToTikz(refusalChart));
 }
 function plotScatter(lbl,bailArr,refArr){
   scatterChart?.destroy();
@@ -400,6 +645,7 @@ function plotScatter(lbl,bailArr,refArr){
                     formatter:v=>v.label,font:{size:10},color:"#333",offset:4,clip:true},
         legend:{display:false}}}});
   updateCorrStats(bailArr,refArr);
+  showTikz('scatterTikz', scatterToTikz(scatterChart));
 }
 document.getElementById("labelToggle").onchange=e=>{
   labelsVisible=e.target.checked;
