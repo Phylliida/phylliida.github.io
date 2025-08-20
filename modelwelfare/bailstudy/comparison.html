@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Model-to-Model Bail-Rate Δ (vertical bars)</title>
+
+<!-- Chart.js & plugin -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+<script src="/modelwelfare/statistics.min.js"></script>
+
+<style>
+body{font-family:Arial,Helvetica,sans-serif;background:#f5f7fa;margin:0;padding:1rem;}
+.wrapper{max-width:1050px;margin:0 auto;background:#fff;padding:1.5rem;border-radius:10px;
+         box-shadow:0 0 10px rgba(0,0,0,.08);}
+h1{margin:.3rem 0 1.2rem;text-align:center;color:#2c3e50;}
+
+select{padding:.45rem .8rem;font-size:1rem;border:1px solid #ccc;border-radius:6px;margin:.35rem;}
+label.toggle{display:flex;align-items:center;gap:.35rem;font-size:.95rem;margin-top:.4rem;user-select:none;}
+
+.ctrl{display:flex;flex-wrap:wrap;justify-content:center;gap:.7rem;margin-bottom:1rem;}
+
+.chart-wrap{width:4000px;overflow-x:auto;}
+.chart-wrap canvas{width:4000px;height:600px;}
+@media(max-width:750px){.chart-wrap canvas{height:460px;}}
+
+.statsBox{max-width:440px;margin:1.2rem auto;}
+.statsBox table{border-collapse:collapse;width:100%;}
+.statsBox th,.statsBox td{border:1px solid #ddd;padding:.4rem .6rem;text-align:center;font-size:.9rem;}
+.statsBox th{background:#ecf0f1;}
+
+.loading{display:flex;justify-content:center;align-items:center;gap:.4rem;margin:2rem 0;color:#7f8c8d;}
+#spinner{width:18px;height:18px;border:3px solid #ddd;border-top:3px solid #3498db;border-radius:50%;
+         animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+a{color:#3498db;text-decoration:none;font-weight:bold;margin-right:.6rem;}
+a:hover{text-decoration:underline;}
+</style>
+</head>
+<body>
+<a href="/modelwelfare/bailstudy/">View data summary</a>
+<div class="wrapper">
+  <h1>Bail-Rate Differences (CF vs BF)</h1>
+
+  <div id="loader" class="loading"><div id="spinner"></div><span>Loading …</span></div>
+
+  <div class="ctrl">
+    <label>Model A <select id="modelA"></select></label>
+    <label>Model B <select id="modelB"></select></label>
+
+    <label class="toggle">
+      <input type="checkbox" id="avgToggle"> Average CF & BF
+    </label>
+  </div>
+
+  <div class="chart-wrap"><canvas id="diffChart"></canvas></div>
+
+  <div class="statsBox" id="statsBox"></div>
+</div>
+
+<script>
+Chart.register(ChartDataLabels);
+Chart.defaults.plugins.datalabels.display=false;
+Chart.defaults.animation=false;
+
+const DATA_URL="https://raw.githubusercontent.com/Phylliida/BailStudyData/refs/heads/main/mergedbailnoswap3/summary.json";
+const COLORS={
+  cfPos:"#e67e22",cfNeg:"#d35400",
+  bfPos:"#3498db",bfNeg:"#2980b9",
+  avgPos:"#c0392b",avgNeg:"#7f8c8d"
+};
+
+let DATA,chart,avgMode=false;
+const selA=document.getElementById("modelA");
+const selB=document.getElementById("modelB");
+const avgToggle=document.getElementById("avgToggle");
+
+/* ── helper functions ───────────────────────────────────────────── */
+const opt=(sel,lst)=>lst.forEach(m=>sel.appendChild(new Option(m,m)));
+
+const bailCF  =(m,M,S)=>DATA.models[m].contFirst.sub[M][S].bail.l*100;
+const bailBF  =(m,M,S)=>DATA.models[m].bailFirst .sub[M][S].bail.l*100;
+const bailAVG =(m,M,S)=>(bailCF(m,M,S)+bailBF(m,M,S))/2;
+
+function compute(modelA,modelB){
+  const L=[],cfΔ=[],bfΔ=[],avgΔ=[],statsA=[],statsB=[];
+  DATA.majorCats.forEach(M=>{
+    DATA.subMap[M].forEach(S=>{
+      L.push(`${M}: ${S}`);
+      const aCF=bailCF(modelA,M,S), bCF=bailCF(modelB,M,S);
+      const aBF=bailBF(modelA,M,S), bBF=bailBF(modelB,M,S);
+      const aAV=(aCF+aBF)/2,     bAV=(bCF+bBF)/2;
+      cfΔ.push(bCF-aCF);
+      bfΔ.push(bBF-aBF);
+      avgΔ.push(bAV-aAV);
+      statsA.push(avgMode? aAV : [aCF,aBF]);   // store per-cat numbers for correlation later
+      statsB.push(avgMode? bAV : [bCF,bBF]);
+    });
+  });
+
+  // sort order: by BF delta (desc) when separate, by AVG delta when average mode
+  const keyArr=avgMode?avgΔ:bfΔ;
+  const order=[...keyArr.keys()].sort((i,j)=>keyArr[j]-keyArr[i]);
+  const re=arr=>order.map(k=>arr[k]);
+
+  return {
+    labels:re(L),
+    cfΔ:re(cfΔ),
+    bfΔ:re(bfΔ),
+    avgΔ:re(avgΔ),
+    statsA:order.map(k=>statsA[k]),
+    statsB:order.map(k=>statsB[k])
+  };
+}
+
+/* ── chart + stats ──────────────────────────────────────────────── */
+function draw(){
+  const modelA=selA.value, modelB=selB.value;
+  const D=compute(modelA,modelB);
+
+  /* chart */
+  chart?.destroy();
+  const datasets=avgMode
+    ? [{
+        label:`Δ AVG (B − A)`,
+        data:D.avgΔ,
+        backgroundColor:D.avgΔ.map(v=>v>=0?COLORS.avgPos:COLORS.avgNeg)
+      }]
+    : [
+        {label:`Δ CF (B − A)`,data:D.cfΔ,
+         backgroundColor:D.cfΔ.map(v=>v>=0?COLORS.cfPos:COLORS.cfNeg)},
+        {label:`Δ BF (B − A)`,data:D.bfΔ,
+         backgroundColor:D.bfΔ.map(v=>v>=0?COLORS.bfPos:COLORS.bfNeg)}
+      ];
+
+  chart=new Chart(document.getElementById("diffChart"),{
+    type:"bar",
+    data:{labels:D.labels,datasets},
+    options:{
+      maintainAspectRatio:false,
+      responsive:true,
+      scales:{
+        x:{ticks:{autoSkip:false,maxRotation:60,minRotation:30}},
+        y:{title:{display:true,text:"Percentage-point difference"}}
+      },
+      plugins:{
+        tooltip:{callbacks:{
+          label:c=>{
+            const i=c.dataIndex;
+            if(avgMode){
+              const a=bailAVG(modelA,...D.labels[i].split(": "));
+              const b=bailAVG(modelB,...D.labels[i].split(": "));
+              return [
+                D.labels[i],
+                `${modelA} AVG: ${a.toFixed(1)} %`,
+                `${modelB} AVG: ${b.toFixed(1)} %`,
+                `Δ: ${(b-a).toFixed(1)} %`
+              ];
+            }else{
+              const isCF=c.datasetIndex===0;
+              const a=isCF?bailCF(modelA,...D.labels[i].split(": "))
+                           :bailBF(modelA,...D.labels[i].split(": "));
+              const b=isCF?bailCF(modelB,...D.labels[i].split(": "))
+                           :bailBF(modelB,...D.labels[i].split(": "));
+              return [
+                D.labels[i],
+                `${modelA}: ${a.toFixed(1)} %`,
+                `${modelB}: ${b.toFixed(1)} %`,
+                `Δ: ${(b-a).toFixed(1)} %`
+              ];
+            }
+          }
+        }}
+      }
+    }
+  });
+
+  /* correlation table */
+  updateStats(D.statsA,D.statsB);
+}
+
+function updateStats(aValsRaw,bValsRaw){
+  /* build vectors depending on mode */
+  const a=avgMode ? aValsRaw               // [num,..]
+                  : aValsRaw.map(v=>v[0]); // CF
+  const b=avgMode ? bValsRaw
+                  : bValsRaw.map(v=>v[0]);
+
+  const data=a.map((v,i)=>({x:v,y:b[i]}));
+  const stats=new Statistics(data,{x:'metric',y:'metric'});
+  const num=v=>isFinite(v)?v.toFixed(3):"–";
+
+  const kind=avgMode?"AVG":"CF (first col)";
+
+  document.getElementById("statsBox").innerHTML=`
+    <table>
+      <tr><th colspan="2">Correlation (${kind} bail-rate)</th></tr>
+      <tr><td>Pearson r</td><td>${num(stats.correlationCoefficient('x','y').correlationCoefficient)}</td></tr>
+      <tr><td>Spearman ρ</td><td>${num(stats.spearmansRho('x','y').rho)}</td></tr>
+      <tr><td>Kendall τ</td><td>${num(stats.kendallsTau('x','y').tau)}</td></tr>
+    </table>`;
+}
+
+/* ── init ───────────────────────────────────────────────────────── */
+async function init(){
+  DATA=await fetch(DATA_URL,{cache:"reload"}).then(r=>r.json());
+
+  const models=Object.keys(DATA.models).sort();
+  opt(selA,models); opt(selB,models);
+  selA.selectedIndex=0; selB.selectedIndex=1;
+
+  selA.onchange=draw;
+  selB.onchange=draw;
+  avgToggle.onchange=e=>{avgMode=e.target.checked;draw();};
+
+  document.getElementById("loader").remove();
+  draw();
+}
+window.addEventListener("load",init);
+</script>
+</body>
+</html>

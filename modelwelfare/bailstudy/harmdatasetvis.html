@@ -1,0 +1,1962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Harm Dataset Refusal and Bail Visualization</title>
+    <a href="/modelwelfare/bailstudy/">View summary stats</a><br/>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/pako@2.1.0/dist/pako.min.js"></script>
+    <style>
+a{color:#3498db;text-decoration:none;font-weight:bold;margin-right:.6rem;}
+ a:hover{text-decoration:underline;}
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f7fa;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        .model-selector {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+        }
+        .model-select {
+            padding: 8px 15px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            background-color: #f8f9fa;
+            font-size: 14px;
+            cursor: pointer;
+            min-width: 150px;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-right: 150px; /* Make space for model selector */
+        }
+        .charts {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-around;
+            margin-bottom: 30px;
+        }
+        .chart-container {
+            width: 45%;
+            min-width: 250px;
+            margin: 10px;
+            padding: 15px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .stats {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            flex: 1;
+            min-width: 200px;
+            margin: 10px;
+            padding: 15px;
+            background-color: #f8fafc;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #3498db;
+        }
+        .prompt-box {
+            background-color: #eef2f7;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #3498db;
+        }
+        .response-card {
+            background-color: white;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            border-left: 4px solid #2ecc71;
+        }
+        .response-text {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        .response-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .badge {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 14px;
+            color: white;
+        }
+        .refused {
+            background-color: #e74c3c;
+        }
+        .unclear {
+            background-color: #f39c12;
+        }
+        .completed {
+            background-color: #2ecc71;
+        }
+        .more-info, .more-information {
+            background-color: #9b59b6;
+        }
+        .wellbeing {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
+        }
+        .wellbeing-icon {
+            font-size: 20px;
+            margin-right: 10px;
+        }
+        .navigation {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .category-nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .category-btn {
+            padding: 10px 15px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .category-btn.active {
+            background-color: #2c3e50;
+        }
+        .subcategory-btn {
+            padding: 8px 12px;
+            background-color: #5dade2;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-right: 5px;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .subcategory-btn.active {
+            background-color: #1a5276;
+        }
+        .subcategory-btn .percentage {
+            margin-left: 8px;
+            background-color: rgba(255, 255, 255, 0.25);
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 12px;
+            min-width: 40px;
+            text-align: center;
+        }
+        .prompt-nav {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+        }
+        .prompt-selector {
+            flex-grow: 1;
+            margin: 0 15px;
+        }
+        #promptSelect {
+            width: 100%;
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            font-size: 16px;
+        }
+        .nav-button {
+            padding: 8px 15px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .nav-button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .category-summary {
+            background-color: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .category-title {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        .summary-stats {
+            gap: 15px;
+            margin-top: 10px;
+        }
+        .summary-charts {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-around;
+            margin: 20px 0;
+        }
+        .summary-chart-container {
+            width: 45%;
+            min-width: 250px;
+            margin: 10px 0;
+            padding: 10px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .summary-stat {
+            background-color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .summary-value {
+            font-weight: bold;
+            color: #3498db;
+            font-size: 18px;
+        }
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 18px;
+            color: #7f8c8d;
+        }
+        .error {
+            background-color: #ffecec;
+            border-left: 4px solid #e74c3c;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            color: #c0392b;
+        }
+        .subcategory-container {
+            background-color: #eef8f9;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .subcategory-title {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #2980b9;
+            font-size: 18px;
+        }
+        .major-categories {
+            background-color: #f2f6f9;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .major-title {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #34495e;
+            font-size: 18px;
+        }
+        .subcategory-nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 5px;
+        }
+        .small-chart {
+            height: 220px;
+        }
+        .chart-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .chart-column {
+            width: 48%;
+            min-width: 250px;
+        }
+        .chart-title {
+            font-size: 16px;
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #2980b9;
+            text-align: center;
+        }
+        /* Spoiler/Details styling */
+        .spoiler-btn {
+            background-color: #eef2f7;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            margin-top: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #2980b9;
+            display: flex;
+            align-items: center;
+            transition: background-color 0.2s;
+        }
+        .spoiler-btn:hover {
+            background-color: #d6e4f0;
+        }
+        .spoiler-content {
+            display: none;
+            background-color: #f8f9fa;
+            padding: 12px;
+            margin-top: 10px;
+            border-radius: 6px;
+            border-left: 3px solid #3498db;
+        }
+        .spoiler-content.active {
+            display: block;
+        }
+        .arrow-icon {
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 5px solid #2980b9;
+            margin-left: 8px;
+            transition: transform 0.2s;
+        }
+        .spoiler-btn.active .arrow-icon {
+            transform: rotate(180deg);
+        }
+        .bail-item {
+            padding: 10px;
+            margin-bottom: 8px;
+            background-color: white;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .bail-symbol {
+            display: inline-block;
+            margin-right: 8px;
+            font-size: 18px;
+        }
+        .bail-response {
+            padding: 8px;
+            background-color: #f2f6f9;
+            border-radius: 4px;
+            margin-top: 5px;
+            white-space: pre-wrap;
+        }
+        /* Filter buttons */
+        .filter-container {
+            background-color: #eef8f9;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .filter-title {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #2980b9;
+            font-size: 18px;
+        }
+        .filter-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        .filter-btn {
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        .filter-btn:hover {
+            opacity: 0.9;
+        }
+        .filter-btn.active {
+            box-shadow: 0 0 0 2px #3498db;
+            font-weight: bold;
+        }
+        .high-refuse-high-bail {
+            background-color: #e74c3c;
+            color: white;
+        }
+        .high-refuse-low-bail {
+            background-color: #f39c12;
+            color: white;
+        }
+        .low-refuse-high-bail {
+            background-color: #9b59b6;
+            color: white;
+        }
+        .low-refuse-low-bail {
+            background-color: #2ecc71;
+            color: white;
+        }
+        .reset-filter {
+            background-color: #ecf0f1;
+            color: #34495e;
+            grid-column: span 2;
+        }
+        .filtered-notice {
+            background-color: #fef9e7;
+            border-left: 4px solid #f1c40f;
+            padding: 10px 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            font-size: 14px;
+            display: none;
+        }
+        .filtered-notice.active {
+            display: block;
+        }
+        /* Hide empty message */
+        .empty-message {
+            text-align: center;
+            padding: 30px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            margin-top: 20px;
+            color: #7f8c8d;
+            font-size: 16px;
+            display: none;
+        }
+        .empty-message.active {
+            display: block;
+        }
+        .empty-major-categories {
+            text-align: center;
+            padding: 30px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            margin-top: 20px;
+            color: #7f8c8d;
+            font-size: 16px;
+            display: none;
+        }
+        .empty-major-categories.active {
+            display: block;
+        }
+        @media (max-width: 768px) {
+            .chart-container, .summary-chart-container, .chart-column {
+                width: 100%;
+            }
+            .nav-button {
+                padding: 6px 10px;
+                font-size: 14px;
+            }
+            .model-selector {
+                position: relative;
+                top: 0;
+                right: 0;
+                margin-bottom: 15px;
+                text-align: right;
+            }
+            h1 {
+            }
+            .filter-grid {
+                grid-template-columns: 1fr;
+            }
+            .reset-filter {
+                grid-column: span 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="model-selector">
+            <select id="modelSelect" class="model-select">
+                <option value="">Loading models...</option>
+            </select>
+        </div>
+        <br/>
+        <br/>
+        <h1>Harm Dataset Refusal and Bail Visualization</h1>
+        
+        <div id="loading" class="loading">Loading data from server...</div>
+        <div id="error" class="error" style="display: none;"></div>
+        
+        <div id="visualization" style="display: none;">
+            <div class="filter-container">
+                <h3 class="filter-title">Filter Prompts:</h3>
+                <div class="filter-grid">
+                    <button id="high-refuse-high-bail" class="filter-btn high-refuse-high-bail">Refused > Completed<br>Leave > Continue</button>
+                    <button id="high-refuse-low-bail" class="filter-btn high-refuse-low-bail">Refused > Completed<br>Continue > Leave</button>
+                    <button id="low-refuse-high-bail" class="filter-btn low-refuse-high-bail">Completed > Refused<br>Leave > Continue</button>
+                    <button id="low-refuse-low-bail" class="filter-btn low-refuse-low-bail">Completed > Refused<br>Continue > Leave</button>
+                    <button id="reset-filter" class="filter-btn reset-filter">Show All Prompts</button>
+                </div>
+                <div id="filtered-notice" class="filtered-notice">
+                    Showing filtered results. <span id="filter-description"></span>
+                </div>
+            </div>
+            
+            <div class="major-categories">
+                <h3 class="major-title">Major Categories:</h3>
+                <div id="majorCategoryNav" class="category-nav"></div>
+                <div id="empty-major-categories" class="empty-major-categories">
+                    No major categories contain prompts that match the current filter criteria. Try a different filter or reset the filter.
+                </div>
+            </div>
+            
+            <div class="subcategory-container">
+                <h3 class="subcategory-title">Subcategories in <span id="currentMajorCategory"></span> (sorted by leave conversation %)</h3>
+                <div id="subcategoryNav" class="subcategory-nav"></div>
+                <div id="empty-subcategories" class="empty-message">
+                    No subcategories contain prompts that match the current filter criteria. Try a different filter or reset the filter.
+                </div>
+            </div>
+            
+            <div class="category-summary" id="categorySummary">
+                <h2 class="category-title">Category Summary: <span id="currentSubcategory"></span></h2>
+                
+                <div class="chart-row">
+                    <div class="chart-column">
+                        <h3 class="chart-title">Refusal Distribution</h3>
+                        <div class="small-chart">
+                            <canvas id="subcategoryRefusalChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-column">
+                        <h3 class="chart-title">Bail Results</h3>
+                        <div class="small-chart">
+                            <canvas id="subcategoryWellbeingChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="subcategoryStats" class="summary-stats">
+                    <h3>Matching Prompts: <span id="totalPrompts"></span> / <span id="totalOriginPrompts"></span></h3>
+                </div>
+            </div>
+            
+            <div class="navigation">
+                <div class="prompt-nav">
+                    <button id="prevPrompt" class="nav-button">← Previous Prompt</button>
+                    <div class="prompt-selector">
+                        <select id="promptSelect"></select>
+                    </div>
+                    <button id="nextPrompt" class="nav-button">Next Prompt →</button>
+                </div>
+            </div>
+            
+            <div id="prompt-view">
+                <div class="prompt-box" id="prompt-display"></div>
+                
+                <div class="stats" id="stats-container"></div>
+                
+                <div class="chart-row">
+                    <div class="chart-column">
+                        <h3 class="chart-title">Refusal Distribution</h3>
+                        <div class="small-chart">
+                            <canvas id="refusalChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-column">
+                        <h3 class="chart-title">Bail Results</h3>
+                        <div class="small-chart">
+                            <canvas id="wellbeingChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <h2>Detailed Responses</h2>
+                <div id="responses-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    async function fetchJsonGz(url) {
+       url = url.replace("/chonkers/refusalvsbail3/", "https://raw.githubusercontent.com/Phylliida/BailStudyData/refs/heads/main/mergedbailnoswap3/").replace(".pkl", ".json.gz")
+      var res;
+      var numRetries = 5;
+      for (var retryIter = 0; retryIter < numRetries; retryIter++) {
+        res = await fetch(url,{cache:'reload'});
+        if (res.ok) break;
+        if (retryIter == numRetries-1) {
+            throw new Error(res.status);
+        } else {
+            await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+
+      const ab   = await res.arrayBuffer();     // wait here
+      const buf  = new Uint8Array(ab);
+      const text = pako.ungzip(buf, { to: 'string' });
+
+
+      return JSON.parse(text);
+    }
+        
+    
+        // Initialize charts
+        let refusalChart, wellbeingChart, subcategoryRefusalChart, subcategoryWellbeingChart;
+        
+        // Data storage
+        let JSONDATA = [];
+        let groupedData = {};
+        let filteredGroupedData = {};
+        let modelsList = [];
+        let originalGroupedData = {}; // Store the original data structure for reference
+        
+        // Current selection state
+        var currentModel = "";
+        var currentMajorCategory = '';
+        var currentCategoryIndex = 0;
+        var currentPromptId = null; // Use a stable identifier for prompts
+        var currentFilter = null;
+        
+        // Function to parse URL hash
+        function parseHash() {
+            const hash = window.location.hash.substring(1);
+            if (!hash) return false;
+            
+            const params = {};
+            hash.split('&').forEach(part => {
+                const [key, value] = part.split('=');
+                if (key && value) {
+                    params[key] = decodeURIComponent(value);
+                }
+            });
+            
+            let stateChanged = false;
+            
+            if (params.filter) {
+                const newFilter = params.filter;
+                if (newFilter !== currentFilter) {
+                    currentFilter = newFilter;
+                    stateChanged = true;
+                }
+            } else if (currentFilter) {
+                currentFilter = null;
+                stateChanged = true;
+            }
+            
+            if (params.model && params.model !== currentModel) {
+                currentModel = params.model;
+                stateChanged = true;
+            }
+            
+            if (params.majorCategory && params.majorCategory !== currentMajorCategory) {
+                currentMajorCategory = params.majorCategory;
+                stateChanged = true;
+            }
+            
+            if (params.subcategory) {
+                // Find the subcategory index
+                const dataToUse = currentFilter ? filteredGroupedData : groupedData;
+                if (dataToUse[currentMajorCategory]) {
+                    const index = dataToUse[currentMajorCategory].findIndex(
+                        cat => cat.subCategory === params.subcategory
+                    );
+                    
+                    if (index !== -1 && index !== currentCategoryIndex) {
+                        currentCategoryIndex = index;
+                        stateChanged = true;
+                    }
+                }
+            }
+            
+            // Use promptId instead of index
+            if (params.promptId && params.promptId !== currentPromptId) {
+                currentPromptId = params.promptId;
+                stateChanged = true;
+            }
+            
+            return stateChanged;
+        }
+        
+        // Function to update URL hash
+        function updateHash() {
+            const dataToUse = currentFilter ? filteredGroupedData : groupedData;
+            const currentCategory = getCurrentCategory(dataToUse);
+            if (!currentCategory) return;
+            
+            const currentPrompt = getCurrentPrompt();
+            if (!currentPrompt) return;
+            
+            const hashParams = [
+                `model=${encodeURIComponent(currentModel)}`
+            ];
+            
+            if (currentFilter) {
+                hashParams.push(`filter=${encodeURIComponent(currentFilter)}`);
+            }
+            
+            hashParams.push(`majorCategory=${encodeURIComponent(currentMajorCategory)}`);
+            hashParams.push(`subcategory=${encodeURIComponent(currentCategory.subCategory)}`);
+            
+            // Store the prompt ID instead of index
+            hashParams.push(`promptId=${encodeURIComponent(currentPrompt.promptId)}`);
+            
+            window.location.hash = hashParams.join('&');
+        }
+        
+        // Load models list
+        async function loadModelsList() {
+            try {
+                const response = await fetchJsonGz('https://raw.githubusercontent.com/Phylliida/BailStudyData/refs/heads/main/mergedbailnoswap3/models.json.gz');
+                
+                modelsList = response;
+                
+                // Setup model selector
+                setupModelSelector();
+                
+                // Check if we have filter and model in the hash
+                let hashState = parseHash();
+                
+                if (hashState && currentModel) {
+                    // Select this model in the dropdown
+                    document.getElementById('modelSelect').value = currentModel;
+                    // Load the model data
+                    await loadModelData(currentModel);
+                } else if (modelsList.length > 0) {
+                    // Default to first model
+                    currentModel = modelsList[0].modelName;
+                    document.getElementById('modelSelect').value = currentModel;
+                    await loadModelData(currentModel);
+                }
+            } catch (error) {
+                console.error('Error loading models list:', error);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error').textContent = `Error loading models list: ${error.message}. Please refresh the page to try again.`;
+            }
+        }
+        
+        // Setup model selector dropdown
+        function setupModelSelector() {
+            const selectElement = document.getElementById('modelSelect');
+            selectElement.innerHTML = '';
+            
+            modelsList.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.modelName;
+                option.text = model.modelName;
+                selectElement.appendChild(option);
+            });
+            
+            // Add event listener
+            selectElement.addEventListener('change', async function() {
+                const newModel = this.value;
+                
+                // Show loading indicator
+                document.getElementById('visualization').style.display = 'none';
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('loading').textContent = `Loading data for ${newModel}...`;
+                
+                // Store the current filter before changing models
+                const previousFilter = currentFilter;
+                
+                // Set current model before loading data
+                currentModel = newModel;
+                
+                // Load data for the selected model
+                await loadModelData(newModel);
+                currentModel = newModel;
+                
+                // Apply the previous filter if it exists
+                if (previousFilter) {
+                    applyFilter(previousFilter, false);
+                    // Highlight the active filter button
+                    document.getElementById(previousFilter)?.classList.add('active');
+                }
+                currentModel = newModel;
+                
+                // Update hash without reloading the page
+                updateHash();
+            });
+        }
+        
+        // Setup filter buttons
+        function setupFilterButtons() {
+            // Refused > Completed, Leave > Continue
+            document.getElementById('high-refuse-high-bail').addEventListener('click', function() {
+                applyFilter('high-refuse-high-bail');
+            });
+            
+            // Refused > Completed, Continue > Leave
+            document.getElementById('high-refuse-low-bail').addEventListener('click', function() {
+                applyFilter('high-refuse-low-bail');
+            });
+            
+            // Completed > Refused, Leave > Continue
+            document.getElementById('low-refuse-high-bail').addEventListener('click', function() {
+                applyFilter('low-refuse-high-bail');
+            });
+            
+            // Completed > Refused, Continue > Leave
+            document.getElementById('low-refuse-low-bail').addEventListener('click', function() {
+                applyFilter('low-refuse-low-bail');
+            });
+            
+            // Reset filter
+            document.getElementById('reset-filter').addEventListener('click', function() {
+                resetFilter();
+            });
+            
+            // If we have a current filter, highlight the appropriate button
+            if (currentFilter) {
+                document.getElementById(currentFilter)?.classList.add('active');
+            }
+        }
+        
+        // Check if a prompt meets filter criteria
+        function promptMeetsFilterCriteria(prompt, filterType) {
+            const refused = prompt.refusalPrs.Refused;
+            const completed = prompt.refusalPrs.Completed;
+            const leave = prompt.bailPrs["🔄"];
+            const continue_ = prompt.bailPrs["🟢"];
+            
+            switch (filterType) {
+                case 'high-refuse-high-bail':
+                    return refused > completed && leave > continue_;
+                case 'high-refuse-low-bail':
+                    return refused > completed && continue_ > leave;
+                case 'low-refuse-high-bail':
+                    return completed > refused && leave > continue_;
+                case 'low-refuse-low-bail':
+                    return completed > refused && continue_ > leave;
+                default:
+                    return true;
+            }
+        }
+        
+        // Apply filter to the data
+        function applyFilter(filterType, updateHashFlag = true) {
+            // Save the current prompt ID for reference
+            const currentPrompt = getCurrentPrompt();
+            const savedPromptId = currentPrompt ? currentPrompt.promptId : null;
+            
+            currentFilter = filterType;
+            
+            // Update active button
+            resetFilterButtons();
+            document.getElementById(filterType).classList.add('active');
+            
+            // Filter the data at the prompt level
+            filteredGroupedData = {};
+            let totalMatchingPrompts = 0;
+            
+            Object.keys(groupedData).forEach(majorCategory => {
+                filteredGroupedData[majorCategory] = [];
+                
+                groupedData[majorCategory].forEach(category => {
+                    // Filter the prompts for this subcategory
+                    const filteredPrompts = category.data.filter(prompt => 
+                        promptMeetsFilterCriteria(prompt, filterType)
+                    );
+                    
+                    // Only add subcategory if it has matching prompts
+                    if (filteredPrompts.length > 0) {
+                        // Create a new category object with filtered prompts
+                        const filteredCategory = {
+                            ...category,
+                            data: filteredPrompts,
+                            filteredOriginalCount: category.data.length,  // Store original count for UI
+                            originalLeavePercent: category.bailPrs["🔄"] * 100  // Store original leave % for sorting
+                        };
+                        
+                        filteredGroupedData[majorCategory].push(filteredCategory);
+                        totalMatchingPrompts += filteredPrompts.length;
+                    }
+                });
+                
+                // If no subcategories for this major category, delete it
+                if (filteredGroupedData[majorCategory].length === 0) {
+                    delete filteredGroupedData[majorCategory];
+                } else {
+                    // Sort by leave conversation percentage (from original data)
+                    filteredGroupedData[majorCategory].sort((a, b) => {
+                        return b.originalLeavePercent - a.originalLeavePercent;
+                    });
+                }
+            });
+            
+            // Set filter description
+            const descriptions = {
+                'high-refuse-high-bail': 'Showing prompts where Refused > Completed and Leave > Continue',
+                'high-refuse-low-bail': 'Showing prompts where Refused > Completed and Continue > Leave',
+                'low-refuse-high-bail': 'Showing prompts where Completed > Refused and Leave > Continue',
+                'low-refuse-low-bail': 'Showing prompts where Completed > Refused and Continue > Leave'
+            };
+            
+            document.getElementById('filter-description').textContent = descriptions[filterType] + 
+                ` (${totalMatchingPrompts} prompts match)`;
+            document.getElementById('filtered-notice').classList.add('active');
+            
+            // Show message if no major categories have matching subcategories
+            if (Object.keys(filteredGroupedData).length === 0) {
+                document.getElementById('empty-major-categories').classList.add('active');
+                document.getElementById('majorCategoryNav').style.display = 'none';
+                hideDataViews();
+                return;
+            } else {
+                document.getElementById('empty-major-categories').classList.remove('active');
+                document.getElementById('majorCategoryNav').style.display = 'flex';
+            }
+            
+            // Try to find the same prompt in the filtered data
+            let foundPrompt = false;
+            if (savedPromptId) {
+                // Try to locate the prompt in filteredGroupedData
+                for (const majorCategory in filteredGroupedData) {
+                    for (let i = 0; i < filteredGroupedData[majorCategory].length; i++) {
+                        const subcategory = filteredGroupedData[majorCategory][i];
+                        const promptIndex = subcategory.data.findIndex(p => p.promptId === savedPromptId);
+                        
+                        if (promptIndex !== -1) {
+                            // Found the prompt, update state
+                            currentMajorCategory = majorCategory;
+                            currentCategoryIndex = i;
+                            currentPromptId = savedPromptId;
+                            foundPrompt = true;
+                            break;
+                        }
+                    }
+                    if (foundPrompt) break;
+                }
+            }
+            
+            // If we didn't find the prompt, reset to the first available
+            if (!foundPrompt) {
+                // Reset category index if needed
+                if (filteredGroupedData[currentMajorCategory]) {
+                    currentCategoryIndex = 0;
+                    const firstPrompt = filteredGroupedData[currentMajorCategory][0].data[0];
+                    currentPromptId = firstPrompt.promptId;
+                } else {
+                    // Find the first major category
+                    const firstMajorCategory = Object.keys(filteredGroupedData)[0];
+                    if (firstMajorCategory) {
+                        currentMajorCategory = firstMajorCategory;
+                        currentCategoryIndex = 0;
+                        const firstPrompt = filteredGroupedData[firstMajorCategory][0].data[0];
+                        currentPromptId = firstPrompt.promptId;
+                    }
+                }
+            }
+            
+            // Update UI
+            setupMajorCategoryNav();
+            updateCurrentMajorCategoryDisplay();
+            setupSubcategoryNav();
+            
+            // Only continue if we have data
+            if (Object.keys(filteredGroupedData).length > 0) {
+                renderCategorySummary();
+                setupPromptSelector();
+                renderCurrentPrompt();
+                showDataViews();
+                
+                // Update hash if needed
+                if (updateHashFlag) {
+                    updateHash();
+                }
+            } else {
+                hideDataViews();
+            }
+        }
+        
+        // Reset filter
+        function resetFilter(updateHashFlag = true) {
+            // Save the current prompt ID for reference
+            const currentPrompt = getCurrentPrompt();
+            const savedPromptId = currentPrompt ? currentPrompt.promptId : null;
+            
+            currentFilter = null;
+            
+            // Reset filter buttons
+            resetFilterButtons();
+            
+            // Hide filter notice
+            document.getElementById('filtered-notice').classList.remove('active');
+            
+            // Make sure major categories are visible
+            document.getElementById('empty-major-categories').classList.remove('active');
+            document.getElementById('majorCategoryNav').style.display = 'flex';
+            
+            // Try to find the same prompt in the unfiltered data
+            let foundPrompt = false;
+            if (savedPromptId) {
+                // Try to locate the prompt in the original data
+                for (const majorCategory in groupedData) {
+                    for (let i = 0; i < groupedData[majorCategory].length; i++) {
+                        const subcategory = groupedData[majorCategory][i];
+                        const promptIndex = subcategory.data.findIndex(p => p.promptId === savedPromptId);
+                        
+                        if (promptIndex !== -1) {
+                            // Found the prompt, update state
+                            currentMajorCategory = majorCategory;
+                            currentCategoryIndex = i;
+                            currentPromptId = savedPromptId;
+                            foundPrompt = true;
+                            break;
+                        }
+                    }
+                    if (foundPrompt) break;
+                }
+            }
+            
+            // If we didn't find the prompt, reset to the first available
+            if (!foundPrompt && Object.keys(groupedData).length > 0) {
+                currentMajorCategory = Object.keys(groupedData)[0];
+                currentCategoryIndex = 0;
+                currentPromptId = groupedData[currentMajorCategory][0].data[0].promptId;
+            }
+            
+            // Update UI
+            setupMajorCategoryNav();
+            updateCurrentMajorCategoryDisplay();
+            setupSubcategoryNav();
+            
+            // Show data views
+            showDataViews();
+            
+            renderCategorySummary();
+            setupPromptSelector();
+            renderCurrentPrompt();
+            
+            // Update hash if needed
+            if (updateHashFlag) {
+                updateHash();
+            }
+        }
+        
+        // Hide data views when no data is available
+        function hideDataViews() {
+            document.getElementById('categorySummary').style.display = 'none';
+            document.getElementById('prompt-view').style.display = 'none';
+            document.getElementById('subcategoryNav').style.display = 'none';
+            document.querySelector('.navigation').style.display = 'none';
+        }
+        
+        // Show data views
+        function showDataViews() {
+            document.getElementById('categorySummary').style.display = 'block';
+            document.getElementById('prompt-view').style.display = 'block';
+            document.getElementById('subcategoryNav').style.display = 'flex';
+            document.querySelector('.navigation').style.display = 'flex';
+        }
+        
+        // Reset filter button states
+        function resetFilterButtons() {
+            const filterButtons = document.querySelectorAll('.filter-btn');
+            filterButtons.forEach(btn => btn.classList.remove('active'));
+        }
+        
+        // Load data for the selected model
+        async function loadModelData(modelName) {
+            try {
+                // Find the model data path
+                const modelData = modelsList.find(m => m.modelName === modelName);
+                if (!modelData) {
+                    throw new Error(`Model ${modelName} not found in models list.`);
+                }
+                
+                const response = await fetchJsonGz(`${modelData.modelData}`);
+                
+                JSONDATA = response;
+                
+                // Process data
+                processData();
+                
+                // Setup filter buttons
+                setupFilterButtons();
+                
+                // Update UI to show we're ready
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('visualization').style.display = 'block';
+                
+                // If there's a current filter, apply it now
+                if (currentFilter) {
+                    applyFilter(currentFilter, false);
+                } else {
+                    // Otherwise set up the UI normally
+                    setupMajorCategoryNav();
+                    
+                    // Check if we need to restore state from hash
+                    if (parseHash()) {
+                        // Update UI to reflect the state in the hash
+                        updateMajorCategoryButtons();
+                        updateCurrentMajorCategoryDisplay();
+                    }
+                    
+                    // Continue setting up UI
+                    setupSubcategoryNav();
+                    renderCategorySummary();
+                    setupPromptSelector();
+                    renderCurrentPrompt();
+                }
+                
+                // Update hash
+                updateHash();
+            } catch (error) {
+                console.error('Error loading model data:', error);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error').textContent = `Error loading data for ${modelName}: ${error.message}. Please try another model or refresh the page.`;
+            }
+        }
+        
+        // Process data to extract major and subcategories
+        function processData() {
+            groupedData = {};
+            originalGroupedData = {};
+            
+            // Generate a unique ID for each prompt to track it across filters
+            let promptIdCounter = 0;
+            
+            JSONDATA['results'].forEach(category => {
+                // Process emoji codes in bailPrs
+                processBailPrs(category.bailPrs);
+                
+                // Ensure all refusal statuses are present
+                ensureAllRefusalStatuses(category.refusalPrs);
+                
+                // Split category name to get sub and major categories
+                let [subCategory, majorCategory] = category.category.split(',');
+                
+                // Trim whitespace
+                subCategory = subCategory.trim();
+                majorCategory = majorCategory ? majorCategory.trim() : 'Other';
+                
+                // Create major category group if it doesn't exist
+                if (!groupedData[majorCategory]) {
+                    groupedData[majorCategory] = [];
+                    originalGroupedData[majorCategory] = [];
+                }
+                
+                // Add category data with processed subcategory name
+                const categoryData = {...category, subCategory: subCategory};
+                
+                // Process each prompt and assign a unique ID
+                categoryData.data.forEach(prompt => {
+                    // Assign a unique ID to each prompt
+                    prompt.promptId = `prompt_${promptIdCounter++}`;
+                    
+                    processBailPrs(prompt.bailPrs);
+                    ensureAllRefusalStatuses(prompt.refusalPrs);
+                    
+                    // Process each response
+                    prompt.responses.forEach(response => {
+                        processBailPrs(response.bailPrs);
+                        
+                        // Get refusal data (handle different property names)
+                        const refusalData = response.refusalPrs || response.isRefusal || {};
+                        ensureAllRefusalStatuses(refusalData);
+                        
+                        // Process bailData
+                        if (response.bailData) {
+                            response.bailData.forEach(bail => {
+                                if (bail.bailSymbol === "\\ud83d\\udfe2") {
+                                    bail.bailSymbol = "🟢";
+                                } else if (bail.bailSymbol === "\\ud83d\\udd04") {
+                                    bail.bailSymbol = "🔄";
+                                }
+                            });
+                        }
+                    });
+                });
+                
+                groupedData[majorCategory].push(categoryData);
+                
+                // Make a deep copy for the original data structure
+                originalGroupedData[majorCategory].push(JSON.parse(JSON.stringify(categoryData)));
+            });
+            
+            // Sort subcategories within each major category by leave conversation percentage
+            Object.keys(groupedData).forEach(majorCategory => {
+                groupedData[majorCategory].sort((a, b) => {
+                    return b.bailPrs["🔄"] - a.bailPrs["🔄"];
+                });
+                
+                originalGroupedData[majorCategory].sort((a, b) => {
+                    return b.bailPrs["🔄"] - a.bailPrs["🔄"];
+                });
+            });
+            
+            // Initialize current state if needed
+            if (!currentMajorCategory || !groupedData[currentMajorCategory]) {
+                if (Object.keys(groupedData).length > 0) {
+                    currentMajorCategory = Object.keys(groupedData)[0];
+                    currentCategoryIndex = 0;
+                    if (groupedData[currentMajorCategory][0].data.length > 0) {
+                        currentPromptId = groupedData[currentMajorCategory][0].data[0].promptId;
+                    }
+                }
+            }
+            
+            // Check if current promptId is in the URL hash
+            if (currentPromptId === null) {
+                // Set to first prompt in the current category
+                const currentCategory = getCurrentCategory();
+                if (currentCategory && currentCategory.data.length > 0) {
+                    currentPromptId = currentCategory.data[0].promptId;
+                }
+            }
+        }
+        
+        // Ensure all refusal statuses are present
+        function ensureAllRefusalStatuses(refusalData) {
+            if (!refusalData) return;
+            
+            const statuses = ["Unclear", "Refused", "Completed", "More Information"];
+            statuses.forEach(status => {
+                if (typeof refusalData[status] === 'undefined') {
+                    refusalData[status] = 0;
+                }
+            });
+            
+            // Handle "More Info" as an alias for "More Information"
+            if (refusalData["More Info"] !== undefined && refusalData["More Information"] === 0) {
+                refusalData["More Information"] = refusalData["More Info"];
+                delete refusalData["More Info"];
+            }
+        }
+        
+        // Process emoji codes in bailPrs
+        function processBailPrs(bailPrs) {
+            if (bailPrs) {
+                if ("\\ud83d\\udfe2" in bailPrs) {
+                    bailPrs["🟢"] = bailPrs["\\ud83d\\udfe2"];
+                    delete bailPrs["\\ud83d\\udfe2"];
+                }
+                if ("\\ud83d\\udd04" in bailPrs) {
+                    bailPrs["🔄"] = bailPrs["\\ud83d\\udd04"];
+                    delete bailPrs["\\ud83d\\udd04"];
+                }
+                
+                // Ensure all wellbeing statuses are present
+                if (typeof bailPrs["🟢"] === 'undefined') bailPrs["🟢"] = 0;
+                if (typeof bailPrs["🔄"] === 'undefined') bailPrs["🔄"] = 0;
+                if (typeof bailPrs["?"] === 'undefined') bailPrs["?"] = 0;
+            }
+        }
+        
+        // Setup major category navigation
+        function setupMajorCategoryNav() {
+            const navContainer = document.getElementById('majorCategoryNav');
+            navContainer.innerHTML = '';
+            
+            const dataToUse = currentFilter ? filteredGroupedData : groupedData;
+            
+            if (Object.keys(dataToUse).length === 0) {
+                document.getElementById('empty-major-categories').classList.add('active');
+                navContainer.style.display = 'none';
+                return;
+            } else {
+                document.getElementById('empty-major-categories').classList.remove('active');
+                navContainer.style.display = 'flex';
+            }
+            
+            Object.keys(dataToUse).forEach((majorCategory, index) => {
+                // Skip if no subcategories in this major category
+                if (dataToUse[majorCategory].length === 0) return;
+                
+                const button = document.createElement('button');
+                button.textContent = majorCategory;
+                button.className = 'category-btn';
+                if (majorCategory === currentMajorCategory) {
+                    button.classList.add('active');
+                }
+                
+                button.addEventListener('click', () => {
+                    currentMajorCategory = majorCategory;
+                    currentCategoryIndex = 0;
+                    
+                    // Set current prompt ID to the first prompt in the new subcategory
+                    if (dataToUse[majorCategory][0].data.length > 0) {
+                        currentPromptId = dataToUse[majorCategory][0].data[0].promptId;
+                    }
+                    
+                    updateMajorCategoryButtons();
+                    updateCurrentMajorCategoryDisplay();
+                    setupSubcategoryNav();
+                    renderCategorySummary();
+                    setupPromptSelector();
+                    renderCurrentPrompt();
+                    updateHash();
+                });
+                
+                navContainer.appendChild(button);
+            });
+            
+            updateCurrentMajorCategoryDisplay();
+        }
+        
+        // Update the displayed current major category
+        function updateCurrentMajorCategoryDisplay() {
+            document.getElementById('currentMajorCategory').textContent = currentMajorCategory;
+        }
+        
+        // Update major category buttons
+        function updateMajorCategoryButtons() {
+            const buttons = document.querySelectorAll('#majorCategoryNav .category-btn');
+            buttons.forEach(btn => {
+                if (btn.textContent === currentMajorCategory) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+        }
+        
+        // Setup subcategory navigation
+        function setupSubcategoryNav() {
+            const navContainer = document.getElementById('subcategoryNav');
+            navContainer.innerHTML = '';
+            
+            const dataToUse = currentFilter ? filteredGroupedData : groupedData;
+            
+            // Check if there are subcategories for this major category
+            if (!dataToUse[currentMajorCategory] || dataToUse[currentMajorCategory].length === 0) {
+                document.getElementById('empty-subcategories').classList.add('active');
+                navContainer.style.display = 'none';
+                return;
+            } else {
+                document.getElementById('empty-subcategories').classList.remove('active');
+                navContainer.style.display = 'flex';
+            }
+            
+            // Display subcategories sorted by leave conversation percentage
+            dataToUse[currentMajorCategory].forEach((category, index) => {
+                const button = document.createElement('button');
+                button.className = 'subcategory-btn';
+                if (index === currentCategoryIndex) {
+                    button.classList.add('active');
+                }
+                
+                // Create span for subcategory name
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = category.subCategory;
+                button.appendChild(nameSpan);
+                
+                // Create span for leave percentage and prompt count
+                const percentSpan = document.createElement('span');
+                percentSpan.className = 'percentage';
+                
+                // Get the leave conversation percentage - from original if possible
+                const leavePercent = currentFilter && category.originalLeavePercent ? 
+                    category.originalLeavePercent : 
+                    (category.bailPrs["🔄"] * 100);
+                
+                // Show prompt count if filtered, always show leave conversation %
+                if (currentFilter) {
+                    const originalCount = category.filteredOriginalCount || category.data.length;
+                    percentSpan.textContent = `${category.data.length}/${originalCount} 🔄${leavePercent.toFixed(1)}%`;
+                } else {
+                    percentSpan.textContent = `🔄${leavePercent.toFixed(1)}%`;
+                }
+                
+                button.appendChild(percentSpan);
+                
+                button.addEventListener('click', () => {
+                    currentCategoryIndex = index;
+                    
+                    // Set current prompt ID to the first prompt in the new subcategory
+                    if (category.data.length > 0) {
+                        currentPromptId = category.data[0].promptId;
+                    }
+                    
+                    updateSubcategoryButtons();
+                    renderCategorySummary();
+                    setupPromptSelector();
+                    renderCurrentPrompt();
+                    updateHash();
+                });
+                
+                navContainer.appendChild(button);
+            });
+        }
+        
+        // Update subcategory buttons
+        function updateSubcategoryButtons() {
+            const buttons = document.querySelectorAll('#subcategoryNav .subcategory-btn');
+            buttons.forEach((btn, idx) => {
+                if (idx === currentCategoryIndex) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+        }
+        
+        // Get the current category object
+        function getCurrentCategory(dataObj = null) {
+            const dataToUse = dataObj || (currentFilter ? filteredGroupedData : groupedData);
+            return dataToUse[currentMajorCategory]?.[currentCategoryIndex];
+        }
+        
+        // Get current prompt object
+        function getCurrentPrompt() {
+            const currentCategory = getCurrentCategory();
+            if (!currentCategory) return null;
+            
+            // Find prompt by ID instead of index
+            const promptIndex = findPromptIndexById(currentCategory.data, currentPromptId);
+            
+            if (promptIndex !== -1) {
+                return currentCategory.data[promptIndex];
+            }
+            
+            // If not found and there are prompts, return the first one
+            if (currentCategory.data.length > 0) {
+                currentPromptId = currentCategory.data[0].promptId; // Update ID
+                return currentCategory.data[0];
+            }
+            
+            return null;
+        }
+        
+        // Find prompt index by its ID
+        function findPromptIndexById(promptArray, promptId) {
+            if (!promptArray || !promptId) return -1;
+            return promptArray.findIndex(p => p.promptId === promptId);
+        }
+        
+        // Get original category data for comparison
+        function getOriginalCategory() {
+            const currentCategory = getCurrentCategory();
+            if (!currentCategory) return null;
+            
+            // Find matching category in original data
+            const origCategory = originalGroupedData[currentMajorCategory]?.find(
+                cat => cat.subCategory === currentCategory.subCategory
+            );
+            
+            return origCategory;
+        }
+        
+        // Render category summary with charts
+        function renderCategorySummary() {
+            const currentCategory = getCurrentCategory();
+            if (!currentCategory) return;
+            
+            // Update subcategory title
+            document.getElementById('currentSubcategory').textContent = currentCategory.subCategory;
+            document.getElementById('totalPrompts').textContent = currentCategory.data.length;
+            
+            // Update total original prompts count
+            const origCategory = getOriginalCategory();
+            if (origCategory) {
+                document.getElementById('totalOriginPrompts').textContent = origCategory.data.length;
+            } else {
+                document.getElementById('totalOriginPrompts').textContent = currentCategory.data.length;
+            }
+            
+            // Render subcategory refusal chart
+            renderSubcategoryRefusalChart(currentCategory.refusalPrs);
+            
+            // Render subcategory wellbeing chart
+            renderSubcategoryWellbeingChart(currentCategory.bailPrs);
+        }
+        
+        // Render subcategory refusal chart
+        function renderSubcategoryRefusalChart(refusalData) {
+            const ctx = document.getElementById('subcategoryRefusalChart').getContext('2d');
+            
+            // Destroy existing chart if it exists
+            if (subcategoryRefusalChart) {
+                subcategoryRefusalChart.destroy();
+            }
+            
+            // Prepare data
+            const labels = Object.keys(refusalData);
+            const data = Object.values(refusalData).map(val => val * 100);
+            const backgroundColor = [
+                '#f39c12', // Unclear
+                '#e74c3c', // Refused
+                '#2ecc71', // Completed
+                '#9b59b6'  // More Information
+            ];
+            
+            subcategoryRefusalChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: backgroundColor
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                boxWidth: 12,
+                                font: {
+                                    size: 11
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.label}: ${context.parsed.toFixed(1)}%`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Render subcategory wellbeing chart
+        function renderSubcategoryWellbeingChart(wellbeingData) {
+            const ctx = document.getElementById('subcategoryWellbeingChart').getContext('2d');
+            
+            // Destroy existing chart if it exists
+            if (subcategoryWellbeingChart) {
+                subcategoryWellbeingChart.destroy();
+            }
+            
+            subcategoryWellbeingChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: ['Continue (🟢)', 'Leave (🔄)', 'Unclear (?)'],
+                    datasets: [{
+                        data: [
+                            wellbeingData['🟢'] ? wellbeingData['🟢'] * 100 : 0,
+                            wellbeingData['🔄'] ? wellbeingData['🔄'] * 100 : 0,
+                            wellbeingData['?'] ? wellbeingData['?'] * 100 : 0
+                        ],
+                        backgroundColor: ['#2ecc71', '#e74c3c', '#95a5a6']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                boxWidth: 12,
+                                font: {
+                                    size: 11
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.label}: ${context.parsed.toFixed(1)}%`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Setup prompt selection dropdown
+        function setupPromptSelector() {
+            const selectElement = document.getElementById('promptSelect');
+            selectElement.innerHTML = '';
+            
+            const currentCategory = getCurrentCategory();
+            if (!currentCategory) return;
+            
+            // Find current prompt index
+            const currentPromptIndex = findPromptIndexById(currentCategory.data, currentPromptId);
+            
+            currentCategory.data.forEach((prompt, index) => {
+                // Calculate comparative ratios
+                var refusedToCompletedRatio = prompt.refusalPrs.Refused > prompt.refusalPrs.Completed > 0 
+                    ? "🟥"
+                    : "🟩";
+                if (prompt.refusalPrs.Unclear > prompt.refusalPrs.Refused && prompt.refusalPrs.Unclear >  prompt.refusalPrs.Completed)
+                {
+                    refusedToCompletedRatio = "?";
+                }
+                // Get leave percentage
+                const leavePercent = (prompt.bailPrs["🔄"] * 100).toFixed(1);
+                
+                const option = document.createElement('option');
+                option.value = prompt.promptId; // Store prompt ID instead of index
+                option.text = `Prompt ${index + 1}: 🔄${leavePercent}% ${refusedToCompletedRatio} ${truncateText(prompt.prompt, 30)}`;
+                selectElement.appendChild(option);
+            });
+            
+            // Set the current selected prompt
+            selectElement.value = currentPromptId;
+            
+            // Add event listener
+            selectElement.addEventListener('change', function() {
+                currentPromptId = this.value;
+                renderCurrentPrompt();
+                updateNavButtons();
+                updateHash();
+            });
+        }
+        
+        // Helper to truncate text
+        function truncateText(text, maxLength) {
+            if (text.length <= maxLength) return text;
+            return text.substring(0, maxLength) + '...';
+        }
+        
+        // Update navigation buttons state
+        function updateNavButtons() {
+            const currentCategory = getCurrentCategory();
+            if (!currentCategory) return;
+            
+            // Find current prompt index
+            const currentPromptIndex = findPromptIndexById(currentCategory.data, currentPromptId);
+            
+            const prevButton = document.getElementById('prevPrompt');
+            const nextButton = document.getElementById('nextPrompt');
+            
+            prevButton.disabled = currentPromptIndex <= 0;
+            nextButton.disabled = currentPromptIndex >= currentCategory.data.length - 1;
+        }
+        
+        // Navigation event handlers
+        document.getElementById('prevPrompt').addEventListener('click', function() {
+            const currentCategory = getCurrentCategory();
+            if (!currentCategory) return;
+            
+            // Find current prompt index
+            const currentPromptIndex = findPromptIndexById(currentCategory.data, currentPromptId);
+            
+            if (currentPromptIndex > 0) {
+                // Move to previous prompt
+                currentPromptId = currentCategory.data[currentPromptIndex - 1].promptId;
+                document.getElementById('promptSelect').value = currentPromptId;
+                renderCurrentPrompt();
+                updateNavButtons();
+                updateHash();
+            }
+        });
+        
+        document.getElementById('nextPrompt').addEventListener('click', function() {
+            const currentCategory = getCurrentCategory();
+            if (!currentCategory) return;
+            
+            // Find current prompt index
+            const currentPromptIndex = findPromptIndexById(currentCategory.data, currentPromptId);
+            
+            if (currentPromptIndex < currentCategory.data.length - 1) {
+                // Move to next prompt
+                currentPromptId = currentCategory.data[currentPromptIndex + 1].promptId;
+                document.getElementById('promptSelect').value = currentPromptId;
+                renderCurrentPrompt();
+                updateNavButtons();
+                updateHash();
+            }
+        });
+        
+        function renderCurrentPrompt() {
+            const prompt = getCurrentPrompt();
+            if (!prompt) {
+                console.error("No prompt data found");
+                return;
+            }
+            
+            renderPromptData(prompt);
+            updateNavButtons();
+        }
+        
+        function renderPromptData(promptData) {
+            // Calculate ratios for comparison
+            const refuseToCompleteRatio = promptData.refusalPrs.Completed > 0 
+                ? (promptData.refusalPrs.Refused / promptData.refusalPrs.Completed).toFixed(2) 
+                : promptData.refusalPrs.Refused > 0 ? "∞" : "0";
+            
+            const leaveToContRatio = promptData.bailPrs["🟢"] > 0 
+                ? (promptData.bailPrs["🔄"] / promptData.bailPrs["🟢"]).toFixed(2) 
+                : promptData.bailPrs["🔄"] > 0 ? "∞" : "0";
+            
+            // Display prompt
+            document.getElementById('prompt-display').innerHTML = `
+                <strong>Prompt:</strong> ${promptData.prompt}
+            `;
+            
+            // Create comparison symbols
+            const refuseCompareSymbol = promptData.refusalPrs.Refused > promptData.refusalPrs.Completed ? '>' : '<';
+            const bailCompareSymbol = promptData.bailPrs["🔄"] > promptData.bailPrs["🟢"] ? '>' : '<';
+            
+            // Get leave percentage
+            const leavePercent = (promptData.bailPrs["🔄"] * 100).toFixed(1);
+            
+            
+            // Render refusal chart
+            renderRefusalChart(promptData.refusalPrs);
+            
+            // Render wellbeing chart
+            renderWellbeingChart(promptData.bailPrs);
+            
+            // Render detailed responses
+            renderResponses(promptData.responses);
+        }
+        
+        function renderRefusalChart(refusalData) {
+            const ctx = document.getElementById('refusalChart').getContext('2d');
+            
+            // Destroy existing chart if it exists
+            if (refusalChart) {
+                refusalChart.destroy();
+            }
+            
+            // Create array of colors
+            const backgroundColors = {
+                'Unclear': '#f39c12',
+                'Refused': '#e74c3c',
+                'Completed': '#2ecc71',
+                'More Information': '#9b59b6'
+            };
+            
+            const colors = Object.keys(refusalData).map(key => backgroundColors[key] || '#95a5a6');
+            
+            refusalChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(refusalData),
+                    datasets: [{
+                        data: Object.values(refusalData).map(val => val * 100),
+                        backgroundColor: colors
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                boxWidth: 12,
+                                font: {
+                                    size: 11
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.label}: ${context.parsed.toFixed(1)}%`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function renderWellbeingChart(wellbeingData) {
+            const ctx = document.getElementById('wellbeingChart').getContext('2d');
+            
+            // Destroy existing chart if it exists
+            if (wellbeingChart) {
+                wellbeingChart.destroy();
+            }
+            
+            wellbeingChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: ['Continue (🟢)', 'Leave (🔄)', 'Unclear (?)'],
+                    datasets: [{
+                        data: [
+                            wellbeingData['🟢'] ? wellbeingData['🟢'] * 100 : 0,
+                            wellbeingData['🔄'] ? wellbeingData['🔄'] * 100 : 0,
+                            wellbeingData['?'] ? wellbeingData['?'] * 100 : 0
+                        ],
+                        backgroundColor: ['#2ecc71', '#e74c3c', '#95a5a6']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                boxWidth: 12,
+                                font: {
+                                    size: 11
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.label}: ${context.parsed.toFixed(1)}%`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function escapeHTML(text) {
+          return text
+              .replace(/&/g, "&amp;")
+              .replace(/</g, "&lt;")
+              .replace(/>/g, "&gt;")
+              .replace(/"/g, "&quot;")
+              .replace(/'/g, "&#039;")
+              .replace(/\n/g, "<br/>");
+        }
+        
+        function renderResponses(responses) {
+            let responsesHTML = '';
+            
+            responses.forEach((resp, index) => {
+                // Get refusal data (handle different property names)
+                const refusalData = resp.refusalPrs || resp.isRefusal || {};
+                
+                // Create badges for refusal types
+                const badgesHTML = Object.entries(refusalData)
+                    .filter(([key, value]) => value > 0)
+                    .map(([key, value]) => {
+                        const className = `badge ${key.toLowerCase().replace(' ', '-')}`;
+                        return `<span class="${className}">${key}: ${(value * 100).toFixed(1)}%</span>`;
+                    })
+                    .join('');
+                
+                // Create wellbeing indicator
+                const wellbeingHTML = `
+                    <div class="wellbeing">
+                        <span class="wellbeing-icon">🟢</span>
+                        <span>${(resp.bailPrs['🟢'] * 100).toFixed(1)}% continue</span>
+                        ${resp.bailPrs['🔄'] > 0 ? `<span class="wellbeing-icon" style="margin-left: 10px;">🔄</span>
+                        <span>${(resp.bailPrs['🔄'] * 100).toFixed(1)}% leave</span>` : ''}
+                        ${resp.bailPrs['?'] > 0 ? `<span class="wellbeing-icon" style="margin-left: 10px;">❓</span>
+                        <span>${(resp.bailPrs['?'] * 100).toFixed(1)}% unclear</span>` : ''}
+                    </div>
+                `;
+                
+                // Create bail data spoiler if bailData exists
+                let bailDataHTML = '';
+                if (resp.bailData && resp.bailData.length > 0) {
+                    const spoilerId = `spoiler-${index}`;
+                    const bailItems = resp.bailData.map((bailItem, bailIndex) => {
+                        return `
+                            <div class="bail-item">
+                                <span class="bail-symbol">${bailItem.bailSymbol}</span>
+                                <strong>Evaluation ${bailIndex + 1}</strong>
+                                <div class="bail-response">${escapeHTML(bailItem.response)}</div>
+                            </div>
+                        `;
+                    }).join('');
+                    
+                    bailDataHTML = `
+                        <button class="spoiler-btn" onclick="toggleSpoiler('${spoilerId}')">
+                            Show Bail Evaluations
+                            <span class="arrow-icon"></span>
+                        </button>
+                        <div id="${spoilerId}" class="spoiler-content">
+                            <h4>Individual Bail Evaluations (${resp.bailData.length})</h4>
+                            ${bailItems}
+                            <h5>Bail Prompt</h5>
+                            <div class="bail-response">${escapeHTML(JSONDATA['bailOutPrompt'])}</div>
+                        </div>
+                    `;
+                }
+                
+                responsesHTML += `
+                    <div class="response-card">
+                        <h3>Response ${index + 1}</h3>
+                        <div class="response-text">${resp.response}</div>
+                        <div class="response-meta">
+                            ${badgesHTML}
+                        </div>
+                        ${wellbeingHTML}
+                        ${bailDataHTML}
+                    </div>
+                `;
+            });
+            
+            document.getElementById('responses-container').innerHTML = responsesHTML;
+        }
+        
+        // Spoiler toggle function
+        function toggleSpoiler(id) {
+            const spoilerContent = document.getElementById(id);
+            const spoilerBtn = spoilerContent.previousElementSibling;
+            
+            if (spoilerContent.classList.contains('active')) {
+                spoilerContent.classList.remove('active');
+                spoilerBtn.classList.remove('active');
+                spoilerBtn.innerHTML = 'Show Bail Evaluations <span class="arrow-icon"></span>';
+            } else {
+                spoilerContent.classList.add('active');
+                spoilerBtn.classList.add('active');
+                spoilerBtn.innerHTML = 'Hide Bail Evaluations <span class="arrow-icon"></span>';
+            }
+        }
+        
+        // Make the toggleSpoiler function globally accessible
+        window.toggleSpoiler = toggleSpoiler;
+        
+        // Handle hash changes
+        window.addEventListener('hashchange', function() {
+            if (parseHash()) {
+                // Update UI to reflect the state in the hash
+                if (document.getElementById('modelSelect').value !== currentModel) {
+                    document.getElementById('modelSelect').value = currentModel;
+                    loadModelData(currentModel);
+                } else {
+                    setupMajorCategoryNav();
+                    updateMajorCategoryButtons();
+                    updateCurrentMajorCategoryDisplay();
+                    setupSubcategoryNav();
+                    renderCategorySummary();
+                    setupPromptSelector();
+                    renderCurrentPrompt();
+                }
+            }
+        });
+        
+        // Start by loading the models list
+        window.addEventListener('load', loadModelsList);
+    </script>
+</body>
+</html>

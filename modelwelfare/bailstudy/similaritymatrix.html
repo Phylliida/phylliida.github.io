@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Model similarity matrix</title>
+
+<!-- MathJax for inline formulas -->
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+<!-- Chart.js for the bar-chart view -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+/* ──────────── layout ──────────── */
+body{font-family:Arial,Helvetica,sans-serif;background:#f5f7fa;margin:0;padding:20px;}
+.wrapper{margin:0;max-width:none;background:#fff;box-shadow:0 0 10px rgba(0,0,0,.08);
+         display:flex;flex-direction:column;align-items:center;}
+h1{margin:.8rem 0 1.1rem;text-align:center;color:#2c3e50;}
+
+/* ──────────── control rows ──────────── */
+.ctrl-row{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:.3rem;position:sticky;top:0;}
+select{padding:.45rem .8rem;font-size:1rem;border:1px solid #ccc;border-radius:6px;}
+
+/* ──────────── similarity matrix ──────────── */
+table.simMat{border-collapse:collapse;border-spacing:0;margin-bottom:1.2rem;}
+table.simMat td.cell,table.simMat th.vert,table.simMat tbody th{
+  border:1px solid #fff;font-size:.75rem;}
+table.simMat td.cell{width:26px;height:26px;cursor:pointer;}
+table.simMat th.vert{writing-mode:vertical-rl;transform:rotate(180deg);
+  padding:.5rem .25rem;color:#34495e;background:#f7fbff;}
+table.simMat tbody th{padding:.25rem .5rem;color:#34495e;background:#f7fbff;text-align:right;}
+
+/* ──────────── model selector card ──────────── */
+.card{border:1px solid #d0d7e2;border-radius:8px;padding:1rem 1.2rem;
+      margin-bottom:1.6rem;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+.card h3{margin:0 0 .6rem;font-size:1rem;color:#2c3e50;text-align:center;}
+.button-row{display:flex;justify-content:center;gap:.8rem;margin-bottom:.8rem;}
+button.btn{padding:.35rem .9rem;font-size:.85rem;border:1px solid #3498db;
+           color:#fff;background:#3498db;border-radius:6px;cursor:pointer;}
+button.btn:hover{background:#2980b9;border-color:#2980b9;}
+button.btn.secondary{background:#95a5a6;border-color:#95a5a6;}
+button.btn.secondary:hover{background:#7f8c8d;border-color:#7f8c8d;}
+.model-list{display:flex;flex-direction:column;gap:.35rem;max-height:320px;
+            overflow:auto;font-size:.85rem;}
+.model-list label{display:flex;align-items:center;gap:.45rem;cursor:pointer;}
+.model-list input[type="checkbox"]{accent-color:#2c7bb6;}
+
+/* ──────────── description & bar-chart area ──────────── */
+.desc{max-width:800px;font-size:.9rem;line-height:1.45;
+      padding:0 1rem 1.2rem;color:#34495e;}
+.desc code{background:#f0f0f0;padding:2px 4px;border-radius:4px;}
+
+#chartCanvas{max-width:900px;width:100%;margin-top:1rem;}
+
+a{color:#3498db;text-decoration:none;font-weight:bold;margin-right:.6rem;}
+a:hover{text-decoration:underline;}
+
+.chart-wrap{width:100%;overflow-x:auto;}
+.chart-wrap canvas{max-width:100%;height:1200px;}
+@media(max-width:600px){.chart-wrap canvas{height:320px;}}
+
+</style>
+</head>
+
+<body>
+<a href="/modelwelfare/bailstudy/">View data summary</a>
+
+<div class="wrapper">
+
+  <h1>Model similarity matrix</h1>
+
+  <!-- ─── metric / normalisation controls ─── -->
+  <div class="ctrl-row">
+    <label><strong>Metric:</strong></label>
+    <select id="metricSelect">
+      <option value="bail.l">Leave / bail rate (🟢 vs 🔄)</option>
+      <option value="ref.r">Refusal rate</option>
+      <option value="rawArr">Raw bail-array dot-product</option>
+      <option value="kl">KL divergence  (exp (−KL))</option>
+    </select>
+
+    <label><strong>Normalisation:</strong></label>
+    <select id="normSelect">
+      <option value="logit">Log-odds residual</option>
+      <option value="center">Centered rate</option>
+      <option value="relative">Relative rate</option>
+    </select>
+  </div>
+  <!-- ── model selector card ── -->
+  <div class="card" style="width:min(320px,90%);">
+    <h3>Models</h3>
+    <div class="button-row">
+      <button id="btnAll"   class="btn">Select all</button>
+      <button id="btnClear" class="btn secondary">Clear all</button>
+    </div>
+    <div id="modelList" class="model-list"></div>
+  </div>
+
+
+
+  <!-- similarity matrix -->
+  <div style="overflow:auto;width:100%;">
+    <table id="simTable" class="simMat"></table>
+  </div>
+
+
+  <!-- reference-model selector for the bar chart -->
+  <div class="ctrl-row" style="margin-top:-.3rem;">
+    <label><strong>Reference model for bar-chart:</strong></label>
+    <select id="refSelect"></select>
+  </div>
+
+  <!-- Chart.js canvas -->
+  <div class="chart-wrap">
+  <canvas id="chartCanvas"></canvas>
+  </div>
+  
+    <!-- explanatory text (unchanged) -->
+  <div class="desc">
+    <h2 style="margin:.2rem 0 .6rem;">What you’re seeing</h2>
+    <p>
+      Each cell shows the cosine similarity between two models after we:
+      <ol style="margin-left:1.4rem">
+        <li>extract either the <em>leave / bail rate</em>
+            \(b_{mc}\) or the <em>refusal rate</em> \(r_{mc}\)
+            for every fine-grained category \(c\);</li>
+        <li>apply the chosen normalisation to obtain
+            \(\tilde b_{mc}\) or \(\tilde r_{mc}\);</li>
+        <li>compute
+            \[
+              \mathrm{sim}(a,b)=
+              \frac{\tilde{\mathbf v}_a\!\cdot\!\tilde{\mathbf v}_b}
+                   {\lVert\tilde{\mathbf v}_a\rVert\,
+                    \lVert\tilde{\mathbf v}_b\rVert},
+            \]
+            which equals Pearson correlation when vectors are centred.
+        </li>
+      </ol>
+    </p>
+
+    <p>
+      Colours follow Plotly’s diverging <code>RdBu</code> scheme:
+      red ≈ anti-correlated, white ≈ uncorrelated, blue ≈ strongly correlated.
+    </p>
+
+    <h3 style="margin:.8rem 0 .4rem;">Normalisation formulas</h3>
+    <p>
+      Let \(\mathbf v_m\) be the raw vector and
+      \(\bar v_m=\frac{1}{C}\sum_c v_{mc}\).
+    </p>
+    <ul>
+      <li><strong>Centered rate:</strong>
+        \( \tilde v_{mc}=v_{mc}-\bar v_m\)</li>
+      <li><strong>Relative rate:</strong>
+        \( \tilde v_{mc}=v_{mc}/\bar v_m\)</li>
+      <li><strong>Log-odds residual:</strong>
+        \( \tilde v_{mc}=\operatorname{logit}(v_{mc})-
+           \operatorname{logit}(\bar v_m)\)
+        with \(\operatorname{logit}(p)=\ln\!\bigl(p/(1-p)\bigr)\).</li>
+    </ul>
+  </div>
+
+</div>
+
+<script>
+/* ─────────── configuration ─────────── */
+const DATA_URL="https://raw.githubusercontent.com/Phylliida/BailStudyData/refs/heads/main/mergedbailnoswap3/summary.json";
+
+let DATA,allModels=[];
+let selectedModels=new Set();
+let currentMetric="bail.l",currentNorm="logit";
+let refModel=null;           // model shown in the bar-chart
+let chartObj=null;           // Chart.js instance
+
+/* ─────────── hash helpers ─────────── */
+function parseHash(){
+  const h=location.hash.slice(1);if(!h)return;
+  const p=new URLSearchParams(h);
+  if(p.has("metric"))currentMetric=p.get("metric");
+  if(p.has("norm"))  currentNorm=p.get("norm");
+  if(p.has("models"))selectedModels=new Set(p.get("models").split(","));
+  if(p.has("ref"))   refModel=p.get("ref");
+}
+function updateHash(){
+  const p=new URLSearchParams();
+  if(currentMetric!=="bail.l")p.set("metric",currentMetric);
+  if(currentNorm!=="logit")   p.set("norm",currentNorm);
+  if(refModel)                p.set("ref",refModel);
+  if(selectedModels.size && selectedModels.size!==allModels.length)
+    p.set("models",[...selectedModels].join(","));
+  location.hash=p.toString();
+}
+
+/* ─────────── maths helpers ─────────── */
+const logit=p=>Math.log(p/(1-p));
+function normaliseVector(v,mode){
+  const n=v.length,avg=v.reduce((a,b)=>a+b,0)/n;
+  if(mode==="center")   return v.map(x=>x-avg);
+  if(mode==="relative") return v.map(x=>avg?x/avg:0);
+  if(mode==="logit"){
+    const eps=1e-6,l=v.map(p=>logit(Math.min(Math.max(p/100,eps),1-eps)));
+    const m=l.reduce((a,b)=>a+b,0)/n;return l.map(x=>x-m);
+  }
+  if(mode==="normalize") {
+    const magnitude = Math.sqrt(v.reduce((a,b)=>a+b**2,0));
+    return v.map(x=>magnitude?x/magnitude:x);
+  }
+  if(mode==="prDistr") {
+    const nonZeroP = v.map(v=>v+0.1); // smoothing
+    const total = nonZeroP.reduce((a,b)=>a+b,0);
+    return nonZeroP.map(x=>total?x/total:x);
+  }
+  return v;
+}
+function dotProduct(a, b){
+  let s = 0;
+  for (let i = 0; i < a.length; i++) s += a[i] * b[i];
+  return s;
+}
+
+function cosine(a,b){
+  let d=0,na=0,nb=0;
+  for(let i=0;i<a.length;i++){d+=a[i]*b[i];na+=a[i]*a[i];nb+=b[i]*b[i];}
+  return na&&nb?d/Math.sqrt(na*nb):0;
+}
+
+function symKL(p, q){
+  const eps = 1.0/10.0;
+  let kl = 0;
+  for (let i = 0; i < p.length; i++){
+    const pi = p[i];
+    const qi = q[i];
+    kl += pi * Math.log(pi / qi) + qi * Math.log(qi / pi);
+  }
+  return kl*0.5;
+  //return kl * 0.5;        // ½·(KL(P‖Q)+KL(Q‖P))
+}
+
+/* RdBu-5 diverging colour helper */
+function simColor(v){
+  v=Math.max(-1,Math.min(1,v));
+  const stops=[[-1,"#d7191c"],[-.5,"#fdae61"],[0,"#ffffff"],[.5,"#abd9e9"],[1,"#2c7bb6"]];
+  for(let i=0;i<stops.length-1;i++){
+    const[p0,c0]=stops[i],[p1,c1]=stops[i+1];
+    if(v>=p0&&v<=p1){
+      const t=(v-p0)/(p1-p0),
+            rgb=h=>[1,3,5].map(o=>parseInt(h.substr(o,2),16)),
+            r0=rgb(c0),r1=rgb(c1),
+            col=r0.map((x,j)=>Math.round(x+(r1[j]-x)*t));
+      return`rgb(${col.join(",")})`;
+    }
+  }
+  return v<0?"#d7191c":"#2c7bb6";
+}
+
+/* ─────────── data helpers ─────────── */
+function getAgg(m,maj,sub){return DATA.models[m]?.bailFirst?.sub[maj]?.[sub]??null;}
+function pickMetric(o){
+  if(currentMetric==="bail.l")return o?.bail.l??null;
+  if(currentMetric==="ref.r") return o?.ref.r ??null;
+  return null;
+}
+
+/* build vectors & similarity matrix; pass filter=true to restrict to selectedModels */
+function buildMatrix(extraModel){
+  const useRaw = currentMetric === "rawArr";
+  const useKL    = currentMetric === "kl";
+  const cats=[];
+  
+  if (!useRaw && !useKL){
+  DATA.majorCats.forEach(M=>DATA.subMap[M].forEach(S=>cats.push([M,S])));
+   }
+  const models=allModels.filter(m=>selectedModels.has(m) || m == extraModel);
+  const vecs=models.map(m=>{
+    const vals= (useRaw || useKL) ? DATA.models[m].rawBailPrArr : cats.map(([M,S])=>{
+      const a=getAgg(m,M,S),x=pickMetric(a);return x!=null?x*100:0;
+    });
+    var currentNormToUse = currentNorm;
+    if (useRaw) currentNormToUse = "normalize";
+    if (useKL) currentNormToUse = "prDistr";
+    return normaliseVector(vals,currentNormToUse);
+  });
+  const sim=models.map((_,i)=>models.map((_,j)=> useRaw ? dotProduct(vecs[i], vecs[j])  : (useKL ? symKL(vecs[i], vecs[j]) : cosine(vecs[i],vecs[j]))));
+  return{models,sim};
+}
+
+/* ─────────── similarity grid ─────────── */
+function renderSimTable(){
+  const{models,sim}=buildMatrix(null);
+  const tbl=document.getElementById("simTable");tbl.innerHTML="";
+  const head=tbl.createTHead().insertRow();head.insertCell();
+  models.forEach(m=>{
+    const th=document.createElement("th");th.className="vert";th.textContent=m;
+    head.appendChild(th);
+  });
+  const body=document.createElement("tbody");
+  sim.forEach((row,i)=>{
+    const tr=body.insertRow();
+    const rth=document.createElement("th");rth.textContent=models[i];tr.appendChild(rth);
+    row.forEach(v=>{
+      const td=tr.insertCell();td.className="cell";
+      td.style.backgroundColor=simColor(v);
+      td.title=v.toFixed(3);
+    });
+  });
+  tbl.appendChild(body);
+}
+
+/* ─────────── Chart.js bar chart ─────────── */
+function renderBarChart(){
+  if(!refModel)return;
+  const {models,sim}=buildMatrix(refModel);           // similarities for ALL models
+  const idx=models.indexOf(refModel);
+  if(idx===-1) return;
+  
+
+  const data=models
+              .map((name,i)=>({name,val:sim[idx][i]}))
+              .filter(d=>d.name!==refModel)
+              .sort((a,b)=>b.val-a.val);
+
+  // destroy previous chart
+  if(chartObj){chartObj.destroy();chartObj=null;}
+  const ctx=document.getElementById("chartCanvas").getContext("2d");
+  chartObj=new Chart(ctx,{
+    type:"bar",
+    data:{
+      labels:data.map(d=>d.name),
+      datasets:[{
+        data:data.map(d=>d.val),
+        backgroundColor:data.map(d=>simColor(d.val))
+      }]
+    },
+    options:{
+      indexAxis:"y",
+      responsive:true,
+      maintainAspectRatio:false,
+      scales:{
+        x:{min:-1,max:1,title:{display:true,text:(currentMetric == "ref.r" ? "refusals" : "bail") + " " + "similarity via " + currentNorm}},
+        y:{ticks:{autoSkip:false}}
+      },
+      plugins:{
+        tooltip:{callbacks:{label:ctx=>ctx.parsed.x.toFixed(3)}},
+        legend:{display:false}
+      }
+    }
+  });
+  document.getElementById("chartCanvas").height=40*data.length+60;
+}
+
+/* ─────────── selectors ─────────── */
+function populateModelCheckboxes(){
+  const box=document.getElementById("modelList");box.innerHTML="";
+  allModels.forEach(m=>{
+    const lab=document.createElement("label");
+    const cb=document.createElement("input");
+    cb.type="checkbox";cb.checked=selectedModels.has(m);
+    cb.onchange=()=>{
+      cb.checked?selectedModels.add(m):selectedModels.delete(m);
+      if(!selectedModels.size)selectedModels=new Set(allModels); // never empty
+      renderSimTable();updateHash();
+    };
+    lab.appendChild(cb);lab.appendChild(document.createTextNode(m));
+    box.appendChild(lab);
+  });
+}
+function populateRefDropdown(){
+  const sel=document.getElementById("refSelect");sel.innerHTML="";
+  allModels.forEach(m=>{
+    const op=document.createElement("option");
+    op.value=m;op.textContent=m;sel.appendChild(op);
+  });
+  if(!refModel)refModel=allModels[0];
+  sel.value=refModel;
+  sel.onchange=e=>{refModel=e.target.value;renderBarChart();updateHash();};
+}
+
+/* ─────────── init ─────────── */
+async function init(){
+  parseHash();
+  DATA=await fetch(DATA_URL,{cache:"reload"}).then(r=>r.json());
+  allModels=Object.keys(DATA.models).sort();
+
+  if(!selectedModels.size)selectedModels=new Set(allModels);
+  if(!refModel)refModel=allModels[0];
+
+  document.getElementById("metricSelect").value=currentMetric;
+  document.getElementById("normSelect").value=currentNorm;
+
+  /* metric / normalisation change handlers */
+  document.getElementById("metricSelect").onchange=e=>{
+    currentMetric=e.target.value;renderSimTable();renderBarChart();updateHash();};
+  document.getElementById("normSelect").onchange=e=>{
+    currentNorm=e.target.value;renderSimTable();renderBarChart();updateHash();};
+
+  /* buttons */
+  document.getElementById("btnAll").onclick=()=>{
+    selectedModels=new Set(allModels);populateModelCheckboxes();
+    renderSimTable();renderBarChart();updateHash();};
+  document.getElementById("btnClear").onclick=()=>{
+    selectedModels=new Set([]);populateModelCheckboxes();
+    renderSimTable();renderBarChart();updateHash();};
+
+  /* initial renders */
+  populateModelCheckboxes();
+  populateRefDropdown();
+  renderSimTable();
+  renderBarChart();
+}
+window.addEventListener("hashchange",()=>{parseHash();populateModelCheckboxes();populateRefDropdown();renderSimTable();renderBarChart();});
+init();
+</script>
+</body>
+</html>
