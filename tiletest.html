@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Infinite 2D Texture Scroller — Click to Upload</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #viewport{
+      width:100vw; height:100vh;
+      overflow:scroll;                 /* both axes */
+      background-image:repeating-conic-gradient(#d9d9d9 0 25%, #f0f0f0 0 50%);
+      background-repeat:repeat;
+      background-size:64px 64px;       /* fallback checkerboard tile size */
+      background-position:0 0;
+      image-rendering:pixelated;       /* crisp for pixel textures */
+      touch-action: pan-x pan-y;
+      overscroll-behavior: contain;    /* avoid browser bounce chaining */
+    }
+    /* Big spacer gives us scrollbars; we recenter so it feels infinite */
+    #spacer{ width:200000px; height:200000px; }
+
+    /* Controls */
+    .controls{
+      position:fixed; top:10px; left:10px; z-index:10;
+      display:flex; gap:8px; align-items:center;
+      font:14px/1 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    .btn{
+      padding:8px 12px; border-radius:10px;
+      background:rgba(0,0,0,.65); color:#fff; cursor:pointer; user-select:none;
+      backdrop-filter:blur(4px);
+    }
+    .btn:hover{ background:rgba(0,0,0,.8); }
+    .visually-hidden{
+      position:absolute !important; left:-10000px; top:auto; width:1px; height:1px; overflow:hidden;
+    }
+    .hint{
+      position:fixed; bottom:10px; left:10px; z-index:10;
+      padding:6px 8px; border-radius:8px;
+      background:rgba(0,0,0,.55); color:#fff;
+      font:12px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      user-select:none;
+    }
+  </style>
+</head>
+<body>
+  <div id="viewport" aria-label="Infinite 2D scroller with tiled background">
+    <div id="spacer"></div>
+  </div>
+
+  <div class="controls">
+    <label class="btn" for="fileInput">Upload texture</label>
+    <input id="fileInput" class="visually-hidden" type="file" accept="image/*" />
+  </div>
+  <div id="hint" class="hint">Tip: Click “Upload texture,” then scroll in any direction. Arrow keys work too.</div>
+
+  <script>
+    (function () {
+      const viewport = document.getElementById('viewport');
+      const fileInput = document.getElementById('fileInput');
+      const HINT = document.getElementById('hint');
+
+      let currentBlobURL = null;
+
+      // ---- Texture helpers ----
+      function applyTexture(url, w, h){
+        // Two layers: your image then a checkerboard fallback
+        viewport.style.backgroundImage =
+          `url("${url}"), repeating-conic-gradient(#d9d9d9 0 25%, #f0f0f0 0 50%)`;
+        if (w && h){
+          viewport.style.backgroundSize = `${w}px ${h}px, 64px 64px`;
+        } else {
+          viewport.style.backgroundSize = `auto, 64px 64px`;
+        }
+      }
+
+      function setTextureFromURL(url){
+        try { url = new URL(url, location.href).href; } catch(_) {}
+        applyTexture(url);
+        const img = new Image();
+        img.onload = () => applyTexture(url, img.naturalWidth, img.naturalHeight);
+        img.src = url;
+      }
+
+      function setTextureFromFile(file){
+        if (!file) return;
+        const blobURL = URL.createObjectURL(file);
+        applyTexture(blobURL);
+        const img = new Image();
+        img.onload = () => {
+          applyTexture(blobURL, img.naturalWidth, img.naturalHeight);
+          if (currentBlobURL && currentBlobURL !== blobURL) URL.revokeObjectURL(currentBlobURL);
+          currentBlobURL = blobURL;
+        };
+        img.src = blobURL;
+        fileInput.value = ''; // allow re-selecting the same file later
+      }
+
+      // Optional: ?img=URL
+      const params = new URLSearchParams(location.search);
+      const paramImg = params.get('img');
+      if (paramImg) setTextureFromURL(paramImg);
+
+      // Click-to-upload
+      fileInput.addEventListener('change', e => {
+        const f = e.target.files && e.target.files[0];
+        if (f && f.type.startsWith('image/')) setTextureFromFile(f);
+      });
+
+      // Hide hint after a bit
+      setTimeout(() => HINT && (HINT.style.display = 'none'), 4000);
+
+      // ---- Infinite 2D scroll via recentering ----
+      let virtualX = 0, virtualY = 0;
+      let lastLeft = 0, lastTop = 0;
+      let isRecentering = false;
+      const EDGE_PAD = 1000;
+
+      function updateBackground(){
+        // Oppose scroll so texture appears fixed on an infinite plane
+        viewport.style.backgroundPosition = `${-virtualX}px ${-virtualY}px`;
+      }
+
+      function centerScroll(){
+        const maxX = viewport.scrollWidth  - viewport.clientWidth;
+        const maxY = viewport.scrollHeight - viewport.clientHeight;
+        const cx = Math.max(0, Math.floor(maxX / 2));
+        const cy = Math.max(0, Math.floor(maxY / 2));
+        isRecentering = true;
+        viewport.scrollLeft = cx;
+        viewport.scrollTop  = cy;
+        lastLeft = cx;
+        lastTop  = cy;
+        isRecentering = false;
+      }
+
+      function init(){
+        centerScroll();
+        virtualX = 0; virtualY = 0;
+        updateBackground();
+      }
+
+      viewport.addEventListener('scroll', () => {
+        if (isRecentering) return;
+
+        const left = viewport.scrollLeft;
+        const top  = viewport.scrollTop;
+        const dx = left - lastLeft;
+        const dy = top  - lastTop;
+
+        if (dx !== 0 || dy !== 0){
+          virtualX += dx;
+          virtualY += dy;
+          lastLeft = left;
+          lastTop  = top;
+          updateBackground();
+        }
+
+        const maxX = viewport.scrollWidth  - viewport.clientWidth;
+        const maxY = viewport.scrollHeight - viewport.clientHeight;
+        if (left < EDGE_PAD || left > maxX - EDGE_PAD ||
+            top  < EDGE_PAD || top  > maxY - EDGE_PAD) {
+          centerScroll();
+        }
+      }, { passive:true });
+
+      // Keep centered when the window size changes
+      new ResizeObserver(() => centerScroll()).observe(viewport);
+
+      window.addEventListener('load', init);
+
+      // Optional: arrow-key panning for convenience
+      window.addEventListener('keydown', (e) => {
+        const step = (e.shiftKey ? 200 : 60);
+        if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) {
+          if (e.key === 'ArrowLeft')  viewport.scrollLeft -= step;
+          if (e.key === 'ArrowRight') viewport.scrollLeft += step;
+          if (e.key === 'ArrowUp')    viewport.scrollTop  -= step;
+          if (e.key === 'ArrowDown')  viewport.scrollTop  += step;
+          e.preventDefault();
+        }
+      }, { passive:false });
+    })();
+  </script>
+</body>
+</html>
