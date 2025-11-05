@@ -1,0 +1,1325 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>H7/H8 — Lock First Piece Centroid</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body { background: #fff; overflow: hidden; }
+  </style>
+</head>
+<body>
+
+<script>
+// -------------------- State & UI --------------------
+let user_ts = [20, 0, 0, 0, -20, 0];   // user pan/zoom transform (2x3)
+let lw_scale = 1;
+
+let sys;
+
+let scale_centre;
+let scale_start;
+let scale_ts;
+
+let reset_but;
+let tile_sel;
+
+let ab_label;
+let ab_slider;
+
+let subst_button;
+let translate_button;
+let scale_button;
+let dragging = false;
+let uibox = true;
+
+let a = 1.0;
+let b = 1.7320508075688772;
+
+let lab;
+let colour_button;
+
+let colourMode = 'plain'; // 'plain' or 'motion'
+let leafShapes = [];
+let shapeSetVersion = 0;
+let referenceState = null;
+let colour_table;
+let sortField = 'colour';
+let sortDir = 1;
+
+const PATH_STEPS = 60;
+let lock_button;
+let colourSummaries = [];
+let lockedShapeId = null;
+let lockedShapeTargetWorld = null;
+
+const colmap = {
+  col0: [96, 149, 239],
+  col1: [240, 133, 101],
+  col2: [126, 201, 121],
+  col3: [226, 203, 106],
+  col4: [155, 108, 196],
+  col5: [107, 190, 209],
+  col6: [210, 137, 187],
+  col7: [186, 186, 110],
+  default: [200, 200, 200]
+};
+
+const colourPalette = ['col0', 'col1', 'col2', 'col3', 'col4', 'col5', 'col6', 'col7'];
+
+function chooseColour(label) {
+  const key = label in colmap ? label : 'default';
+  return colmap[key];
+}
+
+// -------- Analytic locks (orientation + area + whole-tile centroid) --------
+let refAB = null;  // {ax, ay, bx, by, theta0, area0, c0x, c0y}
+
+// -------------------- AB arithmetic --------------------
+function pt(x, y) { return { x, y }; }
+
+function makeAB(a_, b_) { return { a: a_, b: b_ }; }
+function addAB(p, q)    { return makeAB(p.a + q.a, p.b + q.b); }
+function subAB(p, q)    { return makeAB(p.a - q.a, p.b - q.b); }
+function scaleAB(p, s)  { return makeAB(p.a * s, p.b * s); }
+
+function evalAB(p)                 { return a*p.a + b*p.b; }
+function evalABwith(p, aa, bb)     { return aa*p.a + bb*p.b; }
+
+function padd(P, Q){ return pt(addAB(P.x,Q.x), addAB(P.y,Q.y)); }
+function psub(P, Q){ return pt(subAB(P.x,Q.x), subAB(P.y,Q.y)); }
+
+// -------------------- 2x2 Linear --------------------
+function trot(ang) {
+  const c = cos(ang), s = sin(ang);
+  return [c, -s, s, c];
+}
+function transAB(M, P) {
+  return pt(
+    addAB(scaleAB(P.x, M[0]), scaleAB(P.y, M[1])),
+    addAB(scaleAB(P.x, M[2]), scaleAB(P.y, M[3]))
+  );
+}
+
+// -------------------- 2x3 Affine --------------------
+function mulAffine(A, B) { // A * B
+  return [
+    A[0]*B[0] + A[1]*B[3],
+    A[0]*B[1] + A[1]*B[4],
+    A[0]*B[2] + A[1]*B[5] + A[2],
+
+    A[3]*B[0] + A[4]*B[3],
+    A[3]*B[1] + A[4]*B[4],
+    A[3]*B[2] + A[4]*B[5] + A[5]
+  ];
+}
+function ttransAffine(tx, ty) { return [1, 0, tx, 0, 1, ty]; }
+function invAffine(T) {
+  const det = T[0]*T[4] - T[1]*T[3];
+  return [
+    T[4]/det, -T[1]/det, (T[1]*T[5]-T[2]*T[4])/det,
+    -T[3]/det, T[0]/det, (T[2]*T[3]-T[0]*T[5])/det
+  ];
+}
+function transAffine(M, P) {
+  return pt(M[0]*P.x + M[1]*P.y + M[2], M[3]*P.x + M[4]*P.y + M[5]);
+}
+
+// -------------------- Drawing --------------------
+function drawPolygon(shape, f, s, w) {
+  if (f != null) fill(...f); else noFill();
+  if (s != null) { stroke(0); strokeWeight(w); } else noStroke();
+
+  beginShape();
+  for (let p of shape) {
+    const op = pt(evalAB(p.x), evalAB(p.y));
+    vertex(op.x, op.y);
+  }
+  endShape(CLOSE);
+}
+
+class Shape {
+  constructor(pts, quad, label) {
+    this.pts = pts;
+    this.quad = quad;
+    this.label = label;
+    this.gid = -1;
+  }
+  draw() { drawPolygon(this.pts, chooseColour(this.label), [0,0,0], 0.1); }
+
+  streamSVG(S, stream) {
+    let s = '<polygon points="';
+    let first = true;
+    for (let p of this.pts) {
+      const op = pt(evalAB(p.x), evalAB(p.y));
+      const sp = transAffine(S, op);
+      s += (first ? '' : ' ') + `${sp.x},${sp.y}`;
+      first = false;
+    }
+    const col = chooseColour(this.label);
+    s += `" stroke="black" stroke-width="0.1" fill="rgb(${col[0]},${col[1]},${col[2]})" />`;
+    stream.push(s);
+  }
+
+  translateInPlace(dp) {
+    for (let i = 0; i < this.pts.length; ++i) this.pts[i] = padd(this.pts[i], dp);
+    for (let i = 0; i < 4; ++i) this.quad[i] = padd(this.quad[i], dp);
+  }
+
+  rotateAndMatch(T, qidx, P) {
+    const pts = this.pts.map(p => transAB(T, p));
+    const quad = this.quad.map(p => transAB(T, p));
+    const ret = new Shape(pts, quad, this.label);
+    if (qidx >= 0) ret.translateInPlace(psub(P, quad[qidx]));
+    return ret;
+  }
+}
+
+class Meta {
+  constructor() { this.geoms = []; this.quad = []; }
+  addChild(g) { this.geoms.push(g); }
+  draw() { for (let g of this.geoms) g.draw(); }
+  streamSVG(S, stream){ for (let g of this.geoms) g.streamSVG(S, stream); }
+  translateInPlace(dp){
+    for (let g of this.geoms) g.translateInPlace(dp);
+    for (let i=0;i<4;++i) this.quad[i] = padd(this.quad[i], dp);
+  }
+  rotateAndMatch(T, qidx, P){
+    const ret = new Meta();
+    ret.geoms = this.geoms.map(g => g.rotateAndMatch(T, -1));
+    ret.quad  = this.quad.map(p => transAB(T, p));
+    if (qidx >= 0) ret.translateInPlace(psub(P, ret.quad[qidx]));
+    return ret;
+  }
+}
+
+// -------------------- Build tiles --------------------
+function buildBaseTiles() {
+  const edges = [
+    ['a',0], ['a',2], ['b',11], ['b',1], ['a',4], ['a',2],
+    ['b',5], ['b',3], ['a',6], ['a',8], ['a',8], ['a',10], ['b',7]
+  ];
+  const hr3 = 0.5*1.7320508075688772;
+  const dirs = [
+    pt(1,0), pt(hr3,0.5), pt(0.5,hr3),
+    pt(0,1), pt(-0.5,hr3), pt(-hr3,0.5),
+    pt(-1,0), pt(-hr3,-0.5), pt(-0.5,-hr3),
+    pt(0,-1), pt(0.5,-hr3), pt(hr3,-0.5)
+  ];
+
+  let prev = pt(makeAB(0,0), makeAB(0,0));
+  const pts = [prev];
+
+  for (let e of edges) {
+    if (e[0] === 'a') {
+      prev = pt(
+        addAB(prev.x, makeAB(dirs[e[1]].x, 0)),
+        addAB(prev.y, makeAB(dirs[e[1]].y, 0))
+      );
+    } else {
+      prev = pt(
+        addAB(prev.x, makeAB(0, dirs[e[1]].x)),
+        addAB(prev.y, makeAB(0, dirs[e[1]].y))
+      );
+    }
+    pts.push(prev);
+  }
+
+  const quad = [pts[1], pts[3], pts[9], pts[13]];
+  const ret = {};
+
+  ret['H8'] = new Shape(pts, quad, 'single');
+
+  // flipped companion
+  const fpts = [];
+  const len = pts.length;
+  for (let i = 0; i < len; ++i) {
+    const p = pts[len-1-i];
+    fpts.push(pt(p.x, scaleAB(p.y, -1)));
+  }
+  const dp = psub(pts[0], fpts[5]);
+  for (let i = 0; i < len; ++i) fpts[i] = padd(fpts[i], dp);
+
+  const comp = new Meta();
+  comp.addChild(new Shape(pts, quad, 'unflipped'));
+  comp.addChild(new Shape(fpts, quad, 'flipped'));
+  comp.quad = quad;
+  ret['H7'] = comp;
+
+  return ret;
+}
+
+function buildSupertiles(sys) {
+  const sing = sys['H8'];
+  const comp = sys['H7'];
+
+  const smeta = new Meta();
+  const rules = [
+    [PI/3,    2, 0, false],
+    [2*PI/3,  2, 0, false],
+    [0,       1, 1, true],
+    [-2*PI/3, 2, 2, false],
+    [-PI/3,   2, 0, false],
+    [0,       2, 0, false]
+  ];
+
+  smeta.addChild(sing);
+  for (let r of rules) {
+    if (r[3]) {
+      smeta.addChild(comp.rotateAndMatch(trot(r[0]), r[1],
+        smeta.geoms[smeta.geoms.length-1].quad[r[2]]));
+    } else {
+      smeta.addChild(sing.rotateAndMatch(trot(r[0]), r[1],
+        smeta.geoms[smeta.geoms.length-1].quad[r[2]]));
+    }
+  }
+
+  smeta.quad = [
+    smeta.geoms[1].quad[3], smeta.geoms[2].quad[0],
+    smeta.geoms[4].quad[3], smeta.geoms[6].quad[0]
+  ];
+
+  const cmeta = new Meta();
+  cmeta.geoms = smeta.geoms.slice(0, smeta.geoms.length - 1);
+  cmeta.quad = smeta.quad;
+
+  return { 'H8': smeta, 'H7': cmeta };
+}
+
+// -------------------- Geometry helpers --------------------
+// Reference edge for orientation
+function refEdgeABForCurrentTile() {
+  const q = sys[tile_sel.value()].quad;
+  const dx = subAB(q[1].x, q[0].x);
+  const dy = subAB(q[1].y, q[0].y);
+  return { ax: dx.a, bx: dx.b, ay: dy.a, by: dy.b };
+}
+function thetaFromABCoeffs(coeffs, aa, bb) {
+  const x = aa*coeffs.ax + bb*coeffs.bx;
+  const y = aa*coeffs.ay + bb*coeffs.by;
+  if (Math.abs(x) < 1e-15 && Math.abs(y) < 1e-15) return 0;
+  return Math.atan2(y, x);
+}
+
+// Signed area and centroid for one polygon (given a,b explicitly)
+function polygonSignedAreaAndCentroid(pts, aa, bb) {
+  let a2 = 0, cx3 = 0, cy3 = 0; // a2 = 2*area_signed
+  const n = pts.length;
+  for (let i = 0; i < n; ++i) {
+    const p = pts[i], q = pts[(i+1)%n];
+    const x1 = evalABwith(p.x, aa, bb), y1 = evalABwith(p.y, aa, bb);
+    const x2 = evalABwith(q.x, aa, bb), y2 = evalABwith(q.y, aa, bb);
+    const c = x1*y2 - x2*y1;
+    a2  += c;
+    cx3 += (x1 + x2) * c;
+    cy3 += (y1 + y2) * c;
+  }
+  const eps = 1e-15;
+  if (Math.abs(a2) < eps) {
+    // Degenerate; fall back to vertex average
+    let sx = 0, sy = 0;
+    for (let i = 0; i < n; ++i) {
+      sx += evalABwith(pts[i].x, aa, bb);
+      sy += evalABwith(pts[i].y, aa, bb);
+    }
+    return { areaSigned: 0, cx: sx/n, cy: sy/n };
+  }
+  const areaSigned = 0.5 * a2;
+  const cx = cx3 / (3 * a2);
+  const cy = cy3 / (3 * a2);
+  return { areaSigned, cx, cy };
+}
+
+function polygonAreaGivenAB(pts, aa, bb) {
+  return Math.abs(polygonSignedAreaAndCentroid(pts, aa, bb).areaSigned);
+}
+
+// Recursive area (mean per leaf) for area lock
+function areaSumAndCount(node, aa, bb) {
+  if (node instanceof Shape) {
+    return { sum: polygonAreaGivenAB(node.pts, aa, bb), count: 1 };
+  } else if (node instanceof Meta) {
+    let sum = 0, count = 0;
+    for (const g of node.geoms) {
+      const ac = areaSumAndCount(g, aa, bb);
+      sum += ac.sum; count += ac.count;
+    }
+    return { sum, count: Math.max(count, 1) };
+  }
+  return { sum: 0, count: 0 };
+}
+function areaPerLeafGivenAB(node, aa, bb) {
+  const ac = areaSumAndCount(node, aa, bb);
+  return ac.count > 0 ? ac.sum / ac.count : 0;
+}
+
+// ---- Tile centroid helpers ----
+function tileAreaAndCentroid(node, aa, bb) {
+  if (node instanceof Shape) {
+    const sac = polygonSignedAreaAndCentroid(node.pts, aa, bb);
+    const area = Math.abs(sac.areaSigned);
+    return { area, cx: sac.cx, cy: sac.cy };
+  } else if (node instanceof Meta) {
+    let area = 0, cxw = 0, cyw = 0;
+    for (const g of node.geoms) {
+      const ac = tileAreaAndCentroid(g, aa, bb);
+      area += ac.area;
+      cxw += ac.cx * ac.area;
+      cyw += ac.cy * ac.area;
+    }
+    if (area > 0) {
+      return { area, cx: cxw / area, cy: cyw / area };
+    }
+    return { area: 0, cx: 0, cy: 0 };
+  }
+  return { area: 0, cx: 0, cy: 0 };
+}
+
+function gatherShapeCentroids(node, aa, bb, out) {
+  if (node instanceof Shape) {
+    const sac = polygonSignedAreaAndCentroid(node.pts, aa, bb);
+    if (Math.abs(sac.areaSigned) > 1e-12) {
+      out.push({ cx: sac.cx, cy: sac.cy });
+    }
+  } else if (node instanceof Meta) {
+    for (const g of node.geoms) gatherShapeCentroids(g, aa, bb, out);
+  }
+}
+
+function drawTileCentroids(node, aa, bb) {
+  const centres = [];
+  gatherShapeCentroids(node, aa, bb, centres);
+  if (!centres.length) return;
+  push();
+  noStroke();
+  fill(30, 30, 30);
+  for (const c of centres) {
+    const r = 0.6;
+    circle(c.cx, c.cy, r);
+  }
+  pop();
+}
+
+function pointInShape(shape, point, aa, bb) {
+  const pts = shape.pts;
+  const n = pts.length;
+  let inside = false;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = evalABwith(pts[i].x, aa, bb);
+    const yi = evalABwith(pts[i].y, aa, bb);
+    const xj = evalABwith(pts[j].x, aa, bb);
+    const yj = evalABwith(pts[j].y, aa, bb);
+    const intersect = ((yi > point.y) !== (yj > point.y)) &&
+                     (point.x < (xj - xi) * (point.y - yi) / ((yj - yi) || 1e-12) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function getCurrentRoot() {
+  if (!sys || !tile_sel) return null;
+  return sys[tile_sel.value()];
+}
+
+function collectLeafShapes(node, out) {
+  if (!node) return;
+  if (node instanceof Shape) {
+    out.push(node);
+  } else if (node instanceof Meta) {
+    for (const g of node.geoms) collectLeafShapes(g, out);
+  }
+}
+
+function rebuildLeafShapes() {
+  const root = getCurrentRoot();
+  leafShapes = [];
+  if (!root) return;
+  let nextId = 0;
+  const assign = (node) => {
+    if (node instanceof Shape) {
+      node.gid = nextId++;
+      node.label = 'default';
+      leafShapes.push(node);
+    } else if (node instanceof Meta) {
+      for (const g of node.geoms) assign(g);
+    }
+  };
+  assign(root);
+  shapeSetVersion++;
+  referenceState = null;
+  if (!findLeafShapeById(lockedShapeId)) {
+    lockedShapeId = null;
+    lockedShapeTargetWorld = null;
+    updateLockButtonLabel();
+  }
+}
+
+function findLeafShapeById(id) {
+  if (!leafShapes.length) return null;
+  for (const shape of leafShapes) {
+    if (shape.gid === id) return shape;
+  }
+  return null;
+}
+
+function lockedShapeLocalFor(aa = a, bb = b) {
+  if (lockedShapeId === null) return null;
+  const shape = findLeafShapeById(lockedShapeId);
+  if (!shape) return null;
+  const sac = polygonSignedAreaAndCentroid(shape.pts, aa, bb);
+  if (!Number.isFinite(sac.cx) || !Number.isFinite(sac.cy)) return null;
+  return { x: sac.cx, y: sac.cy };
+}
+
+function ensureLeafShapes() {
+  if (!leafShapes.length) rebuildLeafShapes();
+}
+
+function clearShapeColours() {
+  for (const shape of leafShapes) shape.label = 'default';
+  colourSummaries = [];
+}
+
+function currentSliderAB() {
+  const alpha = 1 + sqrt(3);
+  const v = ab_slider ? ab_slider.value() / 100.0 : 0;
+  return { a: alpha * v, b: alpha * (1 - v) };
+}
+
+function referenceSliderAB() {
+  const alpha = 1 + sqrt(3);
+  return { a: alpha, b: 0 };
+}
+
+function sliderValueToAB(value) {
+  const alpha = 1 + sqrt(3);
+  const v = value / 100.0;
+  return { a: alpha * v, b: alpha * (1 - v) };
+}
+
+function withTemporaryAB(aa, bb, fn) {
+  const oldA = a;
+  const oldB = b;
+  a = aa;
+  b = bb;
+  try {
+    return fn();
+  } finally {
+    a = oldA;
+    b = oldB;
+  }
+}
+
+function applyAffineToPoint(M, point) {
+  return {
+    x: M[0]*point.x + M[1]*point.y + M[2],
+    y: M[3]*point.x + M[4]*point.y + M[5]
+  };
+}
+
+function edgeAngleAfterTransform(shape, world, aa, bb) {
+  const n = shape.pts.length;
+  for (let i = 0; i < n; ++i) {
+    const p0 = shape.pts[i];
+    const p1 = shape.pts[(i+1)%n];
+    const x0 = evalABwith(p0.x, aa, bb);
+    const y0 = evalABwith(p0.y, aa, bb);
+    const x1 = evalABwith(p1.x, aa, bb);
+    const y1 = evalABwith(p1.y, aa, bb);
+    const tp0 = applyAffineToPoint(world, { x: x0, y: y0 });
+    const tp1 = applyAffineToPoint(world, { x: x1, y: y1 });
+    const dx = tp1.x - tp0.x;
+    const dy = tp1.y - tp0.y;
+    if (dx*dx + dy*dy > 1e-12) {
+      return Math.atan2(dy, dx);
+    }
+  }
+  return 0;
+}
+
+function computeStateForAB(aa, bb) {
+  if (!sys || !leafShapes.length) return { data: {}, world: null };
+  const data = {};
+  let worldMatrix = null;
+  withTemporaryAB(aa, bb, () => {
+    const R = rlockMatrix();
+    const S = areaScaleMatrix();
+    const RS = mulAffine(R, S);
+    const baseMatrix = mulAffine(RS, centroidMatrix());
+    worldMatrix = applyLockTranslation(baseMatrix, aa, bb);
+    for (const shape of leafShapes) {
+      const sac = polygonSignedAreaAndCentroid(shape.pts, aa, bb);
+      const localCentroid = { x: sac.cx, y: sac.cy };
+      const worldCentroid = applyAffineToPoint(worldMatrix, localCentroid);
+      const angle = edgeAngleAfterTransform(shape, worldMatrix, aa, bb);
+      data[shape.gid] = {
+        angle,
+        localX: localCentroid.x,
+        localY: localCentroid.y,
+        worldX: worldCentroid.x,
+        worldY: worldCentroid.y
+      };
+    }
+  });
+  return { data, world: worldMatrix };
+}
+
+function normalizeAngle(rad) {
+  let r = rad % (2*Math.PI);
+  if (r <= -Math.PI) r += 2*Math.PI;
+  if (r > Math.PI) r -= 2*Math.PI;
+  return r;
+}
+
+function quantizeKey(value, eps, decimals) {
+  let q = Math.round(value / eps) * eps;
+  if (Math.abs(q) < eps / 2) q = 0;
+  const factor = Math.pow(10, decimals);
+  q = Math.round(q * factor) / factor;
+  // avoid negative zero
+  if (Object.is(q, -0)) q = 0;
+  return q.toFixed(decimals);
+}
+
+function ensureReferenceState() {
+  ensureLeafShapes();
+  if (!leafShapes.length) return null;
+  const currentLockId = lockedShapeId == null ? -1 : lockedShapeId;
+  if (!referenceState || referenceState.version !== shapeSetVersion || referenceState.lockId !== currentLockId) {
+    const refAB = referenceSliderAB();
+    const state = computeStateForAB(refAB.a, refAB.b);
+    referenceState = {
+      version: shapeSetVersion,
+      data: state.data,
+      world: state.world,
+      lockId: currentLockId
+    };
+  }
+  return referenceState;
+}
+
+function assignMotionColours() {
+  ensureLeafShapes();
+  const ref = ensureReferenceState();
+  colourSummaries = [];
+  if (!ref) {
+    clearShapeColours();
+    return;
+  }
+  const curAB = currentSliderAB();
+  const cur = computeStateForAB(curAB.a, curAB.b);
+  const groups = new Map();
+  const perShape = [];
+  let paletteIndex = 0;
+  const ROT_EPS = 1e-2;    // degrees tolerance
+  const POS_EPS = 1e-3;    // position tolerance
+
+  for (const shape of leafShapes) {
+    const refData = ref.data[shape.gid];
+    const curData = cur.data[shape.gid];
+    if (!refData || !curData) {
+      shape.label = 'default';
+      continue;
+    }
+    const rotDiffRad = normalizeAngle(curData.angle - refData.angle);
+    const rotDiffDeg = rotDiffRad * 180 / Math.PI;
+    const cosd = Math.cos(rotDiffRad);
+    const sind = Math.sin(rotDiffRad);
+    const refWx = refData.worldX;
+    const refWy = refData.worldY;
+    const rotatedRefX = refWx * cosd - refWy * sind;
+    const rotatedRefY = refWx * sind + refWy * cosd;
+    const dxWorld = curData.worldX - rotatedRefX;
+    const dyWorld = curData.worldY - rotatedRefY;
+    const cosRef = Math.cos(refData.angle);
+    const sinRef = Math.sin(refData.angle);
+    perShape.push({
+      shape,
+      rotDiffDeg,
+      dxWorld,
+      dyWorld,
+      cosRef,
+      sinRef
+    });
+  }
+
+  if (!perShape.length) {
+    updateColourInfo();
+    loop();
+    return;
+  }
+
+  let sumDX = 0, sumDY = 0;
+  for (const item of perShape) {
+    sumDX += item.dxWorld;
+    sumDY += item.dyWorld;
+  }
+  const avgDX = sumDX / perShape.length;
+  const avgDY = sumDY / perShape.length;
+
+  for (const item of perShape) {
+    const { shape, rotDiffDeg, dxWorld, dyWorld, cosRef, sinRef } = item;
+    const relDXWorld = dxWorld - avgDX;
+    const relDYWorld = dyWorld - avgDY;
+    const dx = relDXWorld * cosRef + relDYWorld * sinRef;
+    const dy = -relDXWorld * sinRef + relDYWorld * cosRef;
+    const keyParts = [
+      quantizeKey(rotDiffDeg, ROT_EPS, 3),
+      quantizeKey(dx, POS_EPS, 4),
+      quantizeKey(dy, POS_EPS, 4)
+    ];
+    const key = keyParts.join('|');
+    let group = groups.get(key);
+    if (!group) {
+      const colourKey = colourPalette[paletteIndex % colourPalette.length];
+      paletteIndex++;
+      group = {
+        colourKey,
+        rot: parseFloat(keyParts[0]),
+        dx: parseFloat(keyParts[1]),
+        dy: parseFloat(keyParts[2]),
+        mag: 0,
+        count: 0
+      };
+      if (Math.abs(group.rot) < 1e-10) group.rot = 0;
+      if (Math.abs(group.dx) < 1e-12) group.dx = 0;
+      if (Math.abs(group.dy) < 1e-12) group.dy = 0;
+      group.mag = Math.hypot(group.dx, group.dy);
+      groups.set(key, group);
+    }
+    group.count += 1;
+    shape.label = group.colourKey;
+  }
+  const summaries = Array.from(groups.values()).map(g => ({ ...g }));
+  summaries.sort((a, b) => a.colourKey.localeCompare(b.colourKey));
+  colourSummaries = summaries;
+}
+
+function refreshTileColours() {
+  ensureLeafShapes();
+  if (colourMode === 'motion') {
+    assignMotionColours();
+  } else {
+    clearShapeColours();
+  }
+  updateColourInfo();
+  loop();
+}
+
+function rgbToHex(rgb) {
+  if (!rgb) return '#bbbbbb';
+  return '#' + rgb.map(v => {
+    const clamped = Math.max(0, Math.min(255, Math.round(v)));
+    return clamped.toString(16).padStart(2, '0');
+  }).join('');
+}
+
+function updateColourInfo() {
+  if (!colour_table) return;
+
+  if (colourMode !== 'motion') {
+    colour_table.html('<div>Color mode: Plain<br/>Switch to <strong>Color: Motion Δ</strong> to list rotation and centroid offsets.</div>');
+    return;
+  }
+
+  if (!leafShapes.length) {
+    colour_table.html('<div>No tiles loaded.</div>');
+    return;
+  }
+
+  if (!colourSummaries.length) {
+    colour_table.html('<div>No motion differences computed yet.<br/>Adjust the slider away from the rightmost reference to see changes.</div>');
+    return;
+  }
+
+  const sorted = colourSummaries.slice();
+  sorted.sort((a, b) => {
+    let va, vb;
+    switch (sortField) {
+      case 'rot':
+        va = a.rot; vb = b.rot; break;
+      case 'dx':
+        va = a.dx; vb = b.dx; break;
+      case 'dy':
+        va = a.dy; vb = b.dy; break;
+      case 'mag':
+        va = a.mag; vb = b.mag; break;
+      case 'count':
+        va = a.count; vb = b.count; break;
+      case 'colour':
+      default:
+        return sortDir * a.colourKey.localeCompare(b.colourKey);
+    }
+    if (va < vb) return -1 * sortDir;
+    if (va > vb) return 1 * sortDir;
+    return a.colourKey.localeCompare(b.colourKey);
+  });
+
+  const headers = [
+    { field: 'colour', label: 'Colour' },
+    { field: 'rot', label: 'Δθ (deg)' },
+    { field: 'dx', label: 'Δcx' },
+    { field: 'dy', label: 'Δcy' },
+    { field: 'mag', label: '|Δc|' },
+    { field: 'count', label: 'Count' }
+  ];
+
+  const headerCells = headers.map(h => {
+    const active = sortField === h.field;
+    const arrow = active ? (sortDir === 1 ? '▲' : '▼') : '';
+    return `<th style="border-bottom:1px solid #666;padding:4px 6px;text-align:left;"><button type="button" style="background:none;border:none;padding:0;color:#0a58ca;cursor:pointer;font-family:inherit;font-size:12px;" onclick="setColourSort('${h.field}')">${h.label} ${arrow}</button></th>`;
+  }).join('');
+
+  const rows = sorted.map(entry => {
+    const rgb = colmap[entry.colourKey] || colmap.default;
+    const hex = rgbToHex(rgb);
+    return `
+      <tr>
+        <td style="padding:4px 6px;text-align:left;border-bottom:1px solid #ddd;"><span style="display:inline-block;width:18px;height:12px;margin-right:6px;border:1px solid #555;background:${hex};vertical-align:middle;"></span>${entry.colourKey}</td>
+        <td style="padding:4px 6px;text-align:right;border-bottom:1px solid #eee;">${entry.rot.toFixed(3)}</td>
+        <td style="padding:4px 6px;text-align:right;border-bottom:1px solid #eee;">${entry.dx.toFixed(4)}</td>
+        <td style="padding:4px 6px;text-align:right;border-bottom:1px solid #eee;">${entry.dy.toFixed(4)}</td>
+        <td style="padding:4px 6px;text-align:right;border-bottom:1px solid #eee;">${entry.mag.toFixed(4)}</td>
+        <td style="padding:4px 6px;text-align:right;border-bottom:1px solid #eee;">${entry.count}</td>
+      </tr>`;
+  }).join('');
+
+  const tableHTML = `
+    <table class="colour-summary" style="border-collapse:collapse;width:100%;min-width:340px;">
+      <thead><tr>${headerCells}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+  colour_table.html(tableHTML);
+}
+
+function setColourSort(field) {
+  if (sortField === field) {
+    sortDir *= -1;
+  } else {
+    sortField = field;
+    sortDir = 1;
+  }
+  updateColourInfo();
+}
+
+window.setColourSort = setColourSort;
+
+function computeCentroidPaths(samples = PATH_STEPS) {
+  ensureLeafShapes();
+  if (!leafShapes.length) return [];
+  const accum = new Map();
+  for (const shape of leafShapes) accum.set(shape.gid, []);
+  const steps = Math.max(1, samples);
+  for (let i = 0; i <= steps; ++i) {
+    const sliderVal = (i / steps) * 100;
+    const ab = sliderValueToAB(sliderVal);
+    const state = computeStateForAB(ab.a, ab.b);
+    if (!state.world) continue;
+    const total = mulAffine(user_ts, state.world);
+    for (const shape of leafShapes) {
+      const data = state.data[shape.gid];
+      if (!data) continue;
+      const pt = applyAffineToPoint(total, { x: data.localX, y: data.localY });
+      accum.get(shape.gid).push(pt);
+    }
+  }
+  return leafShapes.map(shape => ({ gid: shape.gid, points: accum.get(shape.gid) || [] }));
+}
+
+function drawCentroidPaths(paths) {
+  if (!paths || !paths.length) return;
+  push();
+  stroke(35, 35, 35, 190);
+  strokeWeight(1.2);
+  noFill();
+  for (const path of paths) {
+    const pts = path.points;
+    if (!pts || pts.length < 2) continue;
+    beginShape();
+    for (const p of pts) {
+      vertex(p.x + width/2, p.y + height/2);
+    }
+    endShape();
+  }
+  pop();
+}
+
+// -------------------- Analytic locks: R, S, T --------------------
+function ensureAnchor() {
+  if (refAB === null) {
+    const coeffs = refEdgeABForCurrentTile();
+    const v = ab_slider.value()/100.0;
+    const alpha = (1 + sqrt(3));
+    const a0 = alpha * v;
+    const b0 = alpha * (1 - v);
+    const tile = sys[tile_sel.value()];
+
+    // area anchor: mean per leaf
+    const area0 = areaPerLeafGivenAB(tile, a0, b0);
+
+    // centroid anchor: whole tile centroid
+    const tc0  = tileAreaAndCentroid(tile, a0, b0);
+
+    refAB = {
+      ...coeffs,
+      theta0: thetaFromABCoeffs(coeffs, a0, b0),
+      area0: area0,
+      c0x: tc0.cx,
+      c0y: tc0.cy
+    };
+  }
+}
+
+// Keep orientation fixed
+function rlockMatrix() {
+  ensureAnchor();
+  const theta = thetaFromABCoeffs(refAB, a, b);
+  const ang = refAB.theta0 - theta;
+  const c = Math.cos(ang), s = Math.sin(ang);
+  return [c, -s, 0, s, c, 0];
+}
+
+// Keep per-piece area constant
+function areaScaleMatrix() {
+  ensureAnchor();
+  const tile = sys[tile_sel.value()];
+  const Acur = areaPerLeafGivenAB(tile, a, b);
+  const A0 = refAB.area0;
+  const eps = 1e-12;
+  const s = (Acur > eps && A0 > eps) ? Math.sqrt(A0 / Acur) : 1;
+  return [s, 0, 0, 0, s, 0];
+}
+
+function centroidMatrix() {
+  return [1, 0, 0, 0, 1, 0];
+}
+
+function applyLockTranslation(worldMatrix, aa = a, bb = b) {
+  if (lockedShapeId === null || lockedShapeTargetWorld === null) return worldMatrix;
+  const lockedLocal = lockedShapeLocalFor(aa, bb);
+  if (!lockedLocal) return worldMatrix;
+  const current = applyAffineToPoint(worldMatrix, lockedLocal);
+  const dx = lockedShapeTargetWorld.x - current.x;
+  const dy = lockedShapeTargetWorld.y - current.y;
+  const trans = [1, 0, dx, 0, 1, dy];
+  return mulAffine(trans, worldMatrix);
+}
+
+function updateLockButtonLabel() {
+  if (!lock_button) return;
+  lock_button.html(lockedShapeId !== null ? "Clear Lock" : "No Lock");
+}
+
+function resetAnchor() {
+  refAB = null;
+  referenceState = null;
+}
+
+// -------------------- UI helpers --------------------
+function isButtonActive(but) { return but.elt.style.border.length > 0; }
+function setButtonActive(but, b) { but.elt.style.border = (b ? "3px solid black" : ""); }
+
+// -------------------- p5: setup/draw --------------------
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+
+  sys = buildBaseTiles();
+
+  reset_but = createButton("Reset");
+  reset_but.position(10, 10);
+  reset_but.size(125, 25);
+  reset_but.mousePressed(function() {
+    sys = buildBaseTiles();
+    user_ts = [20, 0, 0, 0, -20, 0];
+    lw_scale = 0.2;
+    ab_slider.value(100 / (1 + sqrt(3)), 0);
+    tile_sel.value('H8');
+    lockedShapeId = null;
+    lockedShapeTargetWorld = null;
+    updateLockButtonLabel();
+    rebuildLeafShapes();
+    resetAnchor();
+    refreshTileColours();
+  });
+
+  subst_button = createButton("Build Supertiles");
+  subst_button.position(10, 60);
+  subst_button.size(125, 25);
+  subst_button.mousePressed(function() {
+    sys = buildSupertiles(sys);
+    lockedShapeId = null;
+    lockedShapeTargetWorld = null;
+    updateLockButtonLabel();
+    resetAnchor();
+    rebuildLeafShapes();
+    refreshTileColours();
+  });
+
+  lab = createSpan('Category');
+  lab.position(10, 100);
+  lab.size(125, 15);
+
+  tile_sel = createSelect();
+  tile_sel.position(10, 120);
+  tile_sel.size(125, 25);
+  tile_sel.option('H7');
+  tile_sel.option('H8');
+  tile_sel.value('H8');
+  tile_sel.changed(function() {
+    lockedShapeId = null;
+    lockedShapeTargetWorld = null;
+    updateLockButtonLabel();
+    resetAnchor();
+    rebuildLeafShapes();
+    refreshTileColours();
+  });
+
+  ab_label = createSpan('Tile(1,1.732)');
+  ab_label.position(10, 155);
+  ab_label.size(125, 15);
+
+  ab_slider = createSlider(0, 100, 100 / (1 + sqrt(3)), 0);
+  ab_slider.position(10, 170);
+  ab_slider.size(125, 25);
+  ab_slider.input(function() {
+    if (colourMode === 'motion') {
+      refreshTileColours();
+    } else {
+      loop();
+    }
+  });
+
+  let but = createButton('Chevrons');
+  but.position(10, 210);
+  but.size(125, 25);
+  but.mousePressed(function() {
+    ab_slider.value(0);
+    if (colourMode === 'motion') {
+      refreshTileColours();
+    } else {
+      loop();
+    }
+  });
+
+  but = createButton('Hats');
+  but.position(10, 240);
+  but.size(125, 25);
+  but.mousePressed(function() {
+    ab_slider.value(100 / (1 + sqrt(3)));
+    if (colourMode === 'motion') {
+      refreshTileColours();
+    } else {
+      loop();
+    }
+  });
+
+  but = createButton('Tile(1,1)');
+  but.position(10, 270);
+  but.size(125, 25);
+  but.mousePressed(function() {
+    ab_slider.value(50);
+    if (colourMode === 'motion') {
+      refreshTileColours();
+    } else {
+      loop();
+    }
+  });
+
+  but = createButton('Turtles');
+  but.position(10, 300);
+  but.size(125, 25);
+  but.mousePressed(function() {
+    ab_slider.value(100 * sqrt(3) / (1 + sqrt(3)));
+    if (colourMode === 'motion') {
+      refreshTileColours();
+    } else {
+      loop();
+    }
+  });
+
+  but = createButton('Comets');
+  but.position(10, 330);
+  but.size(125, 25);
+  but.mousePressed(function() {
+    ab_slider.value(100);
+    if (colourMode === 'motion') {
+      refreshTileColours();
+    } else {
+      loop();
+    }
+  });
+
+  translate_button = createButton("Translate");
+  setButtonActive(translate_button, true);
+  translate_button.position(10, 370);
+  translate_button.size(125, 25);
+  translate_button.mousePressed(function() {
+    setButtonActive(translate_button, true);
+    setButtonActive(scale_button, false);
+    loop();
+  });
+
+  scale_button = createButton("Scale");
+  scale_button.position(10, 400);
+  scale_button.size(125, 25);
+  scale_button.mousePressed(function() {
+    setButtonActive(translate_button, false);
+    setButtonActive(scale_button, true);
+    loop();
+  });
+
+  let save_button = createButton("Save PNG");
+  save_button.position(10, 430);
+  save_button.size(125, 25);
+  save_button.mousePressed(function () {
+    uibox = false;
+    draw();
+    save("output.png");
+    uibox = true;
+    draw();
+  });
+
+  let svg_button = createButton("Save SVG");
+  svg_button.position(10, 460);
+  svg_button.size(125, 25);
+  svg_button.mousePressed(function () {
+    const stream = [];
+    const sliderAB = currentSliderAB();
+    withTemporaryAB(sliderAB.a, sliderAB.b, () => {
+      const R = rlockMatrix();
+      const S = areaScaleMatrix();
+      const RS = mulAffine(R, S);
+      const world = applyLockTranslation(mulAffine(RS, centroidMatrix()), sliderAB.a, sliderAB.b);
+      const total = mulAffine(user_ts, world);
+      stream.push(`<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">`);
+      stream.push(`<g transform="translate(${width/2},${height/2})">`);
+      const tile = sys[tile_sel.value()];
+      tile.streamSVG(total, stream);
+      const centres = [];
+      gatherShapeCentroids(tile, sliderAB.a, sliderAB.b, centres);
+      const r = 0.35;
+      for (const c of centres) {
+        const centre = transAffine(total, pt(c.cx, c.cy));
+        stream.push(`<circle cx="${centre.x}" cy="${centre.y}" r="${r}" fill="black" />`);
+      }
+      stream.push('</g>');
+      stream.push('</svg>');
+    });
+    saveStrings(stream, 'output', 'svg');
+  });
+
+  colour_button = createButton("Color: Plain");
+  colour_button.position(10, 490);
+  colour_button.size(125, 25);
+  colour_button.mousePressed(function () {
+    colourMode = (colourMode === 'plain') ? 'motion' : 'plain';
+    colour_button.html(colourMode === 'plain' ? "Color: Plain" : "Color: Motion Δ");
+    referenceState = null;
+    refreshTileColours();
+  });
+
+  lock_button = createButton("No Lock");
+  lock_button.position(10, 520);
+  lock_button.size(125, 25);
+  lock_button.mousePressed(function () {
+    lockedShapeId = null;
+    lockedShapeTargetWorld = null;
+    resetAnchor();
+    updateLockButtonLabel();
+    refreshTileColours();
+  });
+
+  updateLockButtonLabel();
+
+  colour_table = createDiv('');
+  colour_table.position(150, 10);
+  colour_table.size(360, 220);
+  colour_table.style('font-family', 'monospace');
+  colour_table.style('font-size', '12px');
+  colour_table.style('overflow', 'auto');
+  colour_table.style('background', 'rgba(255,255,255,0.9)');
+  colour_table.style('padding', '6px');
+  colour_table.style('border', '1px solid #aaa');
+
+  rebuildLeafShapes();
+  refreshTileColours();
+}
+
+function draw() {
+  background(255);
+
+  // slider -> a,b
+  const v = ab_slider.value() / 100.0;
+  const alpha = (1 + sqrt(3));
+  a = alpha * v;
+  b = alpha * (1 - v);
+  ab_label.html(`Tile( ${a.toFixed(2)}, ${b.toFixed(2)} )`);
+
+  // Compose analytic rotation, area, and whole-tile centroid locks
+  const R = rlockMatrix();
+  const S = areaScaleMatrix();
+  const RS = mulAffine(R, S);
+  const worldMatrix = applyLockTranslation(mulAffine(RS, centroidMatrix()), a, b);
+  const to_screen = mulAffine(user_ts, worldMatrix);
+
+  push();
+  translate(width/2, height/2);
+  applyMatrix(
+    to_screen[0], to_screen[3],
+    to_screen[1], to_screen[4],
+    to_screen[2], to_screen[5]
+  );
+  const tile = sys[tile_sel.value()];
+  tile.draw();
+  drawTileCentroids(tile, a, b);
+  pop();
+
+  const lockedLocal = lockedShapeLocalFor(a, b);
+  if (lockedShapeId !== null && lockedLocal) {
+    const screenPos = applyAffineToPoint(to_screen, lockedLocal);
+    push();
+    noFill();
+    stroke(220, 60, 60);
+    strokeWeight(2.0);
+    circle(screenPos.x + width/2, screenPos.y + height/2, 6);
+    pop();
+  }
+
+  const centroidPaths = computeCentroidPaths();
+  drawCentroidPaths(centroidPaths);
+
+  if (uibox) {
+    stroke(0);
+    strokeWeight(0.5);
+    fill(255, 220);
+    rect(5, 5, 135, 560);
+  }
+
+  noLoop();
+}
+
+function windowResized() { resizeCanvas(windowWidth, windowHeight); }
+
+// -------------------- Mouse interactions --------------------
+function mousePressed() {
+  if ((mouseX >= 5) && (mouseX <= 140)) return true;
+
+  dragging = true;
+  if (isButtonActive(scale_button)) {
+    // Include current R, S, T so scaling feels correct in screen space
+    const R = rlockMatrix();
+    const S = areaScaleMatrix();
+    const RS = mulAffine(R, S);
+    const world = applyLockTranslation(mulAffine(RS, centroidMatrix()), a, b);
+    const to_screen = mulAffine(user_ts, world);
+    scale_centre = transAffine(invAffine(to_screen), pt(width/2, height/2));
+    scale_start  = pt(mouseX, mouseY);
+    scale_ts     = [...user_ts];
+  }
+  loop();
+  return false;
+}
+
+function mouseDragged() {
+  if (!dragging) return true;
+
+  let changed = false;
+  if (isButtonActive(translate_button)) {
+    user_ts = mulAffine(ttransAffine(mouseX - pmouseX, mouseY - pmouseY), user_ts);
+    changed = true;
+  } else if (isButtonActive(scale_button)) {
+    const sc = dist(mouseX, mouseY, width/2, height/2) /
+               dist(scale_start.x, scale_start.y, width/2, height/2);
+    user_ts = mulAffine(
+      mulAffine(
+        ttransAffine(scale_centre.x, scale_centre.y),
+        mulAffine([sc, 0, 0, 0, sc, 0], ttransAffine(-scale_centre.x, -scale_centre.y))
+      ),
+      scale_ts
+    );
+    lw_scale = mag(user_ts[0], user_ts[1]) / 20.0;
+    changed = true;
+  }
+
+  if (changed) {
+    referenceState = null;
+    if (colourMode === 'motion') {
+      refreshTileColours();
+    } else {
+      loop();
+    }
+  } else {
+    loop();
+  }
+  return false;
+}
+
+function mouseReleased() { dragging = false; loop(); }
+
+function mouseClicked() {
+  if ((mouseX >= 5) && (mouseX <= 140) && (mouseY >= 5) && (mouseY <= 560)) return true;
+  ensureLeafShapes();
+  if (!leafShapes.length) return false;
+
+  const sliderAB = currentSliderAB();
+  let world = null;
+  withTemporaryAB(sliderAB.a, sliderAB.b, () => {
+    const R = rlockMatrix();
+    const S = areaScaleMatrix();
+    const RS = mulAffine(R, S);
+    world = applyLockTranslation(mulAffine(RS, centroidMatrix()), sliderAB.a, sliderAB.b);
+  });
+  const total = mulAffine(user_ts, world);
+  const invTotal = invAffine(total);
+  const localPt = transAffine(invTotal, pt(mouseX - width/2, mouseY - height/2));
+
+  let selected = null;
+  for (const shape of leafShapes) {
+    if (pointInShape(shape, { x: localPt.x, y: localPt.y }, sliderAB.a, sliderAB.b)) {
+      selected = shape;
+      break;
+    }
+  }
+
+  if (!selected) {
+    lockedShapeId = null;
+    lockedShapeTargetWorld = null;
+    resetAnchor();
+    referenceState = null;
+    refreshTileColours();
+    updateLockButtonLabel();
+    return false;
+  }
+
+  const prevLockId = lockedShapeId;
+  const prevLockTarget = lockedShapeTargetWorld;
+  lockedShapeId = null;
+  lockedShapeTargetWorld = null;
+
+  const state = computeStateForAB(sliderAB.a, sliderAB.b);
+  const data = state.data[selected.gid];
+  if (!data || !state.world) {
+    lockedShapeId = prevLockId;
+    lockedShapeTargetWorld = prevLockTarget;
+    updateLockButtonLabel();
+    resetAnchor();
+    refreshTileColours();
+    return false;
+  }
+  const local = { x: data.localX, y: data.localY };
+  const worldPreUser = applyAffineToPoint(state.world, local);
+
+  lockedShapeId = selected.gid;
+  lockedShapeTargetWorld = worldPreUser;
+  updateLockButtonLabel();
+  resetAnchor();
+  refreshTileColours();
+  return false;
+}
+</script>
+
+</body>
+</html>
