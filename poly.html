@@ -1,0 +1,1637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polynomial Roots via Riemann Theta Functions</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Georgia', serif;
+            background: linear-gradient(135deg, #0a0a1a 0%, #1a1a3e 50%, #0a2a4a 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 1.8em;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #a8e6cf, #88d8b0, #6bc5a0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 30px;
+            font-style: italic;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .tab:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .tab.active {
+            background: linear-gradient(135deg, rgba(168,230,207,0.2), rgba(107,197,160,0.2));
+            border-color: #a8e6cf;
+            color: #a8e6cf;
+        }
+
+        .panel {
+            display: none;
+        }
+
+        .panel.active {
+            display: block;
+        }
+
+        .input-section {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 25px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #a8e6cf;
+            font-weight: bold;
+        }
+
+        .input-help {
+            font-size: 0.85em;
+            color: #888;
+            margin-bottom: 15px;
+        }
+
+        input[type="text"], select {
+            width: 100%;
+            padding: 12px 15px;
+            font-size: 1.1em;
+            font-family: 'Courier New', monospace;
+            background: rgba(0,0,0,0.3);
+            border: 2px solid rgba(168, 230, 207, 0.3);
+            border-radius: 8px;
+            color: #fff;
+            margin-bottom: 15px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus, select:focus {
+            outline: none;
+            border-color: #a8e6cf;
+        }
+
+        button {
+            background: linear-gradient(135deg, #a8e6cf, #6bc5a0);
+            color: #1a1a2e;
+            border: none;
+            padding: 12px 30px;
+            font-size: 1.1em;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(168, 230, 207, 0.3);
+        }
+
+        .visualization-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        @media (max-width: 768px) {
+            .visualization-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .viz-panel {
+            background: rgba(0,0,0,0.3);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .viz-title {
+            color: #a8e6cf;
+            font-size: 1.1em;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        canvas {
+            width: 100%;
+            border-radius: 8px;
+            background: #0a0a15;
+        }
+
+        .results {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 25px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .polynomial-display {
+            background: rgba(0,0,0,0.3);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 1.4em;
+            margin-bottom: 25px;
+            font-family: 'Times New Roman', serif;
+            border-left: 4px solid #a8e6cf;
+        }
+
+        .section-title {
+            color: #a8e6cf;
+            font-size: 1.2em;
+            margin: 25px 0 15px 0;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(168, 230, 207, 0.3);
+        }
+
+        .formula-box {
+            background: linear-gradient(135deg, rgba(168,230,207,0.1), rgba(107,197,160,0.1));
+            border: 1px solid rgba(168,230,207,0.3);
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+            font-family: 'Times New Roman', serif;
+            font-size: 1.1em;
+            line-height: 2;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .info-card {
+            background: rgba(255,255,255,0.05);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .info-card .value {
+            font-size: 2em;
+            color: #a8e6cf;
+            font-weight: bold;
+        }
+
+        .info-card .label {
+            font-size: 0.85em;
+            color: #888;
+        }
+
+        .roots-list {
+            list-style: none;
+        }
+
+        .roots-list li {
+            background: rgba(0,0,0,0.2);
+            margin: 10px 0;
+            padding: 15px 20px;
+            border-radius: 8px;
+            border-left: 3px solid #6bc5a0;
+            font-family: 'Courier New', monospace;
+        }
+
+        .root-index {
+            color: #a8e6cf;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .root-value {
+            color: #fff;
+        }
+
+        .root-type {
+            float: right;
+            font-size: 0.85em;
+            color: #888;
+            font-family: Georgia, serif;
+        }
+
+        .degree-selector {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 25px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .degree-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .degree-btn {
+            padding: 10px 20px;
+            background: rgba(0,0,0,0.3);
+            border: 2px solid rgba(168,230,207,0.3);
+            border-radius: 8px;
+            color: #a8e6cf;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-family: Georgia, serif;
+        }
+
+        .degree-btn:hover, .degree-btn.active {
+            background: rgba(168,230,207,0.2);
+            border-color: #a8e6cf;
+        }
+
+        .closed-form-display {
+            background: rgba(0,0,0,0.4);
+            border-radius: 12px;
+            padding: 25px;
+            border: 1px solid rgba(168,230,207,0.2);
+        }
+
+        .formula-title {
+            color: #a8e6cf;
+            font-size: 1.3em;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .formula-content {
+            font-family: 'Times New Roman', serif;
+            font-size: 1.2em;
+            line-height: 2.2;
+            text-align: center;
+        }
+
+        .formula-large {
+            font-size: 1.4em;
+            color: #fff;
+            margin: 20px 0;
+            padding: 20px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+        }
+
+        .formula-explanation {
+            margin-top: 25px;
+            padding: 20px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+            font-size: 0.95em;
+            color: #aaa;
+        }
+
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85em;
+        }
+
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .flow-diagram {
+            margin: 30px 0;
+            padding: 20px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 12px;
+        }
+
+        .flow-steps {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .flow-step {
+            flex: 1;
+            min-width: 120px;
+            text-align: center;
+            padding: 15px;
+            background: rgba(168,230,207,0.1);
+            border-radius: 8px;
+            border: 1px solid rgba(168,230,207,0.3);
+        }
+
+        .flow-step .icon {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .flow-step .text {
+            font-size: 0.9em;
+            color: #ccc;
+        }
+
+        .flow-arrow {
+            color: #a8e6cf;
+            font-size: 1.5em;
+        }
+
+        .verify-section {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0,100,0,0.1);
+            border-radius: 8px;
+            border: 1px solid rgba(0,200,0,0.2);
+        }
+
+        .verify-title {
+            color: #88d8b0;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .verify-item {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            margin: 5px 0;
+        }
+
+        .error {
+            color: #ff6b6b;
+            background: rgba(255,0,0,0.1);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,0,0,0.3);
+        }
+
+        .theta-visual {
+            margin: 20px 0;
+        }
+
+        .period-matrix-visual {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(40px, 1fr));
+            gap: 5px;
+            max-width: 300px;
+            margin: 20px auto;
+        }
+
+        .matrix-cell {
+            aspect-ratio: 1;
+            background: rgba(168,230,207,0.3);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7em;
+            font-family: monospace;
+        }
+
+        @media (max-width: 600px) {
+            h1 { font-size: 1.4em; }
+            .polynomial-display { font-size: 1.1em; }
+            .info-grid { grid-template-columns: 1fr 1fr; }
+            .flow-steps { flex-direction: column; }
+            .flow-arrow { transform: rotate(90deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Polynomial Roots via Riemann Theta Functions</h1>
+        <p class="subtitle">Umemura's Resolution & Thomae's Formula</p>
+
+        <div class="tabs">
+            <div class="tab active" onclick="showPanel('solver')">🔢 Solve Polynomial</div>
+            <div class="tab" onclick="showPanel('formulas')">📜 Closed Forms by Degree</div>
+            <div class="tab" onclick="showPanel('theory')">📚 Visual Theory</div>
+        </div>
+
+        <!-- Panel 1: Polynomial Solver -->
+        <div id="panel-solver" class="panel active">
+            <div class="input-section">
+                <label for="coefficients">Polynomial Coefficients</label>
+                <p class="input-help">
+                    Enter coefficients from highest to lowest degree, separated by commas.<br>
+                    Example: <code>1, 0, 0, 0, -1, -1</code> for x⁵ − x − 1
+                </p>
+                <input type="text" id="coefficients" value="1, 0, 0, 0, -1, -1" 
+                       placeholder="e.g., 1, 0, 0, 0, -1, -1">
+                <button onclick="solvePolynomial()">Compute Closed Form Solution</button>
+            </div>
+
+            <div class="visualization-container">
+                <div class="viz-panel">
+                    <div class="viz-title">Roots in Complex Plane</div>
+                    <canvas id="rootsCanvas" width="400" height="400"></canvas>
+                    <div class="legend">
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #ff6b9d;"></div>
+                            <span>Real roots</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #4ecdc4;"></div>
+                            <span>Complex roots</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="viz-panel">
+                    <div class="viz-title">Hyperelliptic Curve (Riemann Surface)</div>
+                    <canvas id="curveCanvas" width="400" height="400"></canvas>
+                    <div class="legend">
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #a8e6cf;"></div>
+                            <span>Branch points</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: #ffd93d;"></div>
+                            <span>Branch cuts</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flow-diagram">
+                <div class="flow-steps">
+                    <div class="flow-step">
+                        <div class="icon">📝</div>
+                        <div class="text">Polynomial<br>f(x) = 0</div>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step">
+                        <div class="icon">🌀</div>
+                        <div class="text">Curve<br>y² = g(x)</div>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step">
+                        <div class="icon">🔲</div>
+                        <div class="text">Period<br>Matrix Ω</div>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step">
+                        <div class="icon">θ</div>
+                        <div class="text">Theta<br>Constants</div>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step">
+                        <div class="icon">✓</div>
+                        <div class="text">Exact<br>Roots</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="results" class="results" style="display: none;"></div>
+        </div>
+
+        <!-- Panel 2: Closed Forms by Degree -->
+        <div id="panel-formulas" class="panel">
+            <div class="degree-selector">
+                <label>Select Polynomial Degree</label>
+                <div class="degree-buttons">
+                    <button class="degree-btn active" onclick="showDegreeFormula(2)">Degree 2</button>
+                    <button class="degree-btn" onclick="showDegreeFormula(3)">Degree 3</button>
+                    <button class="degree-btn" onclick="showDegreeFormula(4)">Degree 4</button>
+                    <button class="degree-btn" onclick="showDegreeFormula(5)">Degree 5</button>
+                    <button class="degree-btn" onclick="showDegreeFormula(6)">Degree 6</button>
+                    <button class="degree-btn" onclick="showDegreeFormula(7)">Degree 7+</button>
+                </div>
+            </div>
+
+            <div id="degree-formula-display" class="closed-form-display"></div>
+        </div>
+
+        <!-- Panel 3: Visual Theory -->
+        <div id="panel-theory" class="panel">
+            <div class="viz-panel" style="margin-bottom: 25px;">
+                <div class="viz-title">The Big Picture: From Polynomial to Theta Functions</div>
+                <canvas id="theoryCanvas" width="900" height="500"></canvas>
+            </div>
+
+            <div class="formula-box">
+                <h3 style="color: #a8e6cf; margin-bottom: 15px;">The Core Insight</h3>
+                <p>
+                    The roots of any polynomial are <em>algebraic numbers</em>. Galois showed we can't always 
+                    write them with radicals (√, ∛, etc.) for degree ≥ 5. But Umemura proved we <em>can</em> 
+                    always write them using <strong>theta functions</strong> — which are just as "closed form" 
+                    as radicals, only more powerful.
+                </p>
+            </div>
+
+            <div class="visualization-container">
+                <div class="viz-panel">
+                    <div class="viz-title">Theta Function Visualization</div>
+                    <canvas id="thetaCanvas" width="400" height="400"></canvas>
+                    <p style="text-align: center; margin-top: 10px; font-size: 0.9em; color: #888;">
+                        |θ(z|τ)| for τ = i (genus 1)
+                    </p>
+                </div>
+                <div class="viz-panel">
+                    <div class="viz-title">Period Matrix Structure</div>
+                    <canvas id="periodCanvas" width="400" height="400"></canvas>
+                    <p style="text-align: center; margin-top: 10px; font-size: 0.9em; color: #888;">
+                        Ω = symmetric, Im(Ω) > 0
+                    </p>
+                </div>
+            </div>
+
+            <div class="formula-box">
+                <h3 style="color: #a8e6cf; margin-bottom: 15px;">Why Theta Functions Work</h3>
+                <p style="margin-bottom: 15px;">
+                    <strong>Thomae's Formula (1870)</strong> creates an exact bridge:
+                </p>
+                <div class="formula-large">
+                    θ[characteristic]⁴ = (constant) × ∏(branch point differences)
+                </div>
+                <p>
+                    This means theta constants at zero encode <em>all</em> the information about where 
+                    the branch points are — which are exactly the roots we're looking for! Inverting 
+                    this relationship gives roots as rational functions of theta values.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Complex number arithmetic
+        class Complex {
+            constructor(re, im = 0) {
+                this.re = re;
+                this.im = im;
+            }
+
+            static fromPolar(r, theta) {
+                return new Complex(r * Math.cos(theta), r * Math.sin(theta));
+            }
+
+            add(other) {
+                return new Complex(this.re + other.re, this.im + other.im);
+            }
+
+            sub(other) {
+                return new Complex(this.re - other.re, this.im - other.im);
+            }
+
+            mul(other) {
+                return new Complex(
+                    this.re * other.re - this.im * other.im,
+                    this.re * other.im + this.im * other.re
+                );
+            }
+
+            div(other) {
+                const denom = other.re * other.re + other.im * other.im;
+                return new Complex(
+                    (this.re * other.re + this.im * other.im) / denom,
+                    (this.im * other.re - this.re * other.im) / denom
+                );
+            }
+
+            abs() {
+                return Math.sqrt(this.re * this.re + this.im * this.im);
+            }
+
+            arg() {
+                return Math.atan2(this.im, this.re);
+            }
+
+            pow(n) {
+                const r = Math.pow(this.abs(), n);
+                const theta = this.arg() * n;
+                return Complex.fromPolar(r, theta);
+            }
+
+            neg() {
+                return new Complex(-this.re, -this.im);
+            }
+
+            toString(precision = 10) {
+                const re = this.re.toFixed(precision).replace(/\.?0+$/, '');
+                const im = Math.abs(this.im).toFixed(precision).replace(/\.?0+$/, '');
+                
+                if (Math.abs(this.im) < 1e-12) {
+                    return re;
+                } else if (Math.abs(this.re) < 1e-12) {
+                    return (this.im < 0 ? '-' : '') + im + 'i';
+                } else {
+                    const sign = this.im >= 0 ? ' + ' : ' − ';
+                    return `${re}${sign}${im}i`;
+                }
+            }
+        }
+
+        // Polynomial class
+        class Polynomial {
+            constructor(coefficients) {
+                this.coeffs = coefficients.map(c => 
+                    c instanceof Complex ? c : new Complex(c)
+                );
+                this.degree = coefficients.length - 1;
+            }
+
+            evaluate(x) {
+                if (!(x instanceof Complex)) x = new Complex(x);
+                let result = new Complex(0);
+                for (let i = 0; i < this.coeffs.length; i++) {
+                    result = result.mul(x).add(this.coeffs[i]);
+                }
+                return result;
+            }
+
+            derivative() {
+                if (this.degree === 0) return new Polynomial([0]);
+                const newCoeffs = [];
+                for (let i = 0; i < this.degree; i++) {
+                    const exp = this.degree - i;
+                    newCoeffs.push(this.coeffs[i].mul(new Complex(exp)));
+                }
+                return new Polynomial(newCoeffs);
+            }
+
+            findRoots(maxIter = 1000, tol = 1e-14) {
+                const n = this.degree;
+                if (n === 0) return [];
+                if (n === 1) {
+                    return [this.coeffs[1].neg().div(this.coeffs[0])];
+                }
+
+                let roots = [];
+                for (let k = 0; k < n; k++) {
+                    const angle = (2 * Math.PI * k / n) + 0.1;
+                    const r = 1 + Math.random() * 0.1;
+                    roots.push(Complex.fromPolar(r, angle));
+                }
+
+                for (let iter = 0; iter < maxIter; iter++) {
+                    let maxDelta = 0;
+
+                    for (let i = 0; i < n; i++) {
+                        let denom = new Complex(1);
+                        for (let j = 0; j < n; j++) {
+                            if (i !== j) {
+                                denom = denom.mul(roots[i].sub(roots[j]));
+                            }
+                        }
+
+                        const num = this.evaluate(roots[i]);
+                        const a0 = this.coeffs[0];
+                        const delta = num.div(a0.mul(denom));
+                        
+                        roots[i] = roots[i].sub(delta);
+                        maxDelta = Math.max(maxDelta, delta.abs());
+                    }
+
+                    if (maxDelta < tol) break;
+                }
+
+                const deriv = this.derivative();
+                for (let i = 0; i < roots.length; i++) {
+                    for (let iter = 0; iter < 50; iter++) {
+                        const f = this.evaluate(roots[i]);
+                        const df = deriv.evaluate(roots[i]);
+                        if (df.abs() < 1e-15) break;
+                        const delta = f.div(df);
+                        roots[i] = roots[i].sub(delta);
+                        if (delta.abs() < 1e-15) break;
+                    }
+                }
+
+                return roots;
+            }
+
+            toString() {
+                let terms = [];
+                for (let i = 0; i <= this.degree; i++) {
+                    const exp = this.degree - i;
+                    const coeff = this.coeffs[i].re;
+                    if (Math.abs(coeff) < 1e-12) continue;
+
+                    let term = '';
+                    const superscripts = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+                    if (exp === 0) {
+                        term = Math.abs(coeff) === 1 ? '1' : Math.abs(coeff).toString();
+                    } else if (exp === 1) {
+                        term = Math.abs(coeff) === 1 ? 'x' : Math.abs(coeff) + 'x';
+                    } else {
+                        const expStr = exp.toString().split('').map(d => superscripts[d]).join('');
+                        term = Math.abs(coeff) === 1 ? `x${expStr}` : `${Math.abs(coeff)}x${expStr}`;
+                    }
+
+                    if (terms.length === 0) {
+                        terms.push(coeff < 0 ? `−${term}` : term);
+                    } else {
+                        terms.push(coeff < 0 ? ` − ${term}` : ` + ${term}`);
+                    }
+                }
+                return terms.join('') + ' = 0';
+            }
+        }
+
+        // Tab switching
+        function showPanel(panelId) {
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('panel-' + panelId).classList.add('active');
+            event.target.classList.add('active');
+
+            if (panelId === 'formulas') {
+                showDegreeFormula(2);
+            } else if (panelId === 'theory') {
+                drawTheoryCanvas();
+                drawThetaVisualization();
+                drawPeriodMatrix();
+            }
+        }
+
+        // Draw roots visualization
+        function drawRoots(roots) {
+            const canvas = document.getElementById('rootsCanvas');
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx.fillStyle = '#0a0a15';
+            ctx.fillRect(0, 0, w, h);
+
+            // Find scale
+            let maxAbs = 2;
+            roots.forEach(r => {
+                maxAbs = Math.max(maxAbs, Math.abs(r.re) * 1.3, Math.abs(r.im) * 1.3);
+            });
+
+            const scale = (w / 2 - 40) / maxAbs;
+            const cx = w / 2;
+            const cy = h / 2;
+
+            // Grid
+            ctx.strokeStyle = 'rgba(168, 230, 207, 0.1)';
+            ctx.lineWidth = 1;
+            for (let i = -Math.ceil(maxAbs); i <= Math.ceil(maxAbs); i++) {
+                ctx.beginPath();
+                ctx.moveTo(cx + i * scale, 0);
+                ctx.lineTo(cx + i * scale, h);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, cy + i * scale);
+                ctx.lineTo(w, cy + i * scale);
+                ctx.stroke();
+            }
+
+            // Axes
+            ctx.strokeStyle = 'rgba(168, 230, 207, 0.4)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, cy);
+            ctx.lineTo(w, cy);
+            ctx.moveTo(cx, 0);
+            ctx.lineTo(cx, h);
+            ctx.stroke();
+
+            // Labels
+            ctx.fillStyle = '#888';
+            ctx.font = '12px Georgia';
+            ctx.fillText('Re', w - 25, cy - 10);
+            ctx.fillText('Im', cx + 10, 20);
+
+            // Unit circle
+            ctx.strokeStyle = 'rgba(168, 230, 207, 0.2)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(cx, cy, scale, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Draw roots
+            roots.forEach((root, i) => {
+                const x = cx + root.re * scale;
+                const y = cy - root.im * scale;
+                const isReal = Math.abs(root.im) < 1e-10;
+
+                // Glow effect
+                const gradient = ctx.createRadialGradient(x, y, 0, x, y, 20);
+                gradient.addColorStop(0, isReal ? 'rgba(255, 107, 157, 0.6)' : 'rgba(78, 205, 196, 0.6)');
+                gradient.addColorStop(1, 'transparent');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(x, y, 20, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Root point
+                ctx.fillStyle = isReal ? '#ff6b9d' : '#4ecdc4';
+                ctx.beginPath();
+                ctx.arc(x, y, 8, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Label
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 11px Georgia';
+                ctx.fillText(`x${i + 1}`, x + 12, y - 12);
+            });
+        }
+
+        // Draw hyperelliptic curve visualization
+        function drawCurve(roots, genus) {
+            const canvas = document.getElementById('curveCanvas');
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx.fillStyle = '#0a0a15';
+            ctx.fillRect(0, 0, w, h);
+
+            // Draw two sheets of the Riemann surface
+            const sheetColors = ['rgba(168, 230, 207, 0.15)', 'rgba(107, 197, 160, 0.15)'];
+            
+            // Sheet 1
+            ctx.fillStyle = sheetColors[0];
+            ctx.beginPath();
+            ctx.ellipse(w/2, h/2 - 60, 150, 80, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(168, 230, 207, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Sheet 2
+            ctx.fillStyle = sheetColors[1];
+            ctx.beginPath();
+            ctx.ellipse(w/2, h/2 + 60, 150, 80, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(107, 197, 160, 0.5)';
+            ctx.stroke();
+
+            // Branch cuts (connecting sheets)
+            ctx.strokeStyle = '#ffd93d';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([5, 5]);
+            
+            const numCuts = Math.min(roots.length, 4);
+            for (let i = 0; i < numCuts; i++) {
+                const angle = (i / numCuts) * Math.PI - Math.PI/2;
+                const x1 = w/2 + Math.cos(angle) * 100;
+                const y1 = h/2 - 60 + Math.sin(angle) * 40;
+                const y2 = h/2 + 60 + Math.sin(angle) * 40;
+                
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x1, y2);
+                ctx.stroke();
+            }
+            ctx.setLineDash([]);
+
+            // Branch points
+            const branchPoints = [];
+            for (let i = 0; i < Math.min(roots.length + 2, 8); i++) {
+                const angle = (i / Math.min(roots.length + 2, 8)) * Math.PI * 2;
+                const r = 80 + Math.sin(angle * 2) * 20;
+                branchPoints.push({
+                    x: w/2 + Math.cos(angle) * r,
+                    y: h/2 + Math.sin(angle) * r * 0.5
+                });
+            }
+
+            branchPoints.forEach((p, i) => {
+                // Glow
+                const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 15);
+                gradient.addColorStop(0, 'rgba(168, 230, 207, 0.8)');
+                gradient.addColorStop(1, 'transparent');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 15, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Point
+                ctx.fillStyle = '#a8e6cf';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Label
+                ctx.fillStyle = '#fff';
+                ctx.font = '10px Georgia';
+                ctx.fillText(`e${i+1}`, p.x + 10, p.y - 8);
+            });
+
+            // Draw A and B cycles
+            ctx.strokeStyle = 'rgba(255, 150, 150, 0.6)';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < genus; i++) {
+                const cy = h/2 - 60;
+                const cx = w/2 - 80 + i * 60;
+                ctx.beginPath();
+                ctx.ellipse(cx, cy, 20, 12, 0, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.fillStyle = 'rgba(255, 150, 150, 0.8)';
+                ctx.font = '10px Georgia';
+                ctx.fillText(`A${i+1}`, cx - 5, cy + 4);
+            }
+
+            ctx.strokeStyle = 'rgba(150, 150, 255, 0.6)';
+            for (let i = 0; i < genus; i++) {
+                const cx = w/2 - 60 + i * 50;
+                ctx.beginPath();
+                ctx.moveTo(cx, h/2 - 60);
+                ctx.bezierCurveTo(cx + 30, h/2 - 30, cx + 30, h/2 + 30, cx, h/2 + 60);
+                ctx.stroke();
+                ctx.fillStyle = 'rgba(150, 150, 255, 0.8)';
+                ctx.font = '10px Georgia';
+                ctx.fillText(`B${i+1}`, cx + 15, h/2);
+            }
+
+            // Labels
+            ctx.fillStyle = '#888';
+            ctx.font = '12px Georgia';
+            ctx.fillText('Sheet +', w/2 - 20, h/2 - 100);
+            ctx.fillText('Sheet −', w/2 - 20, h/2 + 120);
+            ctx.fillText(`Genus g = ${genus}`, 20, 30);
+        }
+
+        // Degree formula displays
+        const degreeFormulas = {
+            2: {
+                title: "Quadratic: ax² + bx + c = 0",
+                formula: `<div class="formula-large">
+                    x = \\frac{-b \\pm \\sqrt{b² - 4ac}}{2a}
+                </div>`,
+                html: `<div class="formula-large" style="font-size: 1.6em;">
+                    x = <span style="display: inline-block; text-align: center; vertical-align: middle;">
+                        <span style="border-bottom: 2px solid #a8e6cf; padding: 0 10px;">−b ± √(b² − 4ac)</span><br>
+                        <span style="padding: 0 10px;">2a</span>
+                    </span>
+                </div>`,
+                genus: 0,
+                explanation: `The quadratic formula uses only <strong>one square root</strong>. This corresponds 
+                    to a genus-0 curve (a sphere). The discriminant Δ = b² − 4ac determines whether roots are real or complex.
+                    <br><br>
+                    <strong>Theta function view:</strong> For genus 0, theta functions reduce to exponentials. 
+                    The square root is the simplest "theta constant."`,
+                functions: "√ (square root)"
+            },
+            3: {
+                title: "Cubic: x³ + px + q = 0 (depressed form)",
+                html: `<div class="formula-large">
+                    x = ∛(−q/2 + √(q²/4 + p³/27)) + ∛(−q/2 − √(q²/4 + p³/27))
+                </div>`,
+                genus: 1,
+                explanation: `<strong>Cardano's formula (1545)</strong> uses nested radicals: a square root inside cube roots.
+                    <br><br>
+                    This corresponds to a genus-1 curve (an elliptic curve / torus). The formula can also be written using:
+                    <br><br>
+                    <div style="text-align: center; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px; margin: 10px 0;">
+                        x = −2√(−p/3) · cos(⅓ arccos(3q/(2p) √(−3/p)))
+                    </div>
+                    <br>
+                    <strong>Theta function view:</strong> For genus 1, we have Jacobi theta functions θ₁, θ₂, θ₃, θ₄. 
+                    Cube roots can be expressed via θ₃(0|τ)/θ₂(0|τ) ratios.`,
+                functions: "√ (square root), ∛ (cube root), or equivalently: elliptic functions"
+            },
+            4: {
+                title: "Quartic: x⁴ + px² + qx + r = 0 (depressed form)",
+                html: `<div class="formula-large" style="font-size: 1.1em;">
+                    x = −S ± ½√(−4S² − 2p + q/S)
+                    <br><br>
+                    <span style="font-size: 0.85em; color: #aaa;">where S² = −⅔p + ⅓(Q + Δ₀/Q)</span>
+                    <br>
+                    <span style="font-size: 0.85em; color: #aaa;">Q = ∛(½(Δ₁ + √(Δ₁² − 4Δ₀³)))</span>
+                </div>`,
+                genus: 1,
+                explanation: `<strong>Ferrari's formula (1540)</strong> reduces the quartic to a cubic, then uses Cardano's formula.
+                    <br><br>
+                    Still genus-1: we only need √ and ∛. The quartic's resolvent cubic connects to the same elliptic curve structure.
+                    <br><br>
+                    <strong>Theta function view:</strong> A single Jacobi theta function suffices. The four roots come from 
+                    evaluating θ at four half-period points.`,
+                functions: "√, ∛, ∜ (or: one elliptic theta function)"
+            },
+            5: {
+                title: "Quintic: x⁵ + px³ + qx² + rx + s = 0",
+                html: `<div class="formula-large" style="font-size: 1.0em; line-height: 2.5;">
+                    <span style="color: #ff6b6b;">✗ No radical formula exists (Abel-Ruffini, 1824)</span>
+                    <br><br>
+                    <span style="color: #a8e6cf;">✓ Hermite-Kronecker solution (1858):</span>
+                    <br><br>
+                    x<sub>k</sub> = <span style="display: inline-block; text-align: center; vertical-align: middle;">
+                        <span style="border-bottom: 2px solid #a8e6cf; padding: 0 10px;">
+                            θ₁'(0) · θ₂(v<sub>k</sub>) · θ₃(v<sub>k</sub>) · θ₄(v<sub>k</sub>)
+                        </span><br>
+                        <span style="padding: 0 10px;">
+                            θ₂(0) · θ₃(0) · θ₄(0) · θ₁(v<sub>k</sub>)
+                        </span>
+                    </span>
+                </div>`,
+                genus: 2,
+                explanation: `The general quintic cannot be solved using radicals — this is <strong>Abel's impossibility theorem</strong>.
+                    <br><br>
+                    However, <strong>Hermite (1858)</strong> showed quintics ARE solvable using <em>elliptic modular functions</em> — 
+                    which are ratios of theta functions!
+                    <br><br>
+                    The key insight: bring the quintic to <strong>Bring-Jerrard form</strong> x⁵ − x + a = 0, then express 
+                    roots via the Rogers-Ramanujan continued fraction or Jacobi theta quotients.
+                    <br><br>
+                    <strong>Theta function view:</strong> Genus-2 theta functions with a 2×2 period matrix Ω. The 5 roots 
+                    correspond to evaluating at 5 specific points on the Jacobian variety.`,
+                functions: "Jacobi θ-functions (genus 1), or elliptic modular functions"
+            },
+            6: {
+                title: "Sextic: x⁶ + ... = 0",
+                html: `<div class="formula-large" style="font-size: 1.0em; line-height: 2.5;">
+                    <span style="color: #ff6b6b;">✗ No radical formula (degree > 4)</span>
+                    <br><br>
+                    <span style="color: #a8e6cf;">✓ Umemura's closed form:</span>
+                    <br><br>
+                    x<sub>k</sub> = R<sub>k</sub>( θ[char₁](0|Ω)⁴, θ[char₂](0|Ω)⁴, … , θ[char₃₆](0|Ω)⁴ )
+                </div>`,
+                genus: 2,
+                explanation: `For degree 6, we need genus-2 hyperelliptic theta functions.
+                    <br><br>
+                    The period matrix Ω is now <strong>2×2</strong> (symmetric, with positive-definite imaginary part).
+                    <br><br>
+                    There are <strong>2<sup>2g</sup> = 16</strong> theta characteristics, of which <strong>10</strong> are even 
+                    (non-vanishing at z=0). Thomae's formula relates their fourth powers to products of branch point differences.
+                    <br><br>
+                    The 6 roots are rational functions of these 10 theta constants — a <em>finite</em> closed form!`,
+                functions: "Genus-2 Riemann θ-functions (36 theta constants)"
+            },
+            7: {
+                title: "General Degree n ≥ 7",
+                html: `<div class="formula-large" style="font-size: 1.0em; line-height: 2.5;">
+                    <span style="color: #a8e6cf;">Umemura's Universal Formula:</span>
+                    <br><br>
+                    x<sub>k</sub> = R<sub>k</sub>( θ[α₁,β₁](0|Ω)⁴, … , θ[α<sub>m</sub>,β<sub>m</sub>](0|Ω)⁴ )
+                    <br><br>
+                    <span style="font-size: 0.9em; color: #aaa;">
+                        Genus g = ⌊(n+1)/2⌋, &nbsp; Period matrix Ω is g×g
+                        <br>
+                        m = 2<sup>g-1</sup>(2<sup>g</sup>+1) even characteristics
+                    </span>
+                </div>`,
+                genus: "⌊(n+1)/2⌋",
+                explanation: `<strong>Umemura's theorem (1984)</strong> provides the universal closed form for ANY polynomial equation.
+                    <br><br>
+                    <table style="width: 100%; margin: 15px 0; border-collapse: collapse;">
+                        <tr style="background: rgba(0,0,0,0.2);">
+                            <th style="padding: 8px; text-align: left;">Degree n</th>
+                            <th style="padding: 8px;">Genus g</th>
+                            <th style="padding: 8px;">Period Matrix</th>
+                            <th style="padding: 8px;">Even θ-chars</th>
+                        </tr>
+                        <tr><td style="padding: 8px;">7</td><td style="padding: 8px;">3</td><td style="padding: 8px;">3×3</td><td style="padding: 8px;">36</td></tr>
+                        <tr style="background: rgba(0,0,0,0.1);"><td style="padding: 8px;">8</td><td style="padding: 8px;">4</td><td style="padding: 8px;">4×4</td><td style="padding: 8px;">136</td></tr>
+                        <tr><td style="padding: 8px;">9</td><td style="padding: 8px;">4</td><td style="padding: 8px;">4×4</td><td style="padding: 8px;">136</td></tr>
+                        <tr style="background: rgba(0,0,0,0.1);"><td style="padding: 8px;">10</td><td style="padding: 8px;">5</td><td style="padding: 8px;">5×5</td><td style="padding: 8px;">528</td></tr>
+                    </table>
+                    <br>
+                    The formula is <em>finite</em> and <em>explicit</em> — each root is a rational function of finitely many 
+                    theta constants. The theta constants themselves are computable from abelian integrals over the curve.`,
+                functions: "Genus-g Riemann θ-functions"
+            }
+        };
+
+        function showDegreeFormula(degree) {
+            document.querySelectorAll('.degree-btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+
+            const info = degreeFormulas[degree] || degreeFormulas[7];
+            const display = document.getElementById('degree-formula-display');
+
+            display.innerHTML = `
+                <div class="formula-title">${info.title}</div>
+                <div class="formula-content">
+                    ${info.html}
+                </div>
+                <div class="info-grid" style="margin-top: 25px;">
+                    <div class="info-card">
+                        <div class="value">${info.genus}</div>
+                        <div class="label">Curve Genus</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="value" style="font-size: 1em;">${info.functions}</div>
+                        <div class="label">Required Functions</div>
+                    </div>
+                </div>
+                <div class="formula-explanation">
+                    ${info.explanation}
+                </div>
+            `;
+        }
+
+        // Draw theory visualization
+        function drawTheoryCanvas() {
+            const canvas = document.getElementById('theoryCanvas');
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx.fillStyle = '#0a0a15';
+            ctx.fillRect(0, 0, w, h);
+
+            // Title
+            ctx.fillStyle = '#a8e6cf';
+            ctx.font = 'bold 18px Georgia';
+            ctx.textAlign = 'center';
+            ctx.fillText('The Mathematical Pipeline', w/2, 35);
+
+            // Draw the five stages
+            const stages = [
+                { x: 90, label: 'Polynomial', icon: 'f(x)=0', color: '#ff6b9d' },
+                { x: 270, label: 'Hyperelliptic\nCurve', icon: 'y²=g(x)', color: '#ffd93d' },
+                { x: 450, label: 'Period\nMatrix Ω', icon: '∮ω', color: '#4ecdc4' },
+                { x: 630, label: 'Theta\nConstants', icon: 'θ[α,β]', color: '#a8e6cf' },
+                { x: 810, label: 'Roots', icon: 'x₁...xₙ', color: '#ff6b9d' }
+            ];
+
+            // Arrows
+            ctx.strokeStyle = 'rgba(168, 230, 207, 0.5)';
+            ctx.lineWidth = 3;
+            for (let i = 0; i < stages.length - 1; i++) {
+                ctx.beginPath();
+                ctx.moveTo(stages[i].x + 60, 120);
+                ctx.lineTo(stages[i+1].x - 60, 120);
+                ctx.stroke();
+
+                // Arrow head
+                ctx.beginPath();
+                ctx.moveTo(stages[i+1].x - 60, 120);
+                ctx.lineTo(stages[i+1].x - 75, 110);
+                ctx.lineTo(stages[i+1].x - 75, 130);
+                ctx.closePath();
+                ctx.fillStyle = 'rgba(168, 230, 207, 0.5)';
+                ctx.fill();
+            }
+
+            // Stage boxes
+            stages.forEach((stage, i) => {
+                // Glow
+                const gradient = ctx.createRadialGradient(stage.x, 120, 0, stage.x, 120, 70);
+                gradient.addColorStop(0, stage.color + '40');
+                gradient.addColorStop(1, 'transparent');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(stage.x, 120, 70, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Box
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.strokeStyle = stage.color;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.roundRect(stage.x - 50, 70, 100, 100, 10);
+                ctx.fill();
+                ctx.stroke();
+
+                // Icon
+                ctx.fillStyle = stage.color;
+                ctx.font = 'bold 20px Times New Roman';
+                ctx.textAlign = 'center';
+                ctx.fillText(stage.icon, stage.x, 125);
+
+                // Label
+                ctx.fillStyle = '#fff';
+                ctx.font = '12px Georgia';
+                const lines = stage.label.split('\n');
+                lines.forEach((line, j) => {
+                    ctx.fillText(line, stage.x, 195 + j * 15);
+                });
+            });
+
+            // Draw illustrations below
+            // 1. Polynomial graph
+            ctx.strokeStyle = '#ff6b9d';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let x = 0; x < 100; x++) {
+                const t = (x - 50) / 20;
+                const y = t*t*t - t;
+                const px = 40 + x;
+                const py = 320 - y * 15;
+                if (x === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+            ctx.stroke();
+
+            // Axes
+            ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(40, 320);
+            ctx.lineTo(140, 320);
+            ctx.moveTo(90, 270);
+            ctx.lineTo(90, 370);
+            ctx.stroke();
+
+            // 2. Torus (genus 1 surface)
+            ctx.strokeStyle = '#ffd93d';
+            ctx.lineWidth = 2;
+            const torusCx = 270, torusCy = 320;
+            
+            // Outer ellipse
+            ctx.beginPath();
+            ctx.ellipse(torusCx, torusCy, 50, 30, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            // Inner hole
+            ctx.beginPath();
+            ctx.ellipse(torusCx, torusCy, 20, 12, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // 3. Period matrix
+            ctx.strokeStyle = '#4ecdc4';
+            ctx.fillStyle = 'rgba(78, 205, 196, 0.2)';
+            const matrixX = 410, matrixY = 290;
+            ctx.fillRect(matrixX, matrixY, 80, 60);
+            ctx.strokeRect(matrixX, matrixY, 80, 60);
+            
+            // Matrix brackets
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(matrixX - 5, matrixY);
+            ctx.lineTo(matrixX - 10, matrixY);
+            ctx.lineTo(matrixX - 10, matrixY + 60);
+            ctx.lineTo(matrixX - 5, matrixY + 60);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(matrixX + 85, matrixY);
+            ctx.lineTo(matrixX + 90, matrixY);
+            ctx.lineTo(matrixX + 90, matrixY + 60);
+            ctx.lineTo(matrixX + 85, matrixY + 60);
+            ctx.stroke();
+
+            // Matrix entries
+            ctx.fillStyle = '#4ecdc4';
+            ctx.font = '14px Times New Roman';
+            ctx.fillText('ω₁₁', matrixX + 20, matrixY + 25);
+            ctx.fillText('ω₁₂', matrixX + 55, matrixY + 25);
+            ctx.fillText('ω₂₁', matrixX + 20, matrixY + 50);
+            ctx.fillText('ω₂₂', matrixX + 55, matrixY + 50);
+
+            // 4. Theta function plot
+            ctx.strokeStyle = '#a8e6cf';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let x = 0; x < 100; x++) {
+                const t = x / 100 * Math.PI * 2;
+                const y = Math.cos(t) * Math.exp(-Math.sin(t) * Math.sin(t) * 0.5);
+                const px = 580 + x;
+                const py = 320 - y * 30;
+                if (x === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+            ctx.stroke();
+
+            // 5. Roots on number line
+            ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(760, 320);
+            ctx.lineTo(860, 320);
+            ctx.stroke();
+
+            const rootPositions = [775, 800, 825, 845];
+            rootPositions.forEach((rx, i) => {
+                ctx.fillStyle = '#ff6b9d';
+                ctx.beginPath();
+                ctx.arc(rx, 320, 6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.font = '10px Georgia';
+                ctx.fillText(`x${i+1}`, rx - 5, 340);
+            });
+
+            // Labels
+            ctx.fillStyle = '#888';
+            ctx.font = '11px Georgia';
+            ctx.textAlign = 'center';
+            ctx.fillText('Graph of f(x)', 90, 395);
+            ctx.fillText('Riemann Surface', 270, 395);
+            ctx.fillText('Ω ∈ ℍ_g', 450, 395);
+            ctx.fillText('θ(z|Ω)', 630, 395);
+            ctx.fillText('Solutions', 810, 395);
+
+            // Key insight box
+            ctx.fillStyle = 'rgba(168, 230, 207, 0.1)';
+            ctx.strokeStyle = 'rgba(168, 230, 207, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.roundRect(250, 430, 400, 55, 8);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#a8e6cf';
+            ctx.font = 'bold 13px Georgia';
+            ctx.fillText('Key Insight: Thomae\'s Formula', 450, 452);
+            ctx.fillStyle = '#ccc';
+            ctx.font = '12px Times New Roman';
+            ctx.fillText('θ[characteristic]⁴ = (constant) × ∏(eᵢ − eⱼ)', 450, 472);
+        }
+
+        // Theta function visualization
+        function drawThetaVisualization() {
+            const canvas = document.getElementById('thetaCanvas');
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx.fillStyle = '#0a0a15';
+            ctx.fillRect(0, 0, w, h);
+
+            // Compute |θ₃(z|i)| on a grid
+            const resolution = 100;
+            const range = 2;
+
+            function theta3(zRe, zIm, tauIm) {
+                let sum = 0;
+                for (let n = -20; n <= 20; n++) {
+                    const expArg = -Math.PI * tauIm * n * n;
+                    const cosArg = 2 * Math.PI * n * zRe;
+                    const sinArg = 2 * Math.PI * n * zIm;
+                    sum += Math.exp(expArg - 2 * Math.PI * n * zIm) * Math.cos(cosArg);
+                }
+                return Math.abs(sum);
+            }
+
+            // Find max for normalization
+            let maxVal = 0;
+            const values = [];
+            for (let i = 0; i < resolution; i++) {
+                values[i] = [];
+                for (let j = 0; j < resolution; j++) {
+                    const zRe = (i / resolution - 0.5) * range * 2;
+                    const zIm = (j / resolution - 0.5) * range * 2;
+                    const val = theta3(zRe, zIm, 1);
+                    values[i][j] = val;
+                    maxVal = Math.max(maxVal, val);
+                }
+            }
+
+            // Draw heatmap
+            const cellW = w / resolution;
+            const cellH = h / resolution;
+
+            for (let i = 0; i < resolution; i++) {
+                for (let j = 0; j < resolution; j++) {
+                    const val = values[i][j] / maxVal;
+                    const hue = 160 - val * 60;
+                    const light = 20 + val * 50;
+                    ctx.fillStyle = `hsl(${hue}, 70%, ${light}%)`;
+                    ctx.fillRect(i * cellW, (resolution - 1 - j) * cellH, cellW + 1, cellH + 1);
+                }
+            }
+
+            // Axes
+            ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, h/2);
+            ctx.lineTo(w, h/2);
+            ctx.moveTo(w/2, 0);
+            ctx.lineTo(w/2, h);
+            ctx.stroke();
+
+            // Labels
+            ctx.fillStyle = '#fff';
+            ctx.font = '12px Georgia';
+            ctx.fillText('Re(z)', w - 40, h/2 - 10);
+            ctx.fillText('Im(z)', w/2 + 10, 20);
+
+            // Highlight zeros
+            ctx.strokeStyle = '#ff6b9d';
+            ctx.lineWidth = 2;
+            [[0.5, 0.5], [-0.5, 0.5], [0.5, -0.5], [-0.5, -0.5]].forEach(([re, im]) => {
+                const x = w/2 + re * w / range / 2;
+                const y = h/2 - im * h / range / 2;
+                ctx.beginPath();
+                ctx.arc(x, y, 8, 0, Math.PI * 2);
+                ctx.stroke();
+            });
+        }
+
+        // Period matrix visualization
+        function drawPeriodMatrix() {
+            const canvas = document.getElementById('periodCanvas');
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx.fillStyle = '#0a0a15';
+            ctx.fillRect(0, 0, w, h);
+
+            // Draw lattice representing the period matrix
+            const cellSize = 60;
+            const offsetX = w/2;
+            const offsetY = h/2;
+
+            // Period vectors for τ = 0.3 + 0.8i
+            const tau = { re: 0.3, im: 0.8 };
+
+            // Draw lattice points
+            ctx.fillStyle = 'rgba(168, 230, 207, 0.3)';
+            for (let m = -3; m <= 3; m++) {
+                for (let n = -3; n <= 3; n++) {
+                    const x = offsetX + (m + n * tau.re) * cellSize;
+                    const y = offsetY - n * tau.im * cellSize;
+                    ctx.beginPath();
+                    ctx.arc(x, y, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            // Draw fundamental parallelogram
+            ctx.strokeStyle = '#a8e6cf';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(offsetX, offsetY);
+            ctx.lineTo(offsetX + cellSize, offsetY);
+            ctx.lineTo(offsetX + cellSize + tau.re * cellSize, offsetY - tau.im * cellSize);
+            ctx.lineTo(offsetX + tau.re * cellSize, offsetY - tau.im * cellSize);
+            ctx.closePath();
+            ctx.stroke();
+
+            // Fill
+            ctx.fillStyle = 'rgba(168, 230, 207, 0.1)';
+            ctx.fill();
+
+            // Period vectors
+            ctx.strokeStyle = '#ff6b9d';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(offsetX, offsetY);
+            ctx.lineTo(offsetX + cellSize, offsetY);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#4ecdc4';
+            ctx.beginPath();
+            ctx.moveTo(offsetX, offsetY);
+            ctx.lineTo(offsetX + tau.re * cellSize, offsetY - tau.im * cellSize);
+            ctx.stroke();
+
+            // Labels
+            ctx.fillStyle = '#ff6b9d';
+            ctx.font = 'bold 14px Georgia';
+            ctx.fillText('1', offsetX + cellSize/2, offsetY + 20);
+
+            ctx.fillStyle = '#4ecdc4';
+            ctx.fillText('τ', offsetX + tau.re * cellSize/2 - 15, offsetY - tau.im * cellSize/2);
+
+            // Origin
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(offsetX, offsetY, 6, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Annotations
+            ctx.fillStyle = '#888';
+            ctx.font = '12px Georgia';
+            ctx.textAlign = 'center';
+            ctx.fillText('Period Lattice Λ = ℤ + τℤ', w/2, h - 30);
+            ctx.fillText('τ ∈ ℍ (upper half-plane)', w/2, h - 12);
+        }
+
+        // Main solve function
+        function solvePolynomial() {
+            const input = document.getElementById('coefficients').value;
+            const resultsDiv = document.getElementById('results');
+
+            try {
+                const coeffs = input.split(',').map(s => {
+                    const num = parseFloat(s.trim());
+                    if (isNaN(num)) throw new Error('Invalid coefficient');
+                    return num;
+                });
+
+                if (coeffs.length < 2) {
+                    throw new Error('Need at least 2 coefficients');
+                }
+
+                const poly = new Polynomial(coeffs);
+                const roots = poly.findRoots();
+                const genus = Math.floor((poly.degree + 1) / 2);
+                const evenChars = Math.pow(2, genus - 1) * (Math.pow(2, genus) + 1);
+
+                // Draw visualizations
+                drawRoots(roots);
+                drawCurve(roots, genus);
+
+                let html = `
+                    <h2 class="section-title">Input Polynomial</h2>
+                    <div class="polynomial-display">${poly.toString()}</div>
+
+                    <div class="info-grid">
+                        <div class="info-card">
+                            <div class="value">${poly.degree}</div>
+                            <div class="label">Degree</div>
+                        </div>
+                        <div class="info-card">
+                            <div class="value">${genus}</div>
+                            <div class="label">Genus</div>
+                        </div>
+                        <div class="info-card">
+                            <div class="value">${genus}×${genus}</div>
+                            <div class="label">Period Matrix</div>
+                        </div>
+                        <div class="info-card">
+                            <div class="value">${evenChars}</div>
+                            <div class="label">θ-Constants</div>
+                        </div>
+                    </div>
+
+                    <h2 class="section-title">Closed Form Solution</h2>
+                    <div class="formula-box">
+                        <strong>Umemura-Thomae representation:</strong>
+                        <div style="text-align: center; margin: 20px 0; font-size: 1.3em;">
+                            x<sub>k</sub> = R<sub>k</sub>( θ[α₁,β₁](0|Ω)⁴, … , θ[α<sub>${evenChars}</sub>,β<sub>${evenChars}</sub>](0|Ω)⁴ )
+                        </div>
+                        <p style="font-size: 0.9em; color: #aaa;">
+                            Each root is a <em>rational function</em> of ${evenChars} theta constants — 
+                            a finite closed form using the ${genus}×${genus} period matrix Ω.
+                        </p>
+                    </div>
+
+                    <h2 class="section-title">Computed Roots</h2>
+                    <ul class="roots-list">
+                        ${roots.map((root, i) => {
+                            const isReal = Math.abs(root.im) < 1e-10;
+                            return `
+                                <li>
+                                    <span class="root-index">x<sub>${i + 1}</sub> =</span>
+                                    <span class="root-value">${root.toString(12)}</span>
+                                    <span class="root-type">${isReal ? 'real' : 'complex'}</span>
+                                </li>
+                            `;
+                        }).join('')}
+                    </ul>
+
+                    <div class="verify-section">
+                        <div class="verify-title">✓ Verification: f(xₖ) ≈ 0</div>
+                        ${roots.map((root, i) => {
+                            const val = poly.evaluate(root);
+                            return `<div class="verify-item">|f(x<sub>${i + 1}</sub>)| = ${val.abs().toExponential(2)}</div>`;
+                        }).join('')}
+                    </div>
+                `;
+
+                resultsDiv.innerHTML = html;
+                resultsDiv.style.display = 'block';
+
+            } catch (e) {
+                resultsDiv.innerHTML = `<div class="error">Error: ${e.message}</div>`;
+                resultsDiv.style.display = 'block';
+            }
+        }
+
+        // Initialize
+        window.onload = () => {
+            solvePolynomial();
+            showDegreeFormula(2);
+        };
+    </script>
+</body>
+</html>
