@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sprite Vis</title>
+  <style>
+    :root {
+      --bg: #0b1222;
+      --panel: #0f1c33;
+      --accent: #6be0ff;
+      --border: #1f2f4a;
+      --text: #dbe6ff;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 20% 20%, #13264a 0, #0b1222 55%);
+      color: var(--text);
+      font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+    }
+
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    header h1 {
+      margin: 0 0 4px;
+      letter-spacing: 0.01em;
+    }
+    header p {
+      margin: 0 0 14px;
+      color: #9fb4d8;
+      font-size: 0.95rem;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 0.9rem;
+    }
+    .field span {
+      color: #9fb4d8;
+    }
+    .field input[type="number"],
+    .field input[type="file"] {
+      background: #0b1528;
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 8px 10px;
+    }
+
+    button {
+      background: linear-gradient(120deg, #2fb3ff, #6be0ff);
+      color: #081020;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 100ms ease, box-shadow 120ms ease;
+      box-shadow: 0 8px 20px rgba(22, 190, 255, 0.35);
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    button:hover:not(:disabled) { transform: translateY(-1px); }
+    button:active:not(:disabled) { transform: translateY(0); }
+
+    .status {
+      margin: 12px 0;
+      color: #9fb4d8;
+      font-size: 0.95rem;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 14px;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+    .panel-header {
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .panel-header::before {
+      content: "";
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 12px rgba(107, 224, 255, 0.8);
+    }
+
+    .canvas-shell {
+      background: #0b1528;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px;
+      overflow: auto;
+      max-height: 70vh;
+    }
+
+    canvas {
+      display: block;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      background: #0b1222;
+      border-radius: 6px;
+    }
+
+    #selector {
+      border: 1px solid #1d2b45;
+      margin: 0 auto;
+    }
+
+    .player-shell {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+    }
+    #player {
+      border: 1px solid #1d2b45;
+      box-shadow: 0 0 0 6px #0b1528;
+    }
+
+    .small {
+      font-size: 0.9rem;
+      color: #a2b5d8;
+      word-break: break-word;
+      text-align: center;
+    }
+
+    .tip {
+      color: #8299c2;
+      font-size: 0.92rem;
+      margin-top: 8px;
+    }
+
+    code {
+      background: #0e1930;
+      padding: 2px 6px;
+      border-radius: 6px;
+      border: 1px solid #1b2742;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Sprite Vis</h1>
+      <p>Upload a sprite sheet, set frame size, click the cells you want, and watch them loop.</p>
+    </header>
+
+    <div class="controls">
+      <label class="field">
+        <span>Sprite sheet</span>
+        <input id="sheetInput" type="file" accept="image/*" />
+      </label>
+
+      <label class="field">
+        <span>Frame width</span>
+        <input id="frameW" type="number" min="1" value="64" />
+      </label>
+
+      <label class="field">
+        <span>Frame height</span>
+        <input id="frameH" type="number" min="1" value="64" />
+      </label>
+
+      <label class="field">
+        <span>FPS</span>
+        <input id="fps" type="number" min="1" max="60" value="10" />
+      </label>
+
+      <div class="field">
+        <span>&nbsp;</span>
+        <button id="applySize">Apply size</button>
+      </div>
+      <div class="field">
+        <span>&nbsp;</span>
+        <button id="clearSel">Clear selection</button>
+      </div>
+      <div class="field">
+        <span>&nbsp;</span>
+        <button id="togglePlay">Pause</button>
+      </div>
+      <div class="field">
+        <span>&nbsp;</span>
+        <button id="swapMode">Swap cells</button>
+      </div>
+      <div class="field">
+        <span>&nbsp;</span>
+        <button id="exportGif">Export GIF</button>
+      </div>
+    </div>
+
+    <div class="status" id="sheetInfo">No sheet loaded.</div>
+    <div class="status" id="swapInfo">Swap mode: off.</div>
+
+    <div class="layout">
+      <div class="panel">
+        <div class="panel-header">Select cells</div>
+        <div class="canvas-shell">
+          <canvas id="selector"></canvas>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">Loop preview</div>
+        <div class="player-shell">
+          <canvas id="player"></canvas>
+          <div class="small">Selected frames: <span id="selectionCount">0</span></div>
+          <div class="small" id="selectedList">None yet.</div>
+        </div>
+      </div>
+    </div>
+
+    <p class="tip">
+      Tip: If the grid does not line up, adjust the frame width/height and click "Apply size". Click cells to toggle them. Playback uses your selection in the order you clicked. Use "Swap cells" to pick two tiles and swap them in-place.
+    </p>
+  </div>
+
+  <script>
+    const selector = document.getElementById("selector");
+    const player = document.getElementById("player");
+    const sheetInput = document.getElementById("sheetInput");
+    const frameWInput = document.getElementById("frameW");
+    const frameHInput = document.getElementById("frameH");
+    const fpsInput = document.getElementById("fps");
+    const applySizeBtn = document.getElementById("applySize");
+    const clearSelBtn = document.getElementById("clearSel");
+    const togglePlayBtn = document.getElementById("togglePlay");
+    const swapModeBtn = document.getElementById("swapMode");
+    const exportBtn = document.getElementById("exportGif");
+    const sheetInfo = document.getElementById("sheetInfo");
+    const swapInfo = document.getElementById("swapInfo");
+    const selectionCount = document.getElementById("selectionCount");
+    const selectedList = document.getElementById("selectedList");
+
+    const sCtx = selector.getContext("2d");
+    const pCtx = player.getContext("2d");
+
+    const state = {
+      image: new Image(),
+      imageLoaded: false,
+      sheetCanvas: document.createElement("canvas"),
+      sheetCtx: null,
+      frameW: 64,
+      frameH: 64,
+      cols: 0,
+      rows: 0,
+      selected: [],
+      selectedSet: new Set(),
+      playing: true,
+      fps: 10,
+      raf: null,
+      lastStamp: 0,
+      frameIndex: 0,
+      swapEnabled: false,
+      swapFirst: null,
+    };
+
+    const palette332 = buildPalette332();
+
+    function clampInt(val, fallback) {
+      const v = parseInt(val, 10);
+      return Number.isFinite(v) && v > 0 ? v : fallback;
+    }
+
+    function updateFrameSizeFromInputs(clear = true) {
+      state.frameW = clampInt(frameWInput.value, state.frameW);
+      state.frameH = clampInt(frameHInput.value, state.frameH);
+      if (clear) clearSelection();
+      state.swapFirst = null;
+      computeGrid();
+      resizePlayer();
+      redrawSelector();
+      bumpSheetInfo();
+      updateSwapStatus();
+    }
+
+    function clearSelection() {
+      state.selected = [];
+      state.selectedSet.clear();
+      selectionCount.textContent = "0";
+      selectedList.textContent = "None yet.";
+      exportBtn.disabled = true;
+    }
+
+    function bumpSheetInfo() {
+      if (!state.imageLoaded) {
+        sheetInfo.textContent = "No sheet loaded.";
+        return;
+      }
+      const cells = state.cols * state.rows;
+      sheetInfo.textContent = `Sheet ${state.sheetCanvas.width}×${state.sheetCanvas.height} | grid ${state.cols}×${state.rows} (${cells} cells)`;
+    }
+
+    function computeGrid() {
+      if (!state.imageLoaded) return;
+      state.cols = Math.floor(state.sheetCanvas.width / state.frameW);
+      state.rows = Math.floor(state.sheetCanvas.height / state.frameH);
+    }
+
+    function resizeSelectorCanvas() {
+      if (!state.imageLoaded) return;
+      selector.width = state.sheetCanvas.width;
+      selector.height = state.sheetCanvas.height;
+      const maxW = 820;
+      const scale = Math.min(
+        1,
+        maxW / state.sheetCanvas.width,
+        (window.innerWidth - 60) / state.sheetCanvas.width
+      );
+      selector.style.width = `${state.sheetCanvas.width * scale}px`;
+      selector.style.height = `${state.sheetCanvas.height * scale}px`;
+    }
+
+    function resizePlayer() {
+      player.width = state.frameW;
+      player.height = state.frameH;
+      const scale = Math.min(4, 260 / Math.max(state.frameW, state.frameH));
+      player.style.width = `${state.frameW * scale}px`;
+      player.style.height = `${state.frameH * scale}px`;
+      pCtx.imageSmoothingEnabled = false;
+    }
+
+    function redrawSelector() {
+      sCtx.clearRect(0, 0, selector.width, selector.height);
+      if (!state.imageLoaded) return;
+      sCtx.imageSmoothingEnabled = false;
+      sCtx.drawImage(state.sheetCanvas, 0, 0);
+
+      // highlight selected cells
+      sCtx.fillStyle = "rgba(107, 224, 255, 0.28)";
+      sCtx.strokeStyle = "rgba(107, 224, 255, 0.8)";
+      state.selected.forEach((key) => {
+        const [c, r] = key.split(",").map(Number);
+        sCtx.fillRect(c * state.frameW, r * state.frameH, state.frameW, state.frameH);
+        sCtx.strokeRect(c * state.frameW + 0.5, r * state.frameH + 0.5, state.frameW, state.frameH);
+      });
+
+      // grid lines
+      sCtx.strokeStyle = "rgba(255,255,255,0.18)";
+      sCtx.lineWidth = 1;
+      sCtx.beginPath();
+      for (let x = 0; x <= state.cols; x++) {
+        const px = Math.round(x * state.frameW) + 0.5;
+        sCtx.moveTo(px, 0);
+        sCtx.lineTo(px, selector.height);
+      }
+      for (let y = 0; y <= state.rows; y++) {
+        const py = Math.round(y * state.frameH) + 0.5;
+        sCtx.moveTo(0, py);
+        sCtx.lineTo(selector.width, py);
+      }
+      sCtx.stroke();
+    }
+
+    function updateSelectionDisplay() {
+      selectionCount.textContent = state.selected.length.toString();
+      if (!state.selected.length) {
+        selectedList.textContent = "None yet.";
+        exportBtn.disabled = true;
+        return;
+      }
+      const preview = state.selected
+        .slice(0, 14)
+        .map((key) => {
+          const [c, r] = key.split(",").map(Number);
+          return `[${c},${r}]`;
+        })
+        .join(" ");
+      selectedList.textContent =
+        state.selected.length > 14 ? `${preview} … (${state.selected.length} total)` : preview;
+      exportBtn.disabled = !state.imageLoaded || !state.selected.length;
+    }
+
+    function toggleCell(col, row) {
+      if (col < 0 || row < 0 || col >= state.cols || row >= state.rows) return;
+      const key = `${col},${row}`;
+      if (state.selectedSet.has(key)) {
+        state.selectedSet.delete(key);
+        state.selected = state.selected.filter((k) => k !== key);
+      } else {
+        state.selectedSet.add(key);
+        state.selected.push(key);
+      }
+      updateSelectionDisplay();
+      redrawSelector();
+      drawCurrentFrame(true);
+    }
+
+    function getFrames() {
+      return state.selected.map((key) => {
+        const [c, r] = key.split(",").map(Number);
+        return { c, r };
+      });
+    }
+
+    function drawFrame(frame) {
+      if (!frame || !state.imageLoaded) {
+        pCtx.clearRect(0, 0, player.width, player.height);
+        return;
+      }
+      pCtx.clearRect(0, 0, player.width, player.height);
+      pCtx.drawImage(
+        state.sheetCanvas,
+        frame.c * state.frameW,
+        frame.r * state.frameH,
+        state.frameW,
+        state.frameH,
+        0,
+        0,
+        state.frameW,
+        state.frameH
+      );
+    }
+
+    function drawCurrentFrame(resetIndex = false) {
+      const frames = getFrames();
+      if (!frames.length) {
+        drawFrame(null);
+        return;
+      }
+      if (resetIndex) state.frameIndex = 0;
+      drawFrame(frames[state.frameIndex % frames.length]);
+    }
+
+    function loop(timestamp) {
+      if (!state.playing) {
+        state.raf = null;
+        return;
+      }
+      const frames = getFrames();
+      if (frames.length) {
+        const interval = 1000 / state.fps;
+        if (timestamp - state.lastStamp >= interval) {
+          state.lastStamp = timestamp;
+          state.frameIndex = (state.frameIndex + 1) % frames.length;
+          drawFrame(frames[state.frameIndex]);
+        }
+      }
+      state.raf = requestAnimationFrame(loop);
+    }
+
+    function startLoop() {
+      if (state.raf == null) {
+        state.lastStamp = 0;
+        state.raf = requestAnimationFrame(loop);
+      }
+    }
+
+    function handleClick(ev) {
+      if (!state.imageLoaded) return;
+      const rect = selector.getBoundingClientRect();
+      const scaleX = selector.width / rect.width;
+      const scaleY = selector.height / rect.height;
+      const x = (ev.clientX - rect.left) * scaleX;
+      const y = (ev.clientY - rect.top) * scaleY;
+      const col = Math.floor(x / state.frameW);
+      const row = Math.floor(y / state.frameH);
+      if (state.swapEnabled) {
+        handleSwapClick(col, row);
+      } else {
+        toggleCell(col, row);
+      }
+    }
+
+    sheetInput.addEventListener("change", (ev) => {
+      const file = ev.target.files?.[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      state.image.onload = () => {
+        URL.revokeObjectURL(url);
+        state.sheetCanvas.width = state.image.width;
+        state.sheetCanvas.height = state.image.height;
+        state.sheetCtx = state.sheetCanvas.getContext("2d");
+        state.sheetCtx.imageSmoothingEnabled = false;
+        state.sheetCtx.clearRect(0, 0, state.sheetCanvas.width, state.sheetCanvas.height);
+        state.sheetCtx.drawImage(state.image, 0, 0);
+        state.imageLoaded = true;
+        computeGrid();
+        resizeSelectorCanvas();
+        resizePlayer();
+        clearSelection();
+        bumpSheetInfo();
+        redrawSelector();
+        drawFrame(null);
+        togglePlayBtn.disabled = false;
+        swapModeBtn.disabled = false;
+        state.swapEnabled = false;
+        state.swapFirst = null;
+        swapModeBtn.textContent = "Swap cells";
+        updateSwapStatus();
+        startLoop();
+      };
+      state.image.src = url;
+    });
+
+    selector.addEventListener("click", handleClick);
+
+    applySizeBtn.addEventListener("click", () => {
+      updateFrameSizeFromInputs(true);
+      state.frameIndex = 0;
+      drawCurrentFrame(true);
+    });
+
+    frameWInput.addEventListener("change", () => updateFrameSizeFromInputs(true));
+    frameHInput.addEventListener("change", () => updateFrameSizeFromInputs(true));
+    fpsInput.addEventListener("change", () => {
+      state.fps = clampInt(fpsInput.value, state.fps);
+    });
+
+    clearSelBtn.addEventListener("click", () => {
+      clearSelection();
+      redrawSelector();
+      drawFrame(null);
+    });
+
+    togglePlayBtn.addEventListener("click", () => {
+      state.playing = !state.playing;
+      togglePlayBtn.textContent = state.playing ? "Pause" : "Play";
+      if (state.playing) {
+        startLoop();
+      } else if (state.raf != null) {
+        cancelAnimationFrame(state.raf);
+        state.raf = null;
+      }
+    });
+
+    swapModeBtn.addEventListener("click", () => {
+      if (!state.imageLoaded) return;
+      state.swapEnabled = !state.swapEnabled;
+      state.swapFirst = null;
+      swapModeBtn.textContent = state.swapEnabled ? "Swapping…" : "Swap cells";
+      updateSwapStatus();
+    });
+
+    exportBtn.addEventListener("click", () => {
+      if (!state.imageLoaded || !state.selected.length) return;
+      exportBtn.disabled = true;
+      exportBtn.textContent = "Exporting…";
+      setTimeout(() => {
+        try {
+          const indexedFrames = captureIndexedFrames();
+          const delay = Math.max(1, Math.round(100 / state.fps));
+          const blob = buildGif(indexedFrames, state.frameW, state.frameH, delay, palette332);
+          downloadBlob(blob, "sprite.gif");
+        } catch (err) {
+          console.error(err);
+          alert("Export failed. Check console for details.");
+        } finally {
+          exportBtn.textContent = "Export GIF";
+          exportBtn.disabled = !state.imageLoaded || !state.selected.length;
+        }
+      }, 10);
+    });
+
+    window.addEventListener("resize", () => {
+      resizeSelectorCanvas();
+    });
+
+    function updateSwapStatus() {
+      if (!state.swapEnabled) {
+        swapInfo.textContent = "Swap mode: off.";
+        return;
+      }
+      if (!state.swapFirst) {
+        swapInfo.textContent = "Swap mode: pick the first cell.";
+      } else {
+        swapInfo.textContent = `Swap mode: first cell [${state.swapFirst.col},${state.swapFirst.row}] chosen. Pick the second cell.`;
+      }
+    }
+
+    function handleSwapClick(col, row) {
+      if (col < 0 || row < 0 || col >= state.cols || row >= state.rows) return;
+      if (!state.swapFirst) {
+        state.swapFirst = { col, row };
+      } else {
+        if (state.swapFirst.col === col && state.swapFirst.row === row) {
+          state.swapFirst = null;
+          updateSwapStatus();
+          return;
+        }
+        swapCells(state.swapFirst, { col, row });
+        state.swapFirst = null;
+        redrawSelector();
+        drawCurrentFrame(true);
+      }
+      updateSwapStatus();
+    }
+
+    function swapCells(a, b) {
+      if (!state.sheetCtx) return;
+      const fw = state.frameW;
+      const fh = state.frameH;
+      const ax = a.col * fw;
+      const ay = a.row * fh;
+      const bx = b.col * fw;
+      const by = b.row * fh;
+      const firstData = state.sheetCtx.getImageData(ax, ay, fw, fh);
+      const secondData = state.sheetCtx.getImageData(bx, by, fw, fh);
+      state.sheetCtx.putImageData(secondData, ax, ay);
+      state.sheetCtx.putImageData(firstData, bx, by);
+    }
+
+    function buildPalette332() {
+      const pal = new Uint8Array(256 * 3);
+      for (let r = 0; r < 8; r++) {
+        for (let g = 0; g < 8; g++) {
+          for (let b = 0; b < 4; b++) {
+            const idx = ((r << 5) | (g << 2) | b) * 3;
+            pal[idx] = Math.round((r / 7) * 255);
+            pal[idx + 1] = Math.round((g / 7) * 255);
+            pal[idx + 2] = Math.round((b / 3) * 255);
+          }
+        }
+      }
+      return pal;
+    }
+
+    function quantize332(imageData) {
+      const { data, width, height } = imageData;
+      const out = new Uint8Array(width * height);
+      for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+        const a = data[i + 3];
+        if (a === 0) {
+          out[p] = 0;
+          continue;
+        }
+        const ri = data[i] >> 5;
+        const gi = data[i + 1] >> 5;
+        const bi = data[i + 2] >> 6;
+        out[p] = (ri << 5) | (gi << 2) | bi;
+      }
+      return out;
+    }
+
+    function captureIndexedFrames() {
+      const frames = getFrames();
+      const tmp = document.createElement("canvas");
+      tmp.width = state.frameW;
+      tmp.height = state.frameH;
+      const ctx = tmp.getContext("2d");
+      ctx.imageSmoothingEnabled = false;
+      const indexed = [];
+      frames.forEach((frame) => {
+        ctx.clearRect(0, 0, tmp.width, tmp.height);
+        ctx.drawImage(
+          state.sheetCanvas,
+          frame.c * state.frameW,
+          frame.r * state.frameH,
+          state.frameW,
+          state.frameH,
+          0,
+          0,
+          state.frameW,
+          state.frameH
+        );
+        const data = ctx.getImageData(0, 0, tmp.width, tmp.height);
+        indexed.push(quantize332(data));
+      });
+      return indexed;
+    }
+
+    function lzwCompress(indexed, minCodeSize) {
+      const clearCode = 1 << minCodeSize;
+      const endCode = clearCode + 1;
+      let codeSize = minCodeSize + 1;
+      let dict = new Map();
+      let nextCode = endCode + 1;
+      let cur = indexed[0];
+
+      const output = [];
+      let curByte = 0;
+      let bitsInByte = 0;
+
+      function pushCode(code) {
+        curByte |= code << bitsInByte;
+        bitsInByte += codeSize;
+        while (bitsInByte >= 8) {
+          output.push(curByte & 0xff);
+          curByte >>= 8;
+          bitsInByte -= 8;
+        }
+      }
+
+      pushCode(clearCode);
+      for (let i = 1; i < indexed.length; i++) {
+        const k = indexed[i];
+        const key = `${cur},${k}`;
+        if (dict.has(key)) {
+          cur = dict.get(key);
+        } else {
+          pushCode(cur);
+          dict.set(key, nextCode++);
+          cur = k;
+          if (nextCode === 1 << codeSize && codeSize < 12) {
+            codeSize++;
+          }
+          if (nextCode >= 4096) {
+            pushCode(clearCode);
+            dict = new Map();
+            codeSize = minCodeSize + 1;
+            nextCode = endCode + 1;
+          }
+        }
+      }
+      pushCode(cur);
+      pushCode(endCode);
+      if (bitsInByte > 0) output.push(curByte);
+      return new Uint8Array(output);
+    }
+
+    function buildGif(framesIndexed, width, height, delayCs, palette) {
+      const palColors = palette.length / 3;
+      const gctSize = Math.max(0, Math.ceil(Math.log2(palColors)) - 1);
+      const minCodeSize = Math.max(2, Math.ceil(Math.log2(palColors)));
+      const bytes = [];
+      const push = (...vals) => bytes.push(...vals.map((v) => v & 0xff));
+      const push16 = (v) => push(v & 0xff, (v >> 8) & 0xff);
+
+      push(0x47, 0x49, 0x46, 0x38, 0x39, 0x61);
+      push16(width);
+      push16(height);
+      push(0x80 | (gctSize & 0x07) | 0x70);
+      push(0x00);
+      push(0x00);
+      push(...palette);
+
+      push(0x21, 0xff, 0x0b);
+      push(0x4e, 0x45, 0x54, 0x53, 0x43, 0x41, 0x50, 0x45, 0x32, 0x2e, 0x30);
+      push(0x03, 0x01, 0x00, 0x00, 0x00);
+
+      framesIndexed.forEach((frame) => {
+        push(0x21, 0xf9, 0x04, 0x00);
+        push16(delayCs);
+        push(0x00, 0x00);
+
+        push(0x2c);
+        push16(0);
+        push16(0);
+        push16(width);
+        push16(height);
+        push(0x00);
+
+        push(minCodeSize);
+        const lzw = lzwCompress(frame, minCodeSize);
+        for (let i = 0; i < lzw.length; i += 255) {
+          const slice = lzw.subarray(i, i + 255);
+          push(slice.length);
+          push(...slice);
+        }
+        push(0x00);
+      });
+
+      push(0x3b);
+      return new Blob([new Uint8Array(bytes)], { type: "image/gif" });
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1200);
+    }
+
+    // init defaults
+    resizePlayer();
+    togglePlayBtn.disabled = true;
+    swapModeBtn.disabled = true;
+    exportBtn.disabled = true;
+    startLoop();
+  </script>
+</body>
+</html>
