@@ -729,12 +729,16 @@ function ensureReferenceState() {
       referenceState.vertexIdx !== currentVertex ||
       referenceState.tx !== tx ||
       referenceState.ty !== ty) {
-    const refAB = referenceSliderAB();
-    const state = computeStateForAB(refAB.a, refAB.b);
+    const endAB = referenceSliderAB();
+    const startAB = sliderValueToAB(0);
+    const endState = computeStateForAB(endAB.a, endAB.b);
+    const startState = computeStateForAB(startAB.a, startAB.b);
     referenceState = {
       version: shapeSetVersion,
-      data: state.data,
-      world: state.world,
+      data: endState.data,
+      world: endState.world,
+      startData: startState.data,
+      startWorld: startState.world,
       lockId: currentLockId,
       vertexIdx: currentVertex,
       tx,
@@ -752,8 +756,7 @@ function assignMotionColours() {
     clearShapeColours();
     return;
   }
-  const curAB = currentSliderAB();
-  const cur = computeStateForAB(curAB.a, curAB.b);
+  const start = { data: ref.startData };
   const groups = new Map();
   const perShape = [];
   let paletteIndex = 0;
@@ -762,12 +765,12 @@ function assignMotionColours() {
 
   for (const shape of leafShapes) {
     const refData = ref.data[shape.gid];
-    const curData = cur.data[shape.gid];
-    if (!refData || !curData) {
+    const startData = start.data[shape.gid];
+    if (!refData || !startData) {
       shape.label = 'default';
       continue;
     }
-    const rotDiffRad = normalizeAngle(curData.angle - refData.angle);
+    const rotDiffRad = normalizeAngle(startData.angle - refData.angle);
     const rotDiffDeg = rotDiffRad * 180 / Math.PI;
     const cosd = Math.cos(rotDiffRad);
     const sind = Math.sin(rotDiffRad);
@@ -775,8 +778,8 @@ function assignMotionColours() {
     const refWy = refData.worldY;
     const rotatedRefX = refWx * cosd - refWy * sind;
     const rotatedRefY = refWx * sind + refWy * cosd;
-    const dxWorld = curData.worldX - rotatedRefX;
-    const dyWorld = curData.worldY - rotatedRefY;
+    const dxWorld = startData.worldX - rotatedRefX;
+    const dyWorld = startData.worldY - rotatedRefY;
     const cosRef = Math.cos(refData.angle);
     const sinRef = Math.sin(refData.angle);
     perShape.push({
@@ -1462,10 +1465,28 @@ function windowResized() {
 }
 
 // -------------------- Mouse interactions --------------------
+let _mouseStartX = 0;
+let _mouseStartY = 0;
+let _mouseHasMoved = false;
+let _pressedInSlider = false;
+const MOUSE_TAP_THRESHOLD = 4;
+
+function _inSliderRegion() {
+  return mouseY >= height - 95;
+}
+
 function mousePressed() {
   if ((mouseX >= 5) && (mouseX <= 140)) return true;
+  if (_inSliderRegion()) {
+    _pressedInSlider = true;
+    return true;
+  }
+  _pressedInSlider = false;
 
   dragging = true;
+  _mouseStartX = mouseX;
+  _mouseStartY = mouseY;
+  _mouseHasMoved = false;
   if (isButtonActive(scale_button)) {
     // Include current R, S, T so scaling feels correct in screen space
     const R = rlockMatrix();
@@ -1483,6 +1504,12 @@ function mousePressed() {
 
 function mouseDragged() {
   if (!dragging) return true;
+
+  const dxStart = mouseX - _mouseStartX;
+  const dyStart = mouseY - _mouseStartY;
+  if (Math.sqrt(dxStart*dxStart + dyStart*dyStart) > MOUSE_TAP_THRESHOLD) {
+    _mouseHasMoved = true;
+  }
 
   let changed = false;
   if (isButtonActive(translate_button)) {
@@ -1519,6 +1546,11 @@ function mouseReleased() { dragging = false; loop(); }
 
 function mouseClicked() {
   if ((mouseX >= 5) && (mouseX <= 140) && (mouseY >= 5) && (mouseY <= 510)) return true;
+  if (_inSliderRegion() || _pressedInSlider) {
+    _pressedInSlider = false;
+    return true;
+  }
+  if (_mouseHasMoved) { _mouseHasMoved = false; return false; }
   ensureLeafShapes();
   if (!leafShapes.length) return false;
 
