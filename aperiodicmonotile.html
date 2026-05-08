@@ -1,4 +1,5 @@
 <!doctype html>
+
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -8,6 +9,50 @@
   <style>
     html, body { margin: 0; padding: 0; height: 100%; }
     body { background: #fff; overflow: hidden; }
+
+```
+/* Touch-friendly range slider */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  outline: none;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  background: #ccc;
+  border: 1px solid #999;
+  border-radius: 4px;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 34px;
+  width: 34px;
+  border-radius: 50%;
+  background: #4a7eb8;
+  border: 2px solid #2a5a90;
+  margin-top: -14px;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+}
+input[type="range"]::-moz-range-track {
+  height: 8px;
+  background: #ccc;
+  border: 1px solid #999;
+  border-radius: 4px;
+}
+input[type="range"]::-moz-range-thumb {
+  height: 34px;
+  width: 34px;
+  border-radius: 50%;
+  background: #4a7eb8;
+  border: 2px solid #2a5a90;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+}
+```
+
   </style>
 </head>
 <body>
@@ -53,6 +98,7 @@ const PATH_STEPS = 60;
 let lock_button;
 let colourSummaries = [];
 let lockedShapeId = null;
+let lockedVertexIndex = -1;
 let lockedShapeTargetWorld = null;
 
 const colmap = {
@@ -68,6 +114,39 @@ const colmap = {
 };
 
 const colourPalette = ['col0', 'col1', 'col2', 'col3', 'col4', 'col5', 'col6', 'col7'];
+
+function hslToRgb(h, s, l) {
+  // h: 0-360, s,l: 0-1; returns [r,g,b] 0-255
+  h = ((h % 360) + 360) % 360;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const hp = h / 60;
+  const x = c * (1 - Math.abs((hp % 2) - 1));
+  let r1 = 0, g1 = 0, b1 = 0;
+  if (hp < 1)      { r1 = c; g1 = x; b1 = 0; }
+  else if (hp < 2) { r1 = x; g1 = c; b1 = 0; }
+  else if (hp < 3) { r1 = 0; g1 = c; b1 = x; }
+  else if (hp < 4) { r1 = 0; g1 = x; b1 = c; }
+  else if (hp < 5) { r1 = x; g1 = 0; b1 = c; }
+  else             { r1 = c; g1 = 0; b1 = x; }
+  const m = l - c / 2;
+  return [
+    Math.round((r1 + m) * 255),
+    Math.round((g1 + m) * 255),
+    Math.round((b1 + m) * 255)
+  ];
+}
+
+function generateDistinctColors(n) {
+  // Evenly spaced hues; constant saturation/lightness so all colours read
+  // with similar weight on a white background.
+  const colors = [];
+  if (n <= 0) return colors;
+  for (let i = 0; i < n; i++) {
+    const hue = (i * 360 / n) % 360;
+    colors.push(hslToRgb(hue, 0.65, 0.55));
+  }
+  return colors;
+}
 
 function chooseColour(label) {
   const key = label in colmap ? label : 'default';
@@ -146,8 +225,13 @@ class Shape {
     this.quad = quad;
     this.label = label;
     this.gid = -1;
+    this.rgb = null;
+    this.familyId = null;
   }
-  draw() { drawPolygon(this.pts, chooseColour(this.label), [0,0,0], 0.1); }
+  draw() {
+    const col = this.rgb || chooseColour(this.label);
+    drawPolygon(this.pts, col, [0,0,0], 0.1);
+  }
 
   streamSVG(S, stream) {
     let s = '<polygon points="';
@@ -158,7 +242,7 @@ class Shape {
       s += (first ? '' : ' ') + `${sp.x},${sp.y}`;
       first = false;
     }
-    const col = chooseColour(this.label);
+    const col = this.rgb || chooseColour(this.label);
     s += `" stroke="black" stroke-width="0.1" fill="rgb(${col[0]},${col[1]},${col[2]})" />`;
     stream.push(s);
   }
@@ -388,6 +472,19 @@ function gatherShapeCentroids(node, aa, bb, out) {
   }
 }
 
+function gatherSameVertexAcrossTiles(node, idx, aa, bb, out) {
+  if (idx < 0) return;
+  if (node instanceof Shape) {
+    if (idx < node.pts.length) {
+      const vx = evalABwith(node.pts[idx].x, aa, bb);
+      const vy = evalABwith(node.pts[idx].y, aa, bb);
+      out.push({ x: vx, y: vy, gid: node.gid });
+    }
+  } else if (node instanceof Meta) {
+    for (const g of node.geoms) gatherSameVertexAcrossTiles(g, idx, aa, bb, out);
+  }
+}
+
 function drawTileCentroids(node, aa, bb) {
   const centres = [];
   gatherShapeCentroids(node, aa, bb, centres);
@@ -398,6 +495,29 @@ function drawTileCentroids(node, aa, bb) {
   for (const c of centres) {
     const r = 0.6;
     circle(c.cx, c.cy, r);
+  }
+  pop();
+}
+
+function drawTileFamilyIds(aa, bb, screenMatrix) {
+  if (colourMode !== 'motion') return;
+  if (!leafShapes.length) return;
+  push();
+  textAlign(CENTER, CENTER);
+  textSize(12);
+  textStyle(BOLD);
+  for (const shape of leafShapes) {
+    if (shape.familyId == null) continue;
+    const sac = polygonSignedAreaAndCentroid(shape.pts, aa, bb);
+    if (Math.abs(sac.areaSigned) < 1e-12) continue;
+    const sp = applyAffineToPoint(screenMatrix, { x: sac.cx, y: sac.cy });
+    const sx = sp.x + width/2;
+    const sy = sp.y + height/2;
+    // White halo for legibility on any tile colour
+    stroke(255, 255, 255, 230);
+    strokeWeight(3);
+    fill(20, 20, 20);
+    text(String(shape.familyId), sx, sy);
   }
   pop();
 }
@@ -441,6 +561,8 @@ function rebuildLeafShapes() {
     if (node instanceof Shape) {
       node.gid = nextId++;
       node.label = 'default';
+      node.familyId = null;
+      node.rgb = null;
       leafShapes.push(node);
     } else if (node instanceof Meta) {
       for (const g of node.geoms) assign(g);
@@ -451,6 +573,7 @@ function rebuildLeafShapes() {
   referenceState = null;
   if (!findLeafShapeById(lockedShapeId)) {
     lockedShapeId = null;
+    lockedVertexIndex = -1;
     lockedShapeTargetWorld = null;
     updateLockButtonLabel();
   }
@@ -468,6 +591,12 @@ function lockedShapeLocalFor(aa = a, bb = b) {
   if (lockedShapeId === null) return null;
   const shape = findLeafShapeById(lockedShapeId);
   if (!shape) return null;
+  if (lockedVertexIndex >= 0 && lockedVertexIndex < shape.pts.length) {
+    const vx = evalABwith(shape.pts[lockedVertexIndex].x, aa, bb);
+    const vy = evalABwith(shape.pts[lockedVertexIndex].y, aa, bb);
+    if (!Number.isFinite(vx) || !Number.isFinite(vy)) return null;
+    return { x: vx, y: vy };
+  }
   const sac = polygonSignedAreaAndCentroid(shape.pts, aa, bb);
   if (!Number.isFinite(sac.cx) || !Number.isFinite(sac.cy)) return null;
   return { x: sac.cx, y: sac.cy };
@@ -478,7 +607,11 @@ function ensureLeafShapes() {
 }
 
 function clearShapeColours() {
-  for (const shape of leafShapes) shape.label = 'default';
+  for (const shape of leafShapes) {
+    shape.label = 'default';
+    shape.familyId = null;
+    shape.rgb = null;
+  }
   colourSummaries = [];
 }
 
@@ -587,14 +720,25 @@ function ensureReferenceState() {
   ensureLeafShapes();
   if (!leafShapes.length) return null;
   const currentLockId = lockedShapeId == null ? -1 : lockedShapeId;
-  if (!referenceState || referenceState.version !== shapeSetVersion || referenceState.lockId !== currentLockId) {
+  const currentVertex = lockedVertexIndex;
+  const tx = lockedShapeTargetWorld ? lockedShapeTargetWorld.x : 0;
+  const ty = lockedShapeTargetWorld ? lockedShapeTargetWorld.y : 0;
+  if (!referenceState ||
+      referenceState.version !== shapeSetVersion ||
+      referenceState.lockId !== currentLockId ||
+      referenceState.vertexIdx !== currentVertex ||
+      referenceState.tx !== tx ||
+      referenceState.ty !== ty) {
     const refAB = referenceSliderAB();
     const state = computeStateForAB(refAB.a, refAB.b);
     referenceState = {
       version: shapeSetVersion,
       data: state.data,
       world: state.world,
-      lockId: currentLockId
+      lockId: currentLockId,
+      vertexIdx: currentVertex,
+      tx,
+      ty
     };
   }
   return referenceState;
@@ -673,16 +817,17 @@ function assignMotionColours() {
     const key = keyParts.join('|');
     let group = groups.get(key);
     if (!group) {
-      const colourKey = colourPalette[paletteIndex % colourPalette.length];
-      paletteIndex++;
       group = {
-        colourKey,
+        familyId: paletteIndex + 1,
         rot: parseFloat(keyParts[0]),
         dx: parseFloat(keyParts[1]),
         dy: parseFloat(keyParts[2]),
         mag: 0,
-        count: 0
+        count: 0,
+        members: [],
+        rgb: null
       };
+      paletteIndex++;
       if (Math.abs(group.rot) < 1e-10) group.rot = 0;
       if (Math.abs(group.dx) < 1e-12) group.dx = 0;
       if (Math.abs(group.dy) < 1e-12) group.dy = 0;
@@ -690,10 +835,32 @@ function assignMotionColours() {
       groups.set(key, group);
     }
     group.count += 1;
-    shape.label = group.colourKey;
+    group.members.push(shape);
   }
-  const summaries = Array.from(groups.values()).map(g => ({ ...g }));
-  summaries.sort((a, b) => a.colourKey.localeCompare(b.colourKey));
+
+  // Generate one distinct colour per family.
+  const orderedGroups = Array.from(groups.values()).sort((a, b) => a.familyId - b.familyId);
+  const N = orderedGroups.length;
+  const palette = generateDistinctColors(N);
+  for (let i = 0; i < N; i++) {
+    const group = orderedGroups[i];
+    group.rgb = palette[i];
+    for (const shape of group.members) {
+      shape.rgb = group.rgb;
+      shape.familyId = group.familyId;
+      shape.label = 'family';
+    }
+  }
+
+  const summaries = orderedGroups.map(g => ({
+    familyId: g.familyId,
+    rgb: g.rgb,
+    rot: g.rot,
+    dx: g.dx,
+    dy: g.dy,
+    mag: g.mag,
+    count: g.count
+  }));
   colourSummaries = summaries;
 }
 
@@ -719,8 +886,11 @@ function rgbToHex(rgb) {
 function updateColourInfo() {
   if (!colour_table) return;
 
+  const totalTiles = leafShapes.length;
+  const tilesBanner = `<div style="margin-bottom:6px;padding:4px 6px;background:#f4f4f4;border:1px solid #ccc;border-radius:3px;"><strong>${totalTiles}</strong> tile${totalTiles === 1 ? '' : 's'} total</div>`;
+
   if (colourMode !== 'motion') {
-    colour_table.html('<div>Color mode: Plain<br/>Switch to <strong>Color: Motion Δ</strong> to list rotation and centroid offsets.</div>');
+    colour_table.html(tilesBanner + '<div>Color mode: Plain<br/>Switch to <strong>Color: Motion Δ</strong> to list rotation and centroid offsets.</div>');
     return;
   }
 
@@ -730,7 +900,7 @@ function updateColourInfo() {
   }
 
   if (!colourSummaries.length) {
-    colour_table.html('<div>No motion differences computed yet.<br/>Adjust the slider away from the rightmost reference to see changes.</div>');
+    colour_table.html(tilesBanner + '<div>No motion differences computed yet.<br/>Adjust the slider away from the rightmost reference to see changes.</div>');
     return;
   }
 
@@ -738,6 +908,9 @@ function updateColourInfo() {
   sorted.sort((a, b) => {
     let va, vb;
     switch (sortField) {
+      case 'fid':
+      case 'colour':
+        va = a.familyId; vb = b.familyId; break;
       case 'rot':
         va = a.rot; vb = b.rot; break;
       case 'dx':
@@ -748,16 +921,19 @@ function updateColourInfo() {
         va = a.mag; vb = b.mag; break;
       case 'count':
         va = a.count; vb = b.count; break;
-      case 'colour':
       default:
-        return sortDir * a.colourKey.localeCompare(b.colourKey);
+        va = a.familyId; vb = b.familyId;
     }
     if (va < vb) return -1 * sortDir;
     if (va > vb) return 1 * sortDir;
-    return a.colourKey.localeCompare(b.colourKey);
+    return a.familyId - b.familyId;
   });
 
+  const numFamilies = sorted.length;
+  const summaryBanner = `<div style="margin-bottom:6px;padding:4px 6px;background:#f4f4f4;border:1px solid #ccc;border-radius:3px;"><strong>${numFamilies}</strong> distinct famil${numFamilies === 1 ? 'y' : 'ies'} &middot; <strong>${totalTiles}</strong> tile${totalTiles === 1 ? '' : 's'} total</div>`;
+
   const headers = [
+    { field: 'fid', label: 'ID' },
     { field: 'colour', label: 'Colour' },
     { field: 'rot', label: 'Δθ (deg)' },
     { field: 'dx', label: 'Δcx' },
@@ -773,11 +949,12 @@ function updateColourInfo() {
   }).join('');
 
   const rows = sorted.map(entry => {
-    const rgb = colmap[entry.colourKey] || colmap.default;
+    const rgb = entry.rgb || colmap.default;
     const hex = rgbToHex(rgb);
     return `
       <tr>
-        <td style="padding:4px 6px;text-align:left;border-bottom:1px solid #ddd;"><span style="display:inline-block;width:18px;height:12px;margin-right:6px;border:1px solid #555;background:${hex};vertical-align:middle;"></span>${entry.colourKey}</td>
+        <td style="padding:4px 6px;text-align:right;border-bottom:1px solid #eee;font-weight:bold;">${entry.familyId}</td>
+        <td style="padding:4px 6px;text-align:left;border-bottom:1px solid #ddd;"><span style="display:inline-block;width:18px;height:12px;margin-right:6px;border:1px solid #555;background:${hex};vertical-align:middle;"></span>${hex}</td>
         <td style="padding:4px 6px;text-align:right;border-bottom:1px solid #eee;">${entry.rot.toFixed(3)}</td>
         <td style="padding:4px 6px;text-align:right;border-bottom:1px solid #eee;">${entry.dx.toFixed(4)}</td>
         <td style="padding:4px 6px;text-align:right;border-bottom:1px solid #eee;">${entry.dy.toFixed(4)}</td>
@@ -787,6 +964,7 @@ function updateColourInfo() {
   }).join('');
 
   const tableHTML = `
+    ${summaryBanner}
     <table class="colour-summary" style="border-collapse:collapse;width:100%;min-width:340px;">
       <thead><tr>${headerCells}</tr></thead>
       <tbody>${rows}</tbody>
@@ -810,6 +988,7 @@ window.setColourSort = setColourSort;
 function computeCentroidPaths(samples = PATH_STEPS) {
   ensureLeafShapes();
   if (!leafShapes.length) return [];
+  const useVertex = lockedVertexIndex >= 0;
   const accum = new Map();
   for (const shape of leafShapes) accum.set(shape.gid, []);
   const steps = Math.max(1, samples);
@@ -820,9 +999,17 @@ function computeCentroidPaths(samples = PATH_STEPS) {
     if (!state.world) continue;
     const total = mulAffine(user_ts, state.world);
     for (const shape of leafShapes) {
-      const data = state.data[shape.gid];
-      if (!data) continue;
-      const pt = applyAffineToPoint(total, { x: data.localX, y: data.localY });
+      let localPt;
+      if (useVertex && lockedVertexIndex < shape.pts.length) {
+        const vx = evalABwith(shape.pts[lockedVertexIndex].x, ab.a, ab.b);
+        const vy = evalABwith(shape.pts[lockedVertexIndex].y, ab.a, ab.b);
+        localPt = { x: vx, y: vy };
+      } else {
+        const data = state.data[shape.gid];
+        if (!data) continue;
+        localPt = { x: data.localX, y: data.localY };
+      }
+      const pt = applyAffineToPoint(total, localPt);
       accum.get(shape.gid).push(pt);
     }
   }
@@ -832,12 +1019,40 @@ function computeCentroidPaths(samples = PATH_STEPS) {
 function drawCentroidPaths(paths) {
   if (!paths || !paths.length) return;
   push();
-  stroke(35, 35, 35, 190);
-  strokeWeight(1.2);
   noFill();
+  const useGroupColours = (colourMode === 'motion');
+  let gidMap = null;
+  if (useGroupColours) {
+    gidMap = new Map();
+    for (const s of leafShapes) gidMap.set(s.gid, s);
+  }
+
+  // Pass 1: black outline for every path
+  stroke(0, 0, 0, 230);
+  strokeWeight(3.4);
   for (const path of paths) {
     const pts = path.points;
     if (!pts || pts.length < 2) continue;
+    beginShape();
+    for (const p of pts) {
+      vertex(p.x + width/2, p.y + height/2);
+    }
+    endShape();
+  }
+
+  // Pass 2: coloured interior on top
+  for (const path of paths) {
+    const pts = path.points;
+    if (!pts || pts.length < 2) continue;
+    if (useGroupColours) {
+      const shape = gidMap.get(path.gid);
+      const col = (shape && shape.rgb) ? shape.rgb : [220, 220, 220];
+      stroke(col[0], col[1], col[2], 255);
+      strokeWeight(1.6);
+    } else {
+      stroke(225, 225, 225, 255);
+      strokeWeight(1.4);
+    }
     beginShape();
     for (const p of pts) {
       vertex(p.x + width/2, p.y + height/2);
@@ -924,7 +1139,8 @@ function setButtonActive(but, b) { but.elt.style.border = (b ? "3px solid black"
 
 // -------------------- p5: setup/draw --------------------
 function setup() {
-  createCanvas(windowWidth, windowHeight);
+  const cnv = createCanvas(windowWidth, windowHeight);
+  cnv.elt.style.touchAction = 'none';
 
   sys = buildBaseTiles();
 
@@ -938,6 +1154,7 @@ function setup() {
     ab_slider.value(100 / (1 + sqrt(3)), 0);
     tile_sel.value('H8');
     lockedShapeId = null;
+    lockedVertexIndex = -1;
     lockedShapeTargetWorld = null;
     updateLockButtonLabel();
     rebuildLeafShapes();
@@ -951,6 +1168,7 @@ function setup() {
   subst_button.mousePressed(function() {
     sys = buildSupertiles(sys);
     lockedShapeId = null;
+    lockedVertexIndex = -1;
     lockedShapeTargetWorld = null;
     updateLockButtonLabel();
     resetAnchor();
@@ -970,6 +1188,7 @@ function setup() {
   tile_sel.value('H8');
   tile_sel.changed(function() {
     lockedShapeId = null;
+    lockedVertexIndex = -1;
     lockedShapeTargetWorld = null;
     updateLockButtonLabel();
     resetAnchor();
@@ -978,12 +1197,21 @@ function setup() {
   });
 
   ab_label = createSpan('Tile(1,1.732)');
-  ab_label.position(10, 155);
-  ab_label.size(125, 15);
+  ab_label.position(20, windowHeight - 88);
+  ab_label.size(windowWidth - 40, 22);
+  ab_label.style('background', 'rgba(255, 255, 255, 0.92)');
+  ab_label.style('padding', '2px 6px');
+  ab_label.style('text-align', 'center');
+  ab_label.style('border', '1px solid #aaa');
+  ab_label.style('border-radius', '4px');
+  ab_label.style('box-sizing', 'border-box');
+  ab_label.style('font-family', 'monospace');
+  ab_label.style('font-size', '13px');
+  ab_label.style('pointer-events', 'none');
 
   ab_slider = createSlider(0, 100, 100 / (1 + sqrt(3)), 0);
-  ab_slider.position(10, 170);
-  ab_slider.size(125, 25);
+  ab_slider.position(20, windowHeight - 56);
+  ab_slider.size(windowWidth - 40, 44);
   ab_slider.input(function() {
     if (colourMode === 'motion') {
       refreshTileColours();
@@ -993,7 +1221,7 @@ function setup() {
   });
 
   let but = createButton('Chevrons');
-  but.position(10, 210);
+  but.position(10, 155);
   but.size(125, 25);
   but.mousePressed(function() {
     ab_slider.value(0);
@@ -1005,7 +1233,7 @@ function setup() {
   });
 
   but = createButton('Hats');
-  but.position(10, 240);
+  but.position(10, 185);
   but.size(125, 25);
   but.mousePressed(function() {
     ab_slider.value(100 / (1 + sqrt(3)));
@@ -1017,7 +1245,7 @@ function setup() {
   });
 
   but = createButton('Tile(1,1)');
-  but.position(10, 270);
+  but.position(10, 215);
   but.size(125, 25);
   but.mousePressed(function() {
     ab_slider.value(50);
@@ -1029,7 +1257,7 @@ function setup() {
   });
 
   but = createButton('Turtles');
-  but.position(10, 300);
+  but.position(10, 245);
   but.size(125, 25);
   but.mousePressed(function() {
     ab_slider.value(100 * sqrt(3) / (1 + sqrt(3)));
@@ -1041,7 +1269,7 @@ function setup() {
   });
 
   but = createButton('Comets');
-  but.position(10, 330);
+  but.position(10, 275);
   but.size(125, 25);
   but.mousePressed(function() {
     ab_slider.value(100);
@@ -1054,7 +1282,7 @@ function setup() {
 
   translate_button = createButton("Translate");
   setButtonActive(translate_button, true);
-  translate_button.position(10, 370);
+  translate_button.position(10, 315);
   translate_button.size(125, 25);
   translate_button.mousePressed(function() {
     setButtonActive(translate_button, true);
@@ -1063,7 +1291,7 @@ function setup() {
   });
 
   scale_button = createButton("Scale");
-  scale_button.position(10, 400);
+  scale_button.position(10, 345);
   scale_button.size(125, 25);
   scale_button.mousePressed(function() {
     setButtonActive(translate_button, false);
@@ -1072,7 +1300,7 @@ function setup() {
   });
 
   let save_button = createButton("Save PNG");
-  save_button.position(10, 430);
+  save_button.position(10, 375);
   save_button.size(125, 25);
   save_button.mousePressed(function () {
     uibox = false;
@@ -1083,7 +1311,7 @@ function setup() {
   });
 
   let svg_button = createButton("Save SVG");
-  svg_button.position(10, 460);
+  svg_button.position(10, 405);
   svg_button.size(125, 25);
   svg_button.mousePressed(function () {
     const stream = [];
@@ -1112,7 +1340,7 @@ function setup() {
   });
 
   colour_button = createButton("Color: Plain");
-  colour_button.position(10, 490);
+  colour_button.position(10, 435);
   colour_button.size(125, 25);
   colour_button.mousePressed(function () {
     colourMode = (colourMode === 'plain') ? 'motion' : 'plain';
@@ -1122,10 +1350,11 @@ function setup() {
   });
 
   lock_button = createButton("No Lock");
-  lock_button.position(10, 520);
+  lock_button.position(10, 465);
   lock_button.size(125, 25);
   lock_button.mousePressed(function () {
     lockedShapeId = null;
+    lockedVertexIndex = -1;
     lockedShapeTargetWorld = null;
     resetAnchor();
     updateLockButtonLabel();
@@ -1177,6 +1406,24 @@ function draw() {
   drawTileCentroids(tile, a, b);
   pop();
 
+  drawTileFamilyIds(a, b, to_screen);
+
+  if (lockedVertexIndex >= 0) {
+    const allMarkers = [];
+    gatherSameVertexAcrossTiles(tile, lockedVertexIndex, a, b, allMarkers);
+    if (allMarkers.length) {
+      push();
+      noStroke();
+      fill(220, 60, 60, 170);
+      for (const m of allMarkers) {
+        if (m.gid === lockedShapeId) continue; // ring drawn separately below
+        const sp = applyAffineToPoint(to_screen, m);
+        circle(sp.x + width/2, sp.y + height/2, 5);
+      }
+      pop();
+    }
+  }
+
   const lockedLocal = lockedShapeLocalFor(a, b);
   if (lockedShapeId !== null && lockedLocal) {
     const screenPos = applyAffineToPoint(to_screen, lockedLocal);
@@ -1184,7 +1431,7 @@ function draw() {
     noFill();
     stroke(220, 60, 60);
     strokeWeight(2.0);
-    circle(screenPos.x + width/2, screenPos.y + height/2, 6);
+    circle(screenPos.x + width/2, screenPos.y + height/2, 8);
     pop();
   }
 
@@ -1195,13 +1442,24 @@ function draw() {
     stroke(0);
     strokeWeight(0.5);
     fill(255, 220);
-    rect(5, 5, 135, 560);
+    rect(5, 5, 135, 505);
   }
 
   noLoop();
 }
 
-function windowResized() { resizeCanvas(windowWidth, windowHeight); }
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  if (ab_slider) {
+    ab_slider.position(20, windowHeight - 56);
+    ab_slider.size(windowWidth - 40, 44);
+  }
+  if (ab_label) {
+    ab_label.position(20, windowHeight - 88);
+    ab_label.size(windowWidth - 40, 22);
+  }
+  loop();
+}
 
 // -------------------- Mouse interactions --------------------
 function mousePressed() {
@@ -1260,7 +1518,7 @@ function mouseDragged() {
 function mouseReleased() { dragging = false; loop(); }
 
 function mouseClicked() {
-  if ((mouseX >= 5) && (mouseX <= 140) && (mouseY >= 5) && (mouseY <= 560)) return true;
+  if ((mouseX >= 5) && (mouseX <= 140) && (mouseY >= 5) && (mouseY <= 510)) return true;
   ensureLeafShapes();
   if (!leafShapes.length) return false;
 
@@ -1286,6 +1544,7 @@ function mouseClicked() {
 
   if (!selected) {
     lockedShapeId = null;
+    lockedVertexIndex = -1;
     lockedShapeTargetWorld = null;
     resetAnchor();
     referenceState = null;
@@ -1294,29 +1553,108 @@ function mouseClicked() {
     return false;
   }
 
+  // Find the vertex of the clicked tile nearest to the click point
+  let closestVertexIdx = 0;
+  let closestDistSq = Infinity;
+  for (let i = 0; i < selected.pts.length; ++i) {
+    const vx = evalABwith(selected.pts[i].x, sliderAB.a, sliderAB.b);
+    const vy = evalABwith(selected.pts[i].y, sliderAB.a, sliderAB.b);
+    const dxv = vx - localPt.x;
+    const dyv = vy - localPt.y;
+    const dsq = dxv*dxv + dyv*dyv;
+    if (dsq < closestDistSq) {
+      closestDistSq = dsq;
+      closestVertexIdx = i;
+    }
+  }
+
   const prevLockId = lockedShapeId;
+  const prevLockVertex = lockedVertexIndex;
   const prevLockTarget = lockedShapeTargetWorld;
   lockedShapeId = null;
+  lockedVertexIndex = -1;
   lockedShapeTargetWorld = null;
 
   const state = computeStateForAB(sliderAB.a, sliderAB.b);
-  const data = state.data[selected.gid];
-  if (!data || !state.world) {
+  if (!state.world) {
     lockedShapeId = prevLockId;
+    lockedVertexIndex = prevLockVertex;
     lockedShapeTargetWorld = prevLockTarget;
     updateLockButtonLabel();
     resetAnchor();
     refreshTileColours();
     return false;
   }
-  const local = { x: data.localX, y: data.localY };
+  const vxLocal = evalABwith(selected.pts[closestVertexIdx].x, sliderAB.a, sliderAB.b);
+  const vyLocal = evalABwith(selected.pts[closestVertexIdx].y, sliderAB.a, sliderAB.b);
+  const local = { x: vxLocal, y: vyLocal };
   const worldPreUser = applyAffineToPoint(state.world, local);
 
   lockedShapeId = selected.gid;
+  lockedVertexIndex = closestVertexIdx;
   lockedShapeTargetWorld = worldPreUser;
   updateLockButtonLabel();
   resetAnchor();
   refreshTileColours();
+  return false;
+}
+
+// -------------------- Touch (mobile) --------------------
+let _touchActive = false;
+let _touchStartX = 0;
+let _touchStartY = 0;
+let _touchHasMoved = false;
+const TOUCH_TAP_THRESHOLD = 10;
+
+function _touchTargetIsCanvas(event) {
+  if (!event || !event.target) return true; // assume canvas if unknown
+  return event.target.tagName === 'CANVAS';
+}
+
+function touchStarted(event) {
+  // p5 1.9 registers touch listeners on window, so taps on DOM controls
+  // (buttons, the select, the slider, the colour table) also fire here.
+  // Only intercept when the touch is actually on the canvas; otherwise let
+  // the browser dispatch its synthetic click to the DOM control.
+  if (!_touchTargetIsCanvas(event)) {
+    _touchActive = false;
+    return; // undefined = do not preventDefault
+  }
+  if (typeof touches !== 'undefined' && touches.length > 1) {
+    _touchActive = false;
+    return true;
+  }
+  _touchActive = true;
+  _touchStartX = mouseX;
+  _touchStartY = mouseY;
+  _touchHasMoved = false;
+  const ret = mousePressed();
+  if (ret === true) {
+    _touchActive = false;
+    return; // mousePressed declined; let default happen
+  }
+  return false;
+}
+
+function touchMoved(event) {
+  if (!_touchActive) return;
+  if (!_touchTargetIsCanvas(event)) return;
+  const dx = mouseX - _touchStartX;
+  const dy = mouseY - _touchStartY;
+  if (Math.sqrt(dx*dx + dy*dy) > TOUCH_TAP_THRESHOLD) {
+    _touchHasMoved = true;
+  }
+  mouseDragged();
+  return false;
+}
+
+function touchEnded(event) {
+  if (!_touchActive) return;
+  mouseReleased();
+  if (!_touchHasMoved) {
+    mouseClicked();
+  }
+  _touchActive = false;
   return false;
 }
 </script>
