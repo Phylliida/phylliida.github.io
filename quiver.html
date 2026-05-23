@@ -208,6 +208,8 @@ body {
   <button id="principalFramingButton" class="defaultButton" onclick="applyPrincipalFraming();">PRINCIPAL FRAMING</button>
   <button id="mutationGraphButton" class="defaultButton" onclick="toggleMutationGraph();">SHOW MUTATION GRAPH</button>
   <button id="freezeMgButton" class="defaultButton" onclick="toggleMutationGraphFreeze();">FREEZE MUTATION GRAPH</button>
+  <button id="mgZoomInButton" class="defaultButton" onclick="mgZoomIn();">+ ZOOM MUTATION GRAPH</button>
+  <button id="mgZoomOutButton" class="defaultButton" onclick="mgZoomOut();">- ZOOM MUTATION GRAPH</button>
   <button id="deleteMgButton" class="defaultButton" onclick="confirmDeleteMutationGraph();">DELETE MUTATION GRAPH</button>
 </div>
 
@@ -496,7 +498,11 @@ function serializeMutationGraph() {
         if (mutationGraph.nodesList[i].id === mutationGraph.currentSig) { currentIdx = i; break; }
     }
     var result = [pathToSeed(), opsFlat, positionsFlat, currentIdx];
-    if (customMutationGraphHeight !== null) result.push(Math.round(customMutationGraphHeight));
+    var zoomChanged = mutationGraphZoom !== 1.0;
+    if (customMutationGraphHeight !== null || zoomChanged) {
+        result.push(customMutationGraphHeight !== null ? Math.round(customMutationGraphHeight) : 240);
+    }
+    if (zoomChanged) result.push(Math.round(mutationGraphZoom * 1000) / 1000);
     return result;
 }
 
@@ -619,6 +625,7 @@ function performDeleteMutationGraph() {
     mutationGraphFrozen = false;
     updateFreezeMgButtonText();
     customMutationGraphHeight = null;
+    mutationGraphZoom = 1.0;
     if (mutationGraphSim) { mutationGraphSim.stop(); mutationGraphSim = null; }
     var panel = document.getElementById("mutationGraphPanel");
     if (panel) {
@@ -669,6 +676,28 @@ var mutationGraphSim = null;
 var mgResize = { dragging: false, startY: 0, startH: 0 };
 var customMutationGraphHeight = null;
 var mutationGraphFrozen = false;
+var mutationGraphZoom = 1.0;
+
+function applyMutationGraphZoom() {
+    var svgNode = document.getElementById("mutationGraphSvg");
+    if (!svgNode) return;
+    var rect = svgNode.getBoundingClientRect();
+    var cx = rect.width / 2, cy = rect.height / 2;
+    d3.select("#mutationGraphSvg").select("g.mg-viewport")
+        .attr("transform", "translate(" + cx + "," + cy + ") scale(" + mutationGraphZoom + ") translate(" + (-cx) + "," + (-cy) + ")");
+}
+
+function mgZoomIn() {
+    mutationGraphZoom *= 1.2;
+    applyMutationGraphZoom();
+    triggerURLUpdate();
+}
+
+function mgZoomOut() {
+    mutationGraphZoom /= 1.2;
+    applyMutationGraphZoom();
+    triggerURLUpdate();
+}
 
 function updateFreezeMgButtonText() {
     var btn = document.getElementById("freezeMgButton");
@@ -753,12 +782,14 @@ function renderMutationGraph() {
         .force("charge", d3.forceManyBody().strength(-150))
         .force("center", d3.forceCenter(w / 2, h / 2));
 
-    var link = mSvg.append("g")
+    var viewport = mSvg.append("g").attr("class", "mg-viewport");
+
+    var link = viewport.append("g")
         .attr("stroke", "rgba(255,255,255,0.4)")
         .attr("stroke-width", 1.5)
         .selectAll("line").data(links).join("line");
 
-    var linkLabel = mSvg.append("g")
+    var linkLabel = viewport.append("g")
         .selectAll("text").data(links).join("text")
         .attr("class", "mg-link-label")
         .text(d => d.label != null ? d.label : "")
@@ -771,7 +802,7 @@ function renderMutationGraph() {
         .attr("stroke-width", "3px")
         .style("pointer-events", "none");
 
-    var node = mSvg.append("g")
+    var node = viewport.append("g")
         .selectAll("circle").data(nodes).join("circle")
         .attr("class", "mg-node")
         .attr("r", 14)
@@ -802,7 +833,7 @@ function renderMutationGraph() {
                 triggerURLUpdate();
             }));
 
-    var label = mSvg.append("g")
+    var label = viewport.append("g")
         .selectAll("text").data(nodes).join("text")
         .attr("class", "mg-label")
         .text(d => d.label)
@@ -829,6 +860,8 @@ function renderMutationGraph() {
         node.attr("cx", d => d.x).attr("cy", d => d.y);
         label.attr("x", d => d.x).attr("y", d => d.y + 4);
     });
+
+    applyMutationGraphZoom();
 }
 
 function applyPrincipalFraming() {
@@ -2220,6 +2253,9 @@ function loadGraphFromHash() {
                     customMutationGraphHeight = parsed[8];
                     var mgPanel = document.getElementById("mutationGraphPanel");
                     if (mgPanel) mgPanel.style.height = customMutationGraphHeight + "px";
+                }
+                if (parsed.length >= 10) {
+                    mutationGraphZoom = parsed[9];
                 }
             }
             var nodes = [];
