@@ -1020,26 +1020,20 @@ function mgResizeMove(e) {
         var rect = d3.select("#mutationGraphSvg").node().getBoundingClientRect();
         var rectW = rect.width, rectH = newH;
         mutationGraphSim.force("center", d3.forceCenter(rectW / 2, rectH / 2));
-        var k = mutationGraphZoom || 1;
-        var pad = 18 / k;
-        var cx = rectW / 2, cy = rectH / 2;
-        var halfW = rectW / (2 * k);
-        var halfH = rectH / (2 * k);
-        var minX = cx - halfW + pad, maxX = cx + halfW - pad;
-        var minY = cy - halfH + pad, maxY = cy + halfH - pad;
-        for (var i = 0; i < mutationGraph.nodesList.length; i++) {
-            var d = mutationGraph.nodesList[i];
-            if (d.x < minX) d.x = minX;
-            if (d.x > maxX) d.x = maxX;
-            if (d.y < minY) d.y = minY;
-            if (d.y > maxY) d.y = maxY;
-            if (d.fx != null) {
-                if (d.fx < minX) d.fx = minX;
-                if (d.fx > maxX) d.fx = maxX;
-            }
-            if (d.fy != null) {
-                if (d.fy < minY) d.fy = minY;
-                if (d.fy > maxY) d.fy = maxY;
+        if (!mutationGraphFrozen) {
+            var k = mutationGraphZoom || 1;
+            var pad = 18 / k;
+            var cx = rectW / 2, cy = rectH / 2;
+            var halfW = rectW / (2 * k);
+            var halfH = rectH / (2 * k);
+            var minX = cx - halfW + pad, maxX = cx + halfW - pad;
+            var minY = cy - halfH + pad, maxY = cy + halfH - pad;
+            for (var i = 0; i < mutationGraph.nodesList.length; i++) {
+                var d = mutationGraph.nodesList[i];
+                if (d.x < minX) d.x = minX;
+                if (d.x > maxX) d.x = maxX;
+                if (d.y < minY) d.y = minY;
+                if (d.y > maxY) d.y = maxY;
             }
         }
         mutationGraphSim.alpha(0.05).restart();
@@ -1153,20 +1147,22 @@ function renderMutationGraph() {
         .style("pointer-events", "none");
 
     mutationGraphSim.on("tick", () => {
-        var r = mSvg.node().getBoundingClientRect();
-        var k = mutationGraphZoom || 1;
-        var pad = 18 / k;
-        var cx = r.width / 2, cy = r.height / 2;
-        var halfW = r.width / (2 * k);
-        var halfH = r.height / (2 * k);
-        var minX = cx - halfW + pad, maxX = cx + halfW - pad;
-        var minY = cy - halfH + pad, maxY = cy + halfH - pad;
-        for (var i = 0; i < nodes.length; i++) {
-            var d = nodes[i];
-            if (d.x < minX) { d.x = minX; if (d.vx) d.vx = 0; }
-            if (d.x > maxX) { d.x = maxX; if (d.vx) d.vx = 0; }
-            if (d.y < minY) { d.y = minY; if (d.vy) d.vy = 0; }
-            if (d.y > maxY) { d.y = maxY; if (d.vy) d.vy = 0; }
+        if (!mutationGraphFrozen) {
+            var r = mSvg.node().getBoundingClientRect();
+            var k = mutationGraphZoom || 1;
+            var pad = 18 / k;
+            var cx = r.width / 2, cy = r.height / 2;
+            var halfW = r.width / (2 * k);
+            var halfH = r.height / (2 * k);
+            var minX = cx - halfW + pad, maxX = cx + halfW - pad;
+            var minY = cy - halfH + pad, maxY = cy + halfH - pad;
+            for (var i = 0; i < nodes.length; i++) {
+                var d = nodes[i];
+                if (d.x < minX) { d.x = minX; if (d.vx) d.vx = 0; }
+                if (d.x > maxX) { d.x = maxX; if (d.vx) d.vx = 0; }
+                if (d.y < minY) { d.y = minY; if (d.vy) d.vy = 0; }
+                if (d.y > maxY) { d.y = maxY; if (d.vy) d.vy = 0; }
+            }
         }
         link.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
             .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
