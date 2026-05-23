@@ -233,7 +233,8 @@ body {
   <button id="mgZoomInButton" class="defaultButton" onclick="mgZoomIn();">+ ZOOM MUTATION GRAPH</button>
   <button id="mgZoomOutButton" class="defaultButton" onclick="mgZoomOut();">- ZOOM MUTATION GRAPH</button>
   <button id="deleteMgButton" class="defaultButton" onclick="confirmDeleteMutationGraph();">DELETE MUTATION GRAPH</button>
-  <button id="exportPngButton" class="defaultButton" onclick="exportQuiverPng();">EXPORT</button>
+  <button id="exportPngButton" class="defaultButton" onclick="exportQuiverPng();">EXPORT IMAGE (data in metadata)</button>
+  <button id="exportJsonButton" class="defaultButton" onclick="exportQuiverJson();">EXPORT JSON (alternative format)</button>
   <button id="importPngButton" class="defaultButton" onclick="openImportDialog();">IMPORT (or drop here)</button>
 </div>
 
@@ -882,12 +883,139 @@ function importQuiverPng(file) {
     });
 }
 
+function exportQuiverJson() {
+    ensureMutationGraphFrozen();
+    var hash = window.location.hash || "";
+    if (hash.charAt(0) === "#") hash = hash.substring(1);
+    if (!hash) {
+        alert("No quiver data to export");
+        return;
+    }
+    var parsed;
+    try {
+        parsed = JSON.parse(decodeURI(hash));
+    } catch (e) {
+        alert("Failed to parse current state: " + e.message);
+        return;
+    }
+    var n = (parsed[1] || []).length;
+    var weightsInner = (parsed[0] || "").replace(/_/g, "");
+    weightsInner = weightsInner.substring(1, weightsInner.length - 1);
+    var pieces = weightsInner.length > 0 ? weightsInner.split(",") : [];
+    var bMatrix = [];
+    for (var i = 0; i < n; i++) {
+        var row = [];
+        for (var j = 0; j < n; j++) {
+            var v = pieces[i * n + j];
+            row.push(v != null ? parseInt(v) : 0);
+        }
+        bMatrix.push(row);
+    }
+    var structured = {
+        bMatrix: bMatrix,
+        labels: parsed[1],
+        positions: parsed[2],
+        frozen: parsed[3]
+    };
+    if (parsed.length >= 8) {
+        var opsFlat = parsed[5] || [];
+        var ops = [];
+        for (var i = 0; i < opsFlat.length; i += 2) {
+            ops.push({ from: opsFlat[i], vertex: opsFlat[i + 1] });
+        }
+        var posFlat = parsed[6] || [];
+        var pinned = {};
+        for (var i = 0; i < posFlat.length; i += 3) {
+            pinned[posFlat[i]] = [posFlat[i + 1], posFlat[i + 2]];
+        }
+        structured.mutationGraph = {
+            pathToSeed: parsed[4] || [],
+            ops: ops,
+            pinned: pinned,
+            currentIdx: parsed[7]
+        };
+        if (parsed.length >= 9) structured.mutationGraph.height = parsed[8];
+        if (parsed.length >= 10) structured.mutationGraph.zoom = parsed[9];
+    }
+    var pretty = JSON.stringify(structured, null, 2);
+    var blob = new Blob([pretty], { type: "application/json" });
+    var dlUrl = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = dlUrl;
+    a.download = "quiver.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function() { URL.revokeObjectURL(dlUrl); }, 200);
+}
+
+function importQuiverJson(file) {
+    if (!file) return;
+    file.text().then(function(text) {
+        var data;
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            alert("Failed to parse JSON file: " + e.message);
+            return;
+        }
+        var weightsStr;
+        if (data.bMatrix) {
+            var flat = [];
+            for (var i = 0; i < data.bMatrix.length; i++) {
+                var row = data.bMatrix[i];
+                for (var j = 0; j < row.length; j++) flat.push(row[j] + "");
+            }
+            weightsStr = "____[" + flat.join(",") + "]____";
+        } else if (data.weights) {
+            weightsStr = data.weights;
+        } else {
+            alert("JSON is missing bMatrix");
+            return;
+        }
+        var arr = [weightsStr, data.labels, data.positions, data.frozen];
+        if (data.mutationGraph) {
+            var mg = data.mutationGraph;
+            arr.push(mg.pathToSeed || []);
+            var opsFlat = [];
+            var opsArr = mg.ops || [];
+            for (var i = 0; i < opsArr.length; i++) {
+                opsFlat.push(opsArr[i].from, opsArr[i].vertex);
+            }
+            arr.push(opsFlat);
+            var posFlat = [];
+            var pinned = mg.pinned || {};
+            for (var k in pinned) {
+                posFlat.push(parseInt(k), pinned[k][0], pinned[k][1]);
+            }
+            arr.push(posFlat);
+            arr.push(mg.currentIdx != null ? mg.currentIdx : 0);
+            var hasHeight = mg.height != null;
+            var hasZoom = mg.zoom != null;
+            if (hasHeight || hasZoom) arr.push(hasHeight ? mg.height : 240);
+            if (hasZoom) arr.push(mg.zoom);
+        }
+        pendingImportCenter = true;
+        window.location.hash = "#" + encodeURI(JSON.stringify(arr));
+    });
+}
+
+function importQuiverFile(file) {
+    if (!file) return;
+    var name = (file.name || "").toLowerCase();
+    if (name.endsWith(".json") || file.type === "application/json") {
+        importQuiverJson(file);
+    } else {
+        importQuiverPng(file);
+    }
+}
+
 function openImportDialog() {
     var input = document.createElement("input");
     input.type = "file";
-    input.accept = ".png,image/png";
+    input.accept = ".png,image/png,.json,application/json";
     input.onchange = function(e) {
-        if (e.target.files.length > 0) importQuiverPng(e.target.files[0]);
+        if (e.target.files.length > 0) importQuiverFile(e.target.files[0]);
     };
     input.click();
 }
@@ -908,7 +1036,7 @@ function setupImportDrop() {
         e.preventDefault(); e.stopPropagation();
         btn.classList.add("defaultButton");
         btn.classList.remove("selectedButton");
-        if (e.dataTransfer.files.length > 0) importQuiverPng(e.dataTransfer.files[0]);
+        if (e.dataTransfer.files.length > 0) importQuiverFile(e.dataTransfer.files[0]);
     });
 }
 
