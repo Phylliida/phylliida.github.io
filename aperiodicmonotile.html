@@ -100,6 +100,11 @@ let colourSummaries = [];
 let lockedShapeId = null;
 let lockedVertexIndex = -1;
 let lockedShapeTargetWorld = null;
+let lockedShapeIdB = null;
+let lockedVertexIndexB = -1;
+let lockedShapeTargetWorldB = null;
+let pairMode = 'off'; // 'off' | 'pickA' | 'pickB' | 'paired'
+let pair_button;
 
 const colmap = {
   col0: [96, 149, 239],
@@ -577,6 +582,10 @@ function rebuildLeafShapes() {
     lockedShapeTargetWorld = null;
     updateLockButtonLabel();
   }
+  if (lockedShapeIdB !== null && !findLeafShapeById(lockedShapeIdB)) {
+    clearPairLock();
+    updatePairButtonLabel();
+  }
 }
 
 function findLeafShapeById(id) {
@@ -600,6 +609,26 @@ function lockedShapeLocalFor(aa = a, bb = b) {
   const sac = polygonSignedAreaAndCentroid(shape.pts, aa, bb);
   if (!Number.isFinite(sac.cx) || !Number.isFinite(sac.cy)) return null;
   return { x: sac.cx, y: sac.cy };
+}
+
+function lockedShapeLocalForB(aa = a, bb = b) {
+  if (lockedShapeIdB === null) return null;
+  const shape = findLeafShapeById(lockedShapeIdB);
+  if (!shape) return null;
+  if (lockedVertexIndexB >= 0 && lockedVertexIndexB < shape.pts.length) {
+    const vx = evalABwith(shape.pts[lockedVertexIndexB].x, aa, bb);
+    const vy = evalABwith(shape.pts[lockedVertexIndexB].y, aa, bb);
+    if (!Number.isFinite(vx) || !Number.isFinite(vy)) return null;
+    return { x: vx, y: vy };
+  }
+  return null;
+}
+
+function clearPairLock() {
+  lockedShapeIdB = null;
+  lockedVertexIndexB = -1;
+  lockedShapeTargetWorldB = null;
+  pairMode = 'off';
 }
 
 function ensureLeafShapes() {
@@ -723,12 +752,21 @@ function ensureReferenceState() {
   const currentVertex = lockedVertexIndex;
   const tx = lockedShapeTargetWorld ? lockedShapeTargetWorld.x : 0;
   const ty = lockedShapeTargetWorld ? lockedShapeTargetWorld.y : 0;
+  const currentLockIdB = lockedShapeIdB == null ? -1 : lockedShapeIdB;
+  const currentVertexB = lockedVertexIndexB;
+  const txB = lockedShapeTargetWorldB ? lockedShapeTargetWorldB.x : 0;
+  const tyB = lockedShapeTargetWorldB ? lockedShapeTargetWorldB.y : 0;
   if (!referenceState ||
       referenceState.version !== shapeSetVersion ||
       referenceState.lockId !== currentLockId ||
       referenceState.vertexIdx !== currentVertex ||
       referenceState.tx !== tx ||
-      referenceState.ty !== ty) {
+      referenceState.ty !== ty ||
+      referenceState.pairMode !== pairMode ||
+      referenceState.lockIdB !== currentLockIdB ||
+      referenceState.vertexIdxB !== currentVertexB ||
+      referenceState.txB !== txB ||
+      referenceState.tyB !== tyB) {
     const endAB = referenceSliderAB();
     const startAB = sliderValueToAB(0);
     const endState = computeStateForAB(endAB.a, endAB.b);
@@ -742,7 +780,12 @@ function ensureReferenceState() {
       lockId: currentLockId,
       vertexIdx: currentVertex,
       tx,
-      ty
+      ty,
+      pairMode,
+      lockIdB: currentLockIdB,
+      vertexIdxB: currentVertexB,
+      txB,
+      tyB
     };
   }
   return referenceState;
@@ -1116,6 +1159,33 @@ function centroidMatrix() {
 }
 
 function applyLockTranslation(worldMatrix, aa = a, bb = b) {
+  // While selecting pair vertices, render natural state so each capture is in
+  // the same frame.
+  if (pairMode === 'pickA' || pairMode === 'pickB') return worldMatrix;
+
+  if (pairMode === 'paired' &&
+      lockedShapeId !== null && lockedShapeTargetWorld !== null &&
+      lockedShapeIdB !== null && lockedShapeTargetWorldB !== null) {
+    const localA = lockedShapeLocalFor(aa, bb);
+    const localB = lockedShapeLocalForB(aa, bb);
+    if (!localA || !localB) return worldMatrix;
+    const currentA = applyAffineToPoint(worldMatrix, localA);
+    const currentB = applyAffineToPoint(worldMatrix, localB);
+    const aHats = 1;
+    const aTurtles = Math.sqrt(3);
+    let t = (aa - aHats) / (aTurtles - aHats);
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
+    const dxA = lockedShapeTargetWorld.x - currentA.x;
+    const dyA = lockedShapeTargetWorld.y - currentA.y;
+    const dxB = lockedShapeTargetWorldB.x - currentB.x;
+    const dyB = lockedShapeTargetWorldB.y - currentB.y;
+    const dx = dxA * (1 - t) + dxB * t;
+    const dy = dyA * (1 - t) + dyB * t;
+    const trans = [1, 0, dx, 0, 1, dy];
+    return mulAffine(trans, worldMatrix);
+  }
+
   if (lockedShapeId === null || lockedShapeTargetWorld === null) return worldMatrix;
   const lockedLocal = lockedShapeLocalFor(aa, bb);
   if (!lockedLocal) return worldMatrix;
@@ -1128,7 +1198,21 @@ function applyLockTranslation(worldMatrix, aa = a, bb = b) {
 
 function updateLockButtonLabel() {
   if (!lock_button) return;
-  lock_button.html(lockedShapeId !== null ? "Clear Lock" : "No Lock");
+  if (pairMode === 'paired') {
+    lock_button.html("Clear Locks");
+  } else {
+    lock_button.html(lockedShapeId !== null ? "Clear Lock" : "No Lock");
+  }
+}
+
+function updatePairButtonLabel() {
+  if (!pair_button) return;
+  switch (pairMode) {
+    case 'pickA': pair_button.html("Click vertex A"); break;
+    case 'pickB': pair_button.html("Click vertex B"); break;
+    case 'paired': pair_button.html("Clear Pair"); break;
+    default: pair_button.html("Pair Lock");
+  }
 }
 
 function resetAnchor() {
@@ -1159,7 +1243,9 @@ function setup() {
     lockedShapeId = null;
     lockedVertexIndex = -1;
     lockedShapeTargetWorld = null;
+    clearPairLock();
     updateLockButtonLabel();
+    updatePairButtonLabel();
     rebuildLeafShapes();
     resetAnchor();
     refreshTileColours();
@@ -1173,7 +1259,9 @@ function setup() {
     lockedShapeId = null;
     lockedVertexIndex = -1;
     lockedShapeTargetWorld = null;
+    clearPairLock();
     updateLockButtonLabel();
+    updatePairButtonLabel();
     resetAnchor();
     rebuildLeafShapes();
     refreshTileColours();
@@ -1193,7 +1281,9 @@ function setup() {
     lockedShapeId = null;
     lockedVertexIndex = -1;
     lockedShapeTargetWorld = null;
+    clearPairLock();
     updateLockButtonLabel();
+    updatePairButtonLabel();
     resetAnchor();
     rebuildLeafShapes();
     refreshTileColours();
@@ -1359,12 +1449,42 @@ function setup() {
     lockedShapeId = null;
     lockedVertexIndex = -1;
     lockedShapeTargetWorld = null;
+    clearPairLock();
     resetAnchor();
     updateLockButtonLabel();
+    updatePairButtonLabel();
+    refreshTileColours();
+  });
+
+  pair_button = createButton("Pair Lock");
+  pair_button.position(10, 495);
+  pair_button.size(125, 25);
+  pair_button.mousePressed(function () {
+    if (pairMode !== 'off') {
+      lockedShapeId = null;
+      lockedVertexIndex = -1;
+      lockedShapeTargetWorld = null;
+      clearPairLock();
+      resetAnchor();
+      updateLockButtonLabel();
+      updatePairButtonLabel();
+      refreshTileColours();
+      return;
+    }
+    lockedShapeId = null;
+    lockedVertexIndex = -1;
+    lockedShapeTargetWorld = null;
+    clearPairLock();
+    pairMode = 'pickA';
+    ab_slider.value(100 / (1 + sqrt(3))); // Hats
+    resetAnchor();
+    updateLockButtonLabel();
+    updatePairButtonLabel();
     refreshTileColours();
   });
 
   updateLockButtonLabel();
+  updatePairButtonLabel();
 
   colour_table = createDiv('');
   colour_table.position(150, 10);
@@ -1438,6 +1558,33 @@ function draw() {
     pop();
   }
 
+  if (pairMode === 'paired' && lockedVertexIndexB >= 0) {
+    const allMarkersB = [];
+    gatherSameVertexAcrossTiles(tile, lockedVertexIndexB, a, b, allMarkersB);
+    if (allMarkersB.length) {
+      push();
+      noStroke();
+      fill(60, 110, 220, 170);
+      for (const m of allMarkersB) {
+        if (m.gid === lockedShapeIdB) continue;
+        const sp = applyAffineToPoint(to_screen, m);
+        circle(sp.x + width/2, sp.y + height/2, 5);
+      }
+      pop();
+    }
+  }
+
+  const lockedLocalB = lockedShapeLocalForB(a, b);
+  if (pairMode === 'paired' && lockedShapeIdB !== null && lockedLocalB) {
+    const screenPosB = applyAffineToPoint(to_screen, lockedLocalB);
+    push();
+    noFill();
+    stroke(60, 110, 220);
+    strokeWeight(2.0);
+    circle(screenPosB.x + width/2, screenPosB.y + height/2, 8);
+    pop();
+  }
+
   const centroidPaths = computeCentroidPaths();
   drawCentroidPaths(centroidPaths);
 
@@ -1445,7 +1592,7 @@ function draw() {
     stroke(0);
     strokeWeight(0.5);
     fill(255, 220);
-    rect(5, 5, 135, 505);
+    rect(5, 5, 135, 535);
   }
 
   noLoop();
@@ -1545,7 +1692,7 @@ function mouseDragged() {
 function mouseReleased() { dragging = false; loop(); }
 
 function mouseClicked() {
-  if ((mouseX >= 5) && (mouseX <= 140) && (mouseY >= 5) && (mouseY <= 510)) return true;
+  if ((mouseX >= 5) && (mouseX <= 140) && (mouseY >= 5) && (mouseY <= 540)) return true;
   if (_inSliderRegion() || _pressedInSlider) {
     _pressedInSlider = false;
     return true;
@@ -1575,13 +1722,23 @@ function mouseClicked() {
   }
 
   if (!selected) {
-    lockedShapeId = null;
-    lockedVertexIndex = -1;
-    lockedShapeTargetWorld = null;
+    if (pairMode === 'pickA' || pairMode === 'pickB') {
+      // Click missed a tile during pair selection; cancel back to clean state.
+      lockedShapeId = null;
+      lockedVertexIndex = -1;
+      lockedShapeTargetWorld = null;
+      clearPairLock();
+    } else {
+      lockedShapeId = null;
+      lockedVertexIndex = -1;
+      lockedShapeTargetWorld = null;
+      clearPairLock();
+    }
     resetAnchor();
     referenceState = null;
     refreshTileColours();
     updateLockButtonLabel();
+    updatePairButtonLabel();
     return false;
   }
 
@@ -1603,16 +1760,24 @@ function mouseClicked() {
   const prevLockId = lockedShapeId;
   const prevLockVertex = lockedVertexIndex;
   const prevLockTarget = lockedShapeTargetWorld;
-  lockedShapeId = null;
-  lockedVertexIndex = -1;
-  lockedShapeTargetWorld = null;
+  // For default single-lock, temporarily clear so capture is in natural frame.
+  // In pair selection, applyLockTranslation already returns no-op so we
+  // don't need to touch the lock fields.
+  if (pairMode !== 'pickA' && pairMode !== 'pickB') {
+    lockedShapeId = null;
+    lockedVertexIndex = -1;
+    lockedShapeTargetWorld = null;
+  }
 
   const state = computeStateForAB(sliderAB.a, sliderAB.b);
   if (!state.world) {
-    lockedShapeId = prevLockId;
-    lockedVertexIndex = prevLockVertex;
-    lockedShapeTargetWorld = prevLockTarget;
+    if (pairMode !== 'pickA' && pairMode !== 'pickB') {
+      lockedShapeId = prevLockId;
+      lockedVertexIndex = prevLockVertex;
+      lockedShapeTargetWorld = prevLockTarget;
+    }
     updateLockButtonLabel();
+    updatePairButtonLabel();
     resetAnchor();
     refreshTileColours();
     return false;
@@ -1622,10 +1787,38 @@ function mouseClicked() {
   const local = { x: vxLocal, y: vyLocal };
   const worldPreUser = applyAffineToPoint(state.world, local);
 
+  if (pairMode === 'pickA') {
+    lockedShapeId = selected.gid;
+    lockedVertexIndex = closestVertexIdx;
+    lockedShapeTargetWorld = worldPreUser;
+    pairMode = 'pickB';
+    ab_slider.value(100 * sqrt(3) / (1 + sqrt(3))); // Turtles
+    resetAnchor();
+    updateLockButtonLabel();
+    updatePairButtonLabel();
+    refreshTileColours();
+    return false;
+  }
+
+  if (pairMode === 'pickB') {
+    lockedShapeIdB = selected.gid;
+    lockedVertexIndexB = closestVertexIdx;
+    lockedShapeTargetWorldB = worldPreUser;
+    pairMode = 'paired';
+    resetAnchor();
+    updateLockButtonLabel();
+    updatePairButtonLabel();
+    refreshTileColours();
+    return false;
+  }
+
+  // Default single-lock click (also exits any 'paired' state).
+  clearPairLock();
   lockedShapeId = selected.gid;
   lockedVertexIndex = closestVertexIdx;
   lockedShapeTargetWorld = worldPreUser;
   updateLockButtonLabel();
+  updatePairButtonLabel();
   resetAnchor();
   refreshTileColours();
   return false;

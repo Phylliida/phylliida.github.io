@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Hat Tilings via Markov Partition (Labbé–Selinger)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body { background: #fff; overflow: hidden; font-family: sans-serif; }
+    .ui {
+      position: absolute; top: 6px; left: 6px;
+      background: rgba(255,255,255,0.92);
+      border: 1px solid #999; border-radius: 4px;
+      padding: 6px 8px; font-size: 12px; line-height: 1.6;
+      max-width: 220px;
+      z-index: 10;
+    }
+    .ui label { display: block; }
+    .ui button { margin-top: 4px; }
+    .ui input[type=range] { width: 160px; vertical-align: middle; }
+    .legend { font-size: 11px; margin-top: 4px; }
+    .legend span.sw { display: inline-block; width: 12px; height: 12px; border: 1px solid #555; margin-right: 4px; vertical-align: middle; }
+  </style>
+</head>
+<body>
+
+<div class="ui" id="ui">
+  <strong>Hat tilings — Markov partition</strong><br/>
+  Labbé &amp; Selinger, arXiv:2604.20964<br/>
+  <hr/>
+  <label>Grid shift X: <input id="sx" type="range" min="-100" max="100" value="20" step="1"/></label>
+  <label>Grid shift Y: <input id="sy" type="range" min="-100" max="100" value="35" step="1"/></label>
+  <label>Zoom: <input id="zoom" type="range" min="5" max="200" value="36" step="1"/></label>
+  <label>Fractal depth: <input id="depth" type="range" min="1" max="8" value="5" step="1"/> <span id="depth_val">5</span></label>
+  <label><input type="checkbox" id="show_partition" checked/> Show partition</label>
+  <label><input type="checkbox" id="show_grid" checked/> Show grid points</label>
+  <label><input type="checkbox" id="show_tiles" checked/> Show hat tiles</label>
+  <label><input type="checkbox" id="show_labels"/> Show labels</label>
+  <button id="reset">Reset view</button>
+  <div class="legend" id="legend"></div>
+</div>
+
+<script>
+// ---------- Constants ----------
+// Lattice basis (from the paper / Sage output):
+//   M * lattice =
+//     [Lxa Lya] = [3.118034  0.809017]
+//     [Lxb Lyb]   [0.866025  3.133309]
+const LXA = 3.118034, LXB = 0.866025;
+const LYA = 0.809017, LYB = 3.133309;
+
+const PHI = 1.618034; // golden ratio (side of the empty triangles)
+const SQRT3_2 = 0.8660254037844386;
+
+// Hat-tile colors (paper's color+k / color-k). Numeric label in [-6..-1, 0, 1..6].
+const COLOR_BY_LABEL = {
+  '1':  [237, 28, 36],   '2':  [247, 151,  0],  '3':  [252, 236,  0],
+  '4':  [  0, 204, 29],  '5':  [ 51, 116, 221], '6':  [157,  67, 184],
+  '-1': [244, 119, 124], '-2': [250, 193, 102], '-3': [254, 247, 153],
+  '-4': [153, 235, 165], '-5': [102, 151, 229], '-6': [181, 114, 202],
+  '0':  [255, 255, 255]
+};
+
+// Fractal path generator. The "hat fractal" is defined by a substitution
+// rule on two segment types (Figure 6c of the paper):
+//   Blue B: a "primitive" segment whose canonical form goes from (0,0)
+//           to (φ²,0). Substitutes to 4 children [B,B,R,B], whose
+//           canonical natural endpoints are listed below.
+//   Red R:  primitive form (0.5, √3/2)→(φ²,0). Substitutes to 3 children.
+//
+// Each segment also carries a `traverse` flag — true means the path
+// visits it from natS→natE, false means natE→natS. Substituting a parent
+// with traverse=false reverses the child list and flips each child's
+// traverse flag. Verified against the paper's SAGE outputs at depths 1–5.
+const PHI2 = 2.618034;
+const RED_C2 = 2.118034;     // canonical red end x relative to red start
+const RED_DET = RED_C2*RED_C2 + 0.866025*0.866025; // 5.236068
+
+// canonical natS, canonical natE, traverse-when-parent-traverse=true
+const B_RULE = [
+  ['B', [0.5, 0.866025],  [0, 0],         false],
+  ['B', [1.5, 0.866025],  [0.5, 0.866025], false],
+  ['R', [1.5, 0.866025],  [1.618034, 0],   true],
+  ['B', [1.618034, 0],    [PHI2, 0],       true]
+];
+const R_RULE = [
+  ['B', [1.5, 0.866025],  [0.5, 0.866025], false],
+  ['R', [1.5, 0.866025],  [1.618034, 0],   true],
+  ['B', [1.618034, 0],    [PHI2, 0],       true]
+];
+
+function transformB(natS, natE) {
+  // Maps canonical (0,0)→natS, (φ²,0)→natE via similarity transform.
+  const dx = (natE[0] - natS[0]) / PHI2;
+  const dy = (natE[1] - natS[1]) / PHI2;
+  return (p) => [
+    p[0]*dx - p[1]*dy + natS[0],
+    p[0]*dy + p[1]*dx + natS[1]
+  ];
+}
+
+function transformR(natS, natE) {
+  // Maps canonical (0.5, √3/2)→natS, (φ²,0)→natE.
+  const Vx = natE[0] - natS[0];
+  const Vy = natE[1] - natS[1];
+  const a = (RED_C2*Vx - 0.866025*Vy) / RED_DET;
+  const b = (0.866025*Vx + RED_C2*Vy) / RED_DET;
+  const tx = natS[0] - 0.5*a + 0.866025*b;
+  const ty = natS[1] - 0.5*b - 0.866025*a;
+  return (p) => [p[0]*a - p[1]*b + tx, p[0]*b + p[1]*a + ty];
+}
+
+function substituteSegment(seg) {
+  const rule = seg.type === 'B' ? B_RULE : R_RULE;
+  const T = seg.type === 'B' ? transformB(seg.natS, seg.natE)
+                              : transformR(seg.natS, seg.natE);
+  let kids = rule.map(([t, ns, ne, trav]) => ({
+    type: t, natS: T(ns), natE: T(ne), traverse: trav
+  }));
+  if (!seg.traverse) {
+    kids = kids.reverse().map(k => ({
+      type: k.type, natS: k.natS, natE: k.natE, traverse: !k.traverse
+    }));
+  }
+  return kids;
+}
+
+function generateFractalPath(depth) {
+  let segs = [{ type: 'B', natS: [0, 0], natE: [PHI2, 0], traverse: true }];
+  for (let i = 0; i < depth; i++) {
+    const next = [];
+    for (const s of segs) for (const c of substituteSegment(s)) next.push(c);
+    segs = next;
+  }
+  if (!segs.length) return [];
+  const path = [];
+  for (const s of segs) {
+    const start = s.traverse ? s.natS : s.natE;
+    const end   = s.traverse ? s.natE : s.natS;
+    if (path.length === 0) path.push(start);
+    path.push(end);
+  }
+  return path;
+}
+
+let FRACTAL = generateFractalPath(5);
+// Hat polygon vertices (Smith path), starting at the anchor (0,0).
+// Computed by accumulating the relative offsets in \smithpath. Has 14 verts
+// (anchor + 13 steps; the cycle returns to anchor).
+const HAT_BASE = [
+  [0, 0],
+  [0.250, -0.433013],
+  [0,     -0.577351],
+  [0,     -0.866026],
+  [-0.5,  -0.866026],
+  [-0.75, -0.433013],
+  [-1.0,  -0.577351],
+  [-1.25, -0.433013],
+  [-1.0,   0],
+  [-0.5,   0],
+  [-0.5,   0.288675],
+  [-0.25,  0.433013],
+  [0,      0.577351],
+  [0.25,   0.433013]
+];
+
+// All 12 valid hat orientations.
+const ALL_LABELS = [1,2,3,4,5,6,-1,-2,-3,-4,-5,-6];
+
+// ---------- Geometry ----------
+function rotPt(p, rad) {
+  const c = Math.cos(rad), s = Math.sin(rad);
+  return [p[0]*c - p[1]*s, p[0]*s + p[1]*c];
+}
+
+function pointInPoly(px, py, poly) {
+  // Standard ray-cast.
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0], yi = poly[i][1];
+    const xj = poly[j][0], yj = poly[j][1];
+    if (((yi > py) !== (yj > py)) &&
+        (px < (xj - xi) * (py - yi) / ((yj - yi) || 1e-15) + xi)) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+// Build the 14 colored regions of one fundamental domain (around lattice 0).
+// See \FundamentalDomainAroundOrigin in hat-macros.sty.
+function buildPartition() {
+  const regions = [];
+
+  // Six anti-hat triangles (small): label -1..-6, rotated 0,60,...,300°
+  const baseTri = [[0, 0], [-0.5, SQRT3_2], [-1, 0]];
+  const antiHatLabels = [-1, -2, -3, -4, -5, -6];
+  for (let k = 0; k < 6; k++) {
+    const rad = k * Math.PI / 3;
+    const poly = baseTri.map(p => rotPt(p, rad));
+    regions.push({ label: antiHatLabels[k], poly });
+  }
+
+  // Six hat fractals (big): rotations 0,60,...,300° give labels +2,+3,+4,+5,+6,+1
+  const hatLabels = [2, 3, 4, 5, 6, 1];
+  for (let k = 0; k < 6; k++) {
+    const rad = k * Math.PI / 3;
+    const poly = FRACTAL.map(p => rotPt(p, rad));
+    regions.push({ label: hatLabels[k], poly });
+  }
+
+  // Two empty triangles (label 0). See \EmptyTriangleUP / \EmptyTriangleDOWN.
+  // EmptyTriangleUP at (-Lya, -Lyb)
+  {
+    const x = -LYA + 0.5;
+    const y = -LYB + SQRT3_2;
+    regions.push({
+      label: 0,
+      poly: [
+        [x, y],
+        [x + PHI, y],
+        [x + 0.5*PHI, y + PHI*SQRT3_2]
+      ]
+    });
+  }
+  // EmptyTriangleDOWN at (Lya-Lxa, Lyb-Lxb)
+  {
+    const x = (LYA - LXA) + 1;
+    const y = (LYB - LXB);
+    regions.push({
+      label: 0,
+      poly: [
+        [x, y],
+        [x + PHI, y],
+        [x + 0.5*PHI, y - PHI*SQRT3_2]
+      ]
+    });
+  }
+  return regions;
+}
+
+let PARTITION = buildPartition();
+finalizePartition();
+
+function finalizePartition() {
+  for (const r of PARTITION) {
+    let cx = 0, cy = 0;
+    for (const p of r.poly) { cx += p[0]; cy += p[1]; }
+    r.cent = [cx / r.poly.length, cy / r.poly.length];
+  }
+}
+
+function setFractalDepth(d) {
+  FRACTAL = generateFractalPath(d);
+  PARTITION = buildPartition();
+  finalizePartition();
+}
+
+// Solve [Lx Ly] (a,b)^T = (px,py) — gives lattice coords.
+const LATTICE_DET = LXA*LYB - LXB*LYA;
+function approxLatticeCoords(px, py) {
+  const a = (LYB*px - LYA*py) / LATTICE_DET;
+  const b = (-LXB*px + LXA*py) / LATTICE_DET;
+  return [a, b];
+}
+
+// Classify a point: returns { label, ax, ay } where (ax, ay) is the lattice
+// point hosting the matching region. Returns null if no region matches.
+//
+// The construction has ambiguities at region boundaries (and the depth-4
+// fractal is just an approximation of the limit boundary, so adjacent
+// regions can disagree near shared edges). We resolve consistently by
+// shifting the query point by a small fixed direction — "pick below" — so
+// the same direction is used for every grid point.
+const CLASSIFY_SHIFT_X = 1e-7;
+const CLASSIFY_SHIFT_Y = -1e-7;
+function classifyPoint(px, py) {
+  px += CLASSIFY_SHIFT_X;
+  py += CLASSIFY_SHIFT_Y;
+  const [ar, br] = approxLatticeCoords(px, py);
+  const a0 = Math.round(ar), b0 = Math.round(br);
+  for (let da = -1; da <= 1; da++) {
+    for (let db = -1; db <= 1; db++) {
+      const a = a0 + da, b = b0 + db;
+      const cx = a*LXA + b*LYA;
+      const cy = a*LXB + b*LYB;
+      const lpx = px - cx, lpy = py - cy;
+      for (const r of PARTITION) {
+        if (pointInPoly(lpx, lpy, r.poly)) {
+          return { label: r.label, ax: cx, ay: cy };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// Compute the hat tile polygon for a label, anchored at (0, 0).
+//   orientation = [rotate=k*60+120] for k > 0,
+//                 [rotate=-k*60+120, yscale=-1] for k < 0
+// In TikZ the matrix accumulates left-to-right as `current * T_i`, so the
+// rightmost transform is applied first to the point. We mirror first, then
+// rotate.
+function hatPolygon(label) {
+  const k = label;
+  let angDeg, mirror;
+  if (k > 0) { angDeg = k*60 + 120;  mirror = false; }
+  else       { angDeg = -k*60 + 120; mirror = true;  }
+  const rad = angDeg * Math.PI / 180;
+  const c = Math.cos(rad), s = Math.sin(rad);
+  return HAT_BASE.map(([x, y]) => {
+    const yy = mirror ? -y : y;
+    return [x*c - yy*s, x*s + yy*c];
+  });
+}
+
+// Pre-build polygons for all 12 labels.
+const HAT_POLYS = {};
+for (const k of ALL_LABELS) HAT_POLYS[k] = hatPolygon(k);
+
+// ---------- p5 sketch ----------
+let viewS = 36;          // pixels per world unit
+let viewTx = 0, viewTy = 0; // pan, in pixels (added after centering)
+let dragging = false;
+
+let sliderX, sliderY, sliderZoom, sliderDepth;
+let depthVal;
+let cbPart, cbGrid, cbTiles, cbLabels;
+let resetBtn;
+let legendDiv;
+
+function setup() {
+  const cnv = createCanvas(windowWidth, windowHeight);
+  cnv.elt.style.touchAction = 'none';
+  cnv.elt.style.position = 'absolute';
+  cnv.elt.style.zIndex = '0';
+  // UI lookups
+  sliderX = document.getElementById('sx');
+  sliderY = document.getElementById('sy');
+  sliderZoom = document.getElementById('zoom');
+  sliderDepth = document.getElementById('depth');
+  depthVal = document.getElementById('depth_val');
+  cbPart = document.getElementById('show_partition');
+  cbGrid = document.getElementById('show_grid');
+  cbTiles = document.getElementById('show_tiles');
+  cbLabels = document.getElementById('show_labels');
+  resetBtn = document.getElementById('reset');
+  legendDiv = document.getElementById('legend');
+
+  for (const el of [sliderX, sliderY, cbPart, cbGrid, cbTiles, cbLabels]) {
+    el.addEventListener('input', () => loop());
+    el.addEventListener('change', () => loop());
+  }
+  // Zoom slider: zoom around the canvas centre so viewTx/viewTy don't have to change.
+  sliderZoom.addEventListener('input', () => {
+    viewS = parseFloat(sliderZoom.value);
+    loop();
+  });
+  // Fractal depth slider: regenerate the partition from the substitution rule.
+  sliderDepth.addEventListener('input', () => {
+    const d = parseInt(sliderDepth.value);
+    depthVal.textContent = d;
+    setFractalDepth(d);
+    loop();
+  });
+  resetBtn.addEventListener('click', () => {
+    viewS = 36; viewTx = 0; viewTy = 0;
+    sliderX.value = 20; sliderY.value = 35;
+    sliderZoom.value = 36;
+    sliderDepth.value = 5; depthVal.textContent = '5';
+    setFractalDepth(5);
+    loop();
+  });
+
+  buildLegend();
+  noLoop();
+  loop();
+}
+
+function buildLegend() {
+  let html = '';
+  for (const k of ALL_LABELS) {
+    const c = COLOR_BY_LABEL[String(k)];
+    const hex = '#' + c.map(v => v.toString(16).padStart(2,'0')).join('');
+    html += `<span class="sw" style="background:${hex}"></span>${k>0?'+':''}${k} `;
+    if ((Math.abs(k)) % 6 === 0) html += '<br/>';
+  }
+  legendDiv.innerHTML = html;
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  loop();
+}
+
+// World ↔ screen transforms.
+//   screen_x = width/2  + viewTx + world_x * viewS
+//   screen_y = height/2 + viewTy - world_y * viewS    (y flipped: world up)
+function w2sx(x) { return width/2  + viewTx + x*viewS; }
+function w2sy(y) { return height/2 + viewTy - y*viewS; }
+function s2wx(x) { return (x - width/2  - viewTx) / viewS; }
+function s2wy(y) { return (height/2 + viewTy - y) / viewS; }
+
+function gridShift() {
+  // Convert sliders to world-space shifts. Range -1..+1 on each axis.
+  const gx = parseFloat(sliderX.value) / 100;
+  const gy = parseFloat(sliderY.value) / 100;
+  return [gx, gy];
+}
+
+function visibleWorldBounds() {
+  const xs = [s2wx(0), s2wx(width)];
+  const ys = [s2wy(0), s2wy(height)];
+  return {
+    xmin: Math.min(...xs) - 2,
+    xmax: Math.max(...xs) + 2,
+    ymin: Math.min(...ys) - 2,
+    ymax: Math.max(...ys) + 2
+  };
+}
+
+function visibleLatticeRange(b) {
+  // Lattice points (a, b) with corner extremes inside [xmin..xmax] etc.
+  // Solve [Lx Ly] (i,j) = (corner). Take bounding ints with margin.
+  const corners = [
+    approxLatticeCoords(b.xmin, b.ymin),
+    approxLatticeCoords(b.xmin, b.ymax),
+    approxLatticeCoords(b.xmax, b.ymin),
+    approxLatticeCoords(b.xmax, b.ymax)
+  ];
+  let amin = Infinity, amax = -Infinity, bmin = Infinity, bmax = -Infinity;
+  for (const [a, bb] of corners) {
+    if (a < amin) amin = a; if (a > amax) amax = a;
+    if (bb < bmin) bmin = bb; if (bb > bmax) bmax = bb;
+  }
+  return {
+    amin: Math.floor(amin) - 2, amax: Math.ceil(amax) + 2,
+    bmin: Math.floor(bmin) - 2, bmax: Math.ceil(bmax) + 2
+  };
+}
+
+function drawPartitionLayer(latRange) {
+  noStroke();
+  for (let a = latRange.amin; a <= latRange.amax; a++) {
+    for (let b = latRange.bmin; b <= latRange.bmax; b++) {
+      const cx = a*LXA + b*LYA;
+      const cy = a*LXB + b*LYB;
+      for (const r of PARTITION) {
+        const c = COLOR_BY_LABEL[String(r.label)];
+        fill(c[0], c[1], c[2]);
+        beginShape();
+        for (const [x, y] of r.poly) vertex(w2sx(cx+x), w2sy(cy+y));
+        endShape(CLOSE);
+      }
+    }
+  }
+}
+
+function drawTriangularGrid(b, gx, gy) {
+  // Triangular-grid points: i*(1,0) + j*(0.5, √3/2) + (gx, gy)
+  // i, j ∈ Z. Iterate over j-rows that fall within bounds, then i-columns.
+  push();
+  noStroke();
+  fill(40);
+  const j0 = Math.floor((b.ymin - gy) / SQRT3_2) - 1;
+  const j1 = Math.ceil((b.ymax - gy) / SQRT3_2) + 1;
+  for (let j = j0; j <= j1; j++) {
+    const y = gy + j*SQRT3_2;
+    if (y < b.ymin || y > b.ymax) continue;
+    const xOff = gx + 0.5*j;
+    const i0 = Math.floor(b.xmin - xOff) - 1;
+    const i1 = Math.ceil(b.xmax - xOff) + 1;
+    for (let i = i0; i <= i1; i++) {
+      const x = xOff + i;
+      if (x < b.xmin || x > b.xmax) continue;
+      circle(w2sx(x), w2sy(y), 4);
+    }
+  }
+  pop();
+}
+
+function* triangularGridPoints(b, gx, gy) {
+  const j0 = Math.floor((b.ymin - gy) / SQRT3_2) - 1;
+  const j1 = Math.ceil((b.ymax - gy) / SQRT3_2) + 1;
+  for (let j = j0; j <= j1; j++) {
+    const y = gy + j*SQRT3_2;
+    if (y < b.ymin || y > b.ymax) continue;
+    const xOff = gx + 0.5*j;
+    const i0 = Math.floor(b.xmin - xOff) - 1;
+    const i1 = Math.ceil(b.xmax - xOff) + 1;
+    for (let i = i0; i <= i1; i++) {
+      const x = xOff + i;
+      if (x < b.xmin || x > b.xmax) continue;
+      yield [x, y];
+    }
+  }
+}
+
+function drawHatTiles(b, gx, gy, withLabels) {
+  for (const [x, y] of triangularGridPoints(b, gx, gy)) {
+    const cls = classifyPoint(x, y);
+    if (!cls) continue;
+    const lbl = cls.label;
+    if (lbl === 0) continue;
+    const poly = HAT_POLYS[lbl];
+    const col = COLOR_BY_LABEL[String(lbl)];
+    fill(col[0], col[1], col[2], 150); // translucent so the partition shows through
+    stroke(0);
+    strokeWeight(0.8);
+    beginShape();
+    for (const [hx, hy] of poly) vertex(w2sx(x + hx), w2sy(y + hy));
+    endShape(CLOSE);
+    // anchor dot
+    noStroke();
+    fill(255);
+    stroke(0);
+    strokeWeight(0.8);
+    circle(w2sx(x), w2sy(y), 4);
+    if (withLabels) {
+      noStroke();
+      fill(0);
+      textAlign(CENTER, CENTER);
+      textSize(11);
+      const sgn = lbl > 0 ? '+' : '';
+      text(`${sgn}${lbl}`, w2sx(x) + 8, w2sy(y) + 8);
+    }
+  }
+}
+
+function draw() {
+  background(255);
+  const b = visibleWorldBounds();
+  const lat = visibleLatticeRange(b);
+  const [gx, gy] = gridShift();
+
+  if (cbPart.checked) drawPartitionLayer(lat);
+  if (cbTiles.checked) drawHatTiles(b, gx, gy, cbLabels.checked);
+  if (cbGrid.checked) drawTriangularGrid(b, gx, gy);
+
+  noLoop();
+}
+
+// ---------- Pan / zoom ----------
+function inUI(x, y) {
+  const el = document.getElementById('ui');
+  const r = el.getBoundingClientRect();
+  return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+}
+
+function mousePressed(e) {
+  if (inUI(mouseX, mouseY)) return true;
+  dragging = true;
+  return false;
+}
+function mouseReleased() { dragging = false; loop(); }
+function mouseDragged() {
+  if (!dragging) return true;
+  viewTx += movedX;
+  viewTy += movedY;
+  loop();
+  return false;
+}
+function mouseWheel(e) {
+  if (inUI(mouseX, mouseY)) return true;
+  // Zoom around mouse position.
+  const wx = s2wx(mouseX), wy = s2wy(mouseY);
+  const factor = Math.exp(-e.delta * 0.001);
+  viewS *= factor;
+  if (viewS < 5) viewS = 5;
+  if (viewS > 200) viewS = 200;
+  // Re-center so the mouse stays over the same world point.
+  viewTx = mouseX - width/2 - wx*viewS;
+  viewTy = mouseY - height/2 + wy*viewS;
+  if (sliderZoom) sliderZoom.value = String(Math.round(viewS));
+  loop();
+  return false;
+}
+</script>
+
+</body>
+</html>
