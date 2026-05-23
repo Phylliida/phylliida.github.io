@@ -211,6 +211,8 @@ body {
   <button id="mgZoomInButton" class="defaultButton" onclick="mgZoomIn();">+ ZOOM MUTATION GRAPH</button>
   <button id="mgZoomOutButton" class="defaultButton" onclick="mgZoomOut();">- ZOOM MUTATION GRAPH</button>
   <button id="deleteMgButton" class="defaultButton" onclick="confirmDeleteMutationGraph();">DELETE MUTATION GRAPH</button>
+  <button id="exportPngButton" class="defaultButton" onclick="exportQuiverPng();">EXPORT</button>
+  <button id="importPngButton" class="defaultButton" onclick="openImportDialog();">IMPORT (or drop here)</button>
 </div>
 
 <div id="mgConfirmPanel" class="mg-confirm-panel" style="display:none;">
@@ -618,6 +620,169 @@ function seedCurrentQuiver() {
     mutationGraph.currentSig = sig;
 }
 
+var _crc32Table = null;
+function crc32(bytes) {
+    if (!_crc32Table) {
+        _crc32Table = new Uint32Array(256);
+        for (var n = 0; n < 256; n++) {
+            var c = n;
+            for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+            _crc32Table[n] = c >>> 0;
+        }
+    }
+    var crc = 0xFFFFFFFF;
+    for (var i = 0; i < bytes.length; i++) crc = (crc >>> 8) ^ _crc32Table[(crc ^ bytes[i]) & 0xFF];
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function injectPngText(pngBytes, keyword, text) {
+    var keyBytes = new TextEncoder().encode(keyword);
+    var txtBytes = new TextEncoder().encode(text);
+    var dataLen = keyBytes.length + 1 + txtBytes.length;
+    var chunk = new Uint8Array(4 + 4 + dataLen + 4);
+    chunk[0] = (dataLen >>> 24) & 0xFF;
+    chunk[1] = (dataLen >>> 16) & 0xFF;
+    chunk[2] = (dataLen >>> 8) & 0xFF;
+    chunk[3] = dataLen & 0xFF;
+    chunk[4] = 0x74; chunk[5] = 0x45; chunk[6] = 0x58; chunk[7] = 0x74; // "tEXt"
+    var idx = 8;
+    for (var i = 0; i < keyBytes.length; i++) chunk[idx++] = keyBytes[i];
+    chunk[idx++] = 0;
+    for (var i = 0; i < txtBytes.length; i++) chunk[idx++] = txtBytes[i];
+    var crc = crc32(chunk.subarray(4, 8 + dataLen));
+    var ci = 8 + dataLen;
+    chunk[ci] = (crc >>> 24) & 0xFF;
+    chunk[ci + 1] = (crc >>> 16) & 0xFF;
+    chunk[ci + 2] = (crc >>> 8) & 0xFF;
+    chunk[ci + 3] = crc & 0xFF;
+
+    var pos = 8; // skip 8-byte signature
+    while (pos + 8 <= pngBytes.length) {
+        var len = (pngBytes[pos] << 24) | (pngBytes[pos + 1] << 16) | (pngBytes[pos + 2] << 8) | pngBytes[pos + 3];
+        var type = String.fromCharCode(pngBytes[pos + 4], pngBytes[pos + 5], pngBytes[pos + 6], pngBytes[pos + 7]);
+        if (type === "IEND") break;
+        pos += 12 + len;
+    }
+    var result = new Uint8Array(pngBytes.length + chunk.length);
+    result.set(pngBytes.subarray(0, pos), 0);
+    result.set(chunk, pos);
+    result.set(pngBytes.subarray(pos), pos + chunk.length);
+    return result;
+}
+
+function extractPngText(pngBytes, keyword) {
+    var keyBytes = new TextEncoder().encode(keyword);
+    var pos = 8;
+    while (pos + 8 <= pngBytes.length) {
+        var len = (pngBytes[pos] << 24) | (pngBytes[pos + 1] << 16) | (pngBytes[pos + 2] << 8) | pngBytes[pos + 3];
+        var type = String.fromCharCode(pngBytes[pos + 4], pngBytes[pos + 5], pngBytes[pos + 6], pngBytes[pos + 7]);
+        if (type === "tEXt") {
+            var ds = pos + 8;
+            var match = true;
+            for (var i = 0; i < keyBytes.length; i++) {
+                if (pngBytes[ds + i] !== keyBytes[i]) { match = false; break; }
+            }
+            if (match && pngBytes[ds + keyBytes.length] === 0) {
+                var ts = ds + keyBytes.length + 1;
+                var te = ds + len;
+                return new TextDecoder().decode(pngBytes.subarray(ts, te));
+            }
+        }
+        if (type === "IEND") break;
+        pos += 12 + len;
+    }
+    return null;
+}
+
+function exportQuiverPng() {
+    var mainSvg = document.querySelector(".graph-container > svg");
+    if (!mainSvg) return;
+    var rect = mainSvg.getBoundingClientRect();
+    var w = Math.round(rect.width), h = Math.round(rect.height);
+    var clone = mainSvg.cloneNode(true);
+    clone.setAttribute("width", w);
+    clone.setAttribute("height", h);
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    var svgStr = new XMLSerializer().serializeToString(clone);
+    var svgBlob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
+    var url = URL.createObjectURL(svgBlob);
+    var img = new Image();
+    img.onload = function() {
+        var canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        var ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#111";
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(function(blob) {
+            blob.arrayBuffer().then(function(buf) {
+                var pngBytes = new Uint8Array(buf);
+                var hashStr = window.location.hash || "";
+                if (hashStr.charAt(0) === "#") hashStr = hashStr.substring(1);
+                var withMeta = injectPngText(pngBytes, "QuiverHash", hashStr);
+                var outBlob = new Blob([withMeta], { type: "image/png" });
+                var dlUrl = URL.createObjectURL(outBlob);
+                var a = document.createElement("a");
+                a.href = dlUrl;
+                a.download = "quiver.png";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(function() { URL.revokeObjectURL(dlUrl); }, 200);
+            });
+        }, "image/png");
+    };
+    img.onerror = function() {
+        URL.revokeObjectURL(url);
+        alert("Failed to render SVG for export");
+    };
+    img.src = url;
+}
+
+function importQuiverPng(file) {
+    if (!file) return;
+    file.arrayBuffer().then(function(buf) {
+        var bytes = new Uint8Array(buf);
+        var hashStr = extractPngText(bytes, "QuiverHash");
+        if (!hashStr) {
+            alert("No quiver data found in this PNG");
+            return;
+        }
+        window.location.hash = "#" + hashStr;
+    });
+}
+
+function openImportDialog() {
+    var input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".png,image/png";
+    input.onchange = function(e) {
+        if (e.target.files.length > 0) importQuiverPng(e.target.files[0]);
+    };
+    input.click();
+}
+
+function setupImportDrop() {
+    var btn = document.getElementById("importPngButton");
+    if (!btn) return;
+    btn.addEventListener("dragover", function(e) {
+        e.preventDefault(); e.stopPropagation();
+        btn.classList.add("selectedButton");
+        btn.classList.remove("defaultButton");
+    });
+    btn.addEventListener("dragleave", function(e) {
+        btn.classList.add("defaultButton");
+        btn.classList.remove("selectedButton");
+    });
+    btn.addEventListener("drop", function(e) {
+        e.preventDefault(); e.stopPropagation();
+        btn.classList.add("defaultButton");
+        btn.classList.remove("selectedButton");
+        if (e.dataTransfer.files.length > 0) importQuiverPng(e.dataTransfer.files[0]);
+    });
+}
+
 function confirmDeleteMutationGraph() {
     if (mutationGraph.ops.length > 0 || mutationGraph.nodesList.length > 1) {
         document.getElementById("mgConfirmPanel").style.display = "block";
@@ -691,6 +856,87 @@ function loadQuiverSnap(snap) {
 }
 
 var mutationGraphSim = null;
+
+var mgImageSize = 60;
+
+function mgEscapeXml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+function snapToImage(snap) {
+    if (!snap || !snap.nodes || snap.nodes.length === 0) return null;
+    var nodes = snap.nodes, links = snap.links || [];
+    var nodeRadius = 30;
+
+    // Prefer current canvas positions (matches what's displayed); fall back to snap positions.
+    var curPos = {};
+    if (typeof simulation !== 'undefined' && simulation && typeof simulation.nodes === 'function') {
+        var sn = simulation.nodes();
+        for (var i = 0; i < sn.length; i++) curPos[sn[i].id] = { x: sn[i].x, y: sn[i].y };
+    }
+
+    var posById = {};
+    var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, anyPos = false;
+    for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i];
+        var cp = curPos[n.id];
+        var px = cp ? cp.x : n.x;
+        var py = cp ? cp.y : n.y;
+        if (px == null || py == null) continue;
+        posById[n.id] = { x: px, y: py, label: n.label, frozen: n.frozen };
+        if (px < minX) minX = px;
+        if (px > maxX) maxX = px;
+        if (py < minY) minY = py;
+        if (py > maxY) maxY = py;
+        anyPos = true;
+    }
+    if (!anyPos) return null;
+
+    var pad = nodeRadius + 10;
+    var contentW = Math.max(maxX - minX, 1);
+    var contentH = Math.max(maxY - minY, 1);
+    var vbW = contentW + pad * 2;
+    var vbH = contentH + pad * 2;
+    function tx(x) { return x - minX + pad; }
+    function ty(y) { return y - minY + pad; }
+
+    function intersect(cx, cy, tx_, ty_, r) {
+        var dx = tx_ - cx, dy = ty_ - cy;
+        var len = Math.sqrt(dx * dx + dy * dy);
+        if (len === 0) return { x: cx, y: cy };
+        return { x: cx + dx / len * r, y: cy + dy / len * r };
+    }
+
+    var parts = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + vbW + ' ' + vbH + '">'];
+    parts.push('<defs><marker id="mgArrow" viewBox="0 -5 10 10" refX="10" refY="0" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,-5L10,0L0,5" fill="none" stroke="white" stroke-width="1"/></marker></defs>');
+
+    for (var i = 0; i < links.length; i++) {
+        var link = links[i];
+        var s = posById[link.source], t = posById[link.target];
+        if (!s || !t) continue;
+        var sx = tx(s.x), sy = ty(s.y), txp = tx(t.x), typ = ty(t.y);
+        var sp = intersect(sx, sy, txp, typ, nodeRadius);
+        var tp = intersect(txp, typ, sx, sy, nodeRadius);
+        parts.push('<line x1="' + sp.x + '" y1="' + sp.y + '" x2="' + tp.x + '" y2="' + tp.y + '" stroke="white" stroke-width="2" marker-end="url(#mgArrow)"/>');
+        if (link.label != null && link.label !== "") {
+            var mx = (sx + txp) / 2;
+            var my = (sy + typ) / 2 + 5;
+            parts.push('<text x="' + mx + '" y="' + my + '" font-family="sans-serif" font-size="25" text-anchor="middle" fill="white">' + mgEscapeXml(link.label) + '</text>');
+        }
+    }
+
+    for (var id in posById) {
+        var p = posById[id];
+        var fill = p.frozen ? "#555" : "black";
+        parts.push('<circle cx="' + tx(p.x) + '" cy="' + ty(p.y) + '" r="' + nodeRadius + '" fill="' + fill + '" stroke="white" stroke-width="2"/>');
+        if (p.label != null && p.label !== "") {
+            parts.push('<text x="' + tx(p.x) + '" y="' + (ty(p.y) + 8) + '" font-family="sans-serif" font-size="25" text-anchor="middle" fill="white">' + mgEscapeXml(p.label) + '</text>');
+        }
+    }
+
+    parts.push('</svg>');
+    return 'data:image/svg+xml;utf8,' + encodeURIComponent(parts.join(''));
+}
 
 var mgResize = { dragging: false, startY: 0, startH: 0 };
 var customMutationGraphHeight = null;
@@ -799,12 +1045,17 @@ document.addEventListener('touchmove', mgResizeMove, { passive: false });
 document.addEventListener('touchend', mgResizeEnd);
 document.addEventListener('touchcancel', mgResizeEnd);
 
+function refreshMutationGraphThumbnails() {
+    if (!mutationGraph.enabled) return;
+    d3.select("#mutationGraphSvg").selectAll("image.mg-label")
+        .attr("href", d => snapToImage(d.snap));
+}
+
 function updateMutationGraphHighlight() {
     var mSvg = d3.select("#mutationGraphSvg");
     mSvg.selectAll("circle.mg-node")
-        .attr("fill", d => d.id === mutationGraph.currentSig ? "#fff" : "#222");
-    mSvg.selectAll("text.mg-label")
-        .attr("fill", d => d.id === mutationGraph.currentSig ? "#000" : "#fff");
+        .attr("stroke", d => d.id === mutationGraph.currentSig ? "#fff" : "rgba(255,255,255,0.4)")
+        .attr("stroke-width", d => d.id === mutationGraph.currentSig ? 3 : 1.5);
 }
 
 function renderMutationGraph() {
@@ -849,10 +1100,10 @@ function renderMutationGraph() {
     var node = viewport.append("g")
         .selectAll("circle").data(nodes).join("circle")
         .attr("class", "mg-node")
-        .attr("r", 14)
-        .attr("fill", d => d.id === mutationGraph.currentSig ? "#fff" : "#222")
-        .attr("stroke", "#fff")
-        .attr("stroke-width", 1.5)
+        .attr("r", mgImageSize / 2)
+        .attr("fill", "rgba(20,20,20,0.9)")
+        .attr("stroke", d => d.id === mutationGraph.currentSig ? "#fff" : "rgba(255,255,255,0.4)")
+        .attr("stroke-width", d => d.id === mutationGraph.currentSig ? 3 : 1.5)
         .style("cursor", "pointer")
         .on("click", function(event, d) {
             if (event.defaultPrevented) return;
@@ -878,13 +1129,11 @@ function renderMutationGraph() {
             }));
 
     var label = viewport.append("g")
-        .selectAll("text").data(nodes).join("text")
+        .selectAll("image").data(nodes).join("image")
         .attr("class", "mg-label")
-        .text(d => d.label)
-        .attr("font-family", "sans-serif")
-        .attr("font-size", "12px")
-        .attr("text-anchor", "middle")
-        .attr("fill", d => d.id === mutationGraph.currentSig ? "#000" : "#fff")
+        .attr("href", d => snapToImage(d.snap))
+        .attr("width", mgImageSize)
+        .attr("height", mgImageSize)
         .style("pointer-events", "none");
 
     mutationGraphSim.on("tick", () => {
@@ -908,7 +1157,7 @@ function renderMutationGraph() {
         linkLabel.attr("x", d => (d.source.x + d.target.x) / 2)
                  .attr("y", d => (d.source.y + d.target.y) / 2 - 3);
         node.attr("cx", d => d.x).attr("cy", d => d.y);
-        label.attr("x", d => d.x).attr("y", d => d.y + 4);
+        label.attr("x", d => d.x - mgImageSize / 2).attr("y", d => d.y - mgImageSize / 2);
     });
 
     applyMutationGraphZoom();
@@ -1711,10 +1960,11 @@ svg.on("click", function(event) {
     
     function dragged(event) {
       if (modifyingState == TRANSLATE_STATE) {
-      
+
         event.subject.fx = event.x;
         event.subject.fy = event.y;
- 
+        refreshMutationGraphThumbnails();
+
       }
       if (modifyingState == CREATE_EDGE_STATE) {
         dragLine
@@ -2379,6 +2629,7 @@ function loadGraphFromHash() {
 
 document.addEventListener("DOMContentLoaded", async function(event) {
     setModifyingState(MUTATE_STATE);
+    setupImportDrop();
     if (!loadGraphFromHash()) {
         ForceGraph({
             "nodes": [
