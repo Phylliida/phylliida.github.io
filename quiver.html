@@ -798,6 +798,63 @@ function exportQuiverPng() {
     });
 }
 
+var pendingImportCenter = false;
+
+function centerMainQuiver() {
+    if (typeof simulation === 'undefined' || !simulation || typeof simulation.nodes !== 'function') return;
+    var nodes = simulation.nodes();
+    if (!nodes || nodes.length === 0) return;
+    var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i];
+        if (n.x == null || n.y == null) continue;
+        if (n.x < minX) minX = n.x;
+        if (n.x > maxX) maxX = n.x;
+        if (n.y < minY) minY = n.y;
+        if (n.y > maxY) maxY = n.y;
+    }
+    if (minX === Infinity) return;
+    var dx = -(minX + maxX) / 2;
+    var dy = -(minY + maxY) / 2;
+    for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i];
+        if (n.x != null) n.x += dx;
+        if (n.y != null) n.y += dy;
+        if (n.fx != null) n.fx += dx;
+        if (n.fy != null) n.fy += dy;
+    }
+    simulation.alpha(0.05).restart();
+}
+
+function centerMutationGraph() {
+    if (!mutationGraph.enabled || mutationGraph.nodesList.length === 0) return;
+    var nodes = mutationGraph.nodesList;
+    var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i];
+        if (n.x == null || n.y == null) continue;
+        if (n.x < minX) minX = n.x;
+        if (n.x > maxX) maxX = n.x;
+        if (n.y < minY) minY = n.y;
+        if (n.y > maxY) maxY = n.y;
+    }
+    if (minX === Infinity) return;
+    var svgEl = document.getElementById("mutationGraphSvg");
+    if (!svgEl) return;
+    var rect = svgEl.getBoundingClientRect();
+    var info = mgViewportInfo(rect.width, rect.height);
+    var dx = info.centerX - (minX + maxX) / 2;
+    var dy = info.centerY - (minY + maxY) / 2;
+    for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i];
+        if (n.x != null) n.x += dx;
+        if (n.y != null) n.y += dy;
+        if (n.fx != null) n.fx += dx;
+        if (n.fy != null) n.fy += dy;
+    }
+    if (mutationGraphSim) mutationGraphSim.alpha(0.05).restart();
+}
+
 function importQuiverPng(file) {
     if (!file) return;
     file.arrayBuffer().then(function(buf) {
@@ -807,6 +864,7 @@ function importQuiverPng(file) {
             alert("No quiver data found in this PNG");
             return;
         }
+        pendingImportCenter = true;
         window.location.hash = "#" + hashStr;
     });
 }
@@ -2690,6 +2748,12 @@ function loadGraphFromHash() {
                       links: newLinks.map(l => ({...l}))
                   };
                   restoreMutationGraph(mgData, currentSnap);
+              }
+              if (pendingImportCenter) {
+                  pendingImportCenter = false;
+                  centerMainQuiver();
+                  if (mgData) centerMutationGraph();
+                  triggerURLUpdate();
               }
               return true;
     }
