@@ -64,10 +64,41 @@
     z-index: 10;
     box-shadow: 0 0 12px rgba(0, 0, 0, 0.6);
   }
+
+  .mutation-graph-panel {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 240px;
+    background: rgba(10, 10, 10, 0.25);
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    z-index: 5;
+    pointer-events: none;
+  }
+  .mutation-graph-handle {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 6px;
+    cursor: ns-resize;
+    background: rgba(255, 255, 255, 0.15);
+    pointer-events: auto;
+  }
+  .mutation-graph-handle:hover {
+    background: rgba(255, 255, 255, 0.4);
+  }
+  .mutation-graph-panel svg {
+    width: 100%;
+    height: 100%;
+  }
+  .mutation-graph-panel svg circle {
+    pointer-events: auto;
+  }
   
   .graph-container {
     flex-grow: 1;
     height: 100vh;
+    position: relative;
   }
   svg {
     width: 100%;
@@ -152,12 +183,17 @@ body {
 <div id="extrasPanel" class="extras-panel" style="display:none;">
   <button id="freezeVertexButton" class="defaultButton" onclick="setModifyingState(FREEZE_VERTEX_STATE);">FREEZE VERTEX (F)</button>
   <button id="principalFramingButton" class="defaultButton" onclick="applyPrincipalFraming();">PRINCIPAL FRAMING</button>
+  <button id="mutationGraphButton" class="defaultButton" onclick="toggleMutationGraph();">SHOW MUTATION GRAPH</button>
 </div>
 
  </div>
-  
+
   <div class="graph-container">
       <svg width="3000" height="3000"></svg>
+      <div id="mutationGraphPanel" class="mutation-graph-panel" style="display:none;">
+        <div class="mutation-graph-handle" onmousedown="mgResizeStart(event)" ontouchstart="mgResizeStart(event)"></div>
+        <svg id="mutationGraphSvg"></svg>
+      </div>
   </div>
   </div>
 
@@ -248,6 +284,442 @@ function toggleExtrasPanel() {
     panel.style.display = (panel.style.display === "none") ? "flex" : "none";
 }
 
+var mutationGraph = {
+    enabled: false,
+    baseSnap: null,
+    ops: [],
+    nodesBySig: {},
+    nodesList: [],
+    edges: [],
+    edgesKey: {},
+    currentSig: null,
+    nextLabel: 0
+};
+
+function quiverSig(nodes, links) {
+    var ids = nodes.map(n => n.id + "").sort();
+    var idToI = {};
+    for (var i = 0; i < ids.length; i++) idToI[ids[i]] = i;
+    var n = ids.length;
+    var b = [];
+    for (var i = 0; i < n; i++) {
+        var row = [];
+        for (var j = 0; j < n; j++) row.push("0");
+        b.push(row);
+    }
+    for (var k = 0; k < links.length; k++) {
+        var l = links[k];
+        var src = (l.source && l.source.id !== undefined) ? l.source.id : l.source;
+        var tgt = (l.target && l.target.id !== undefined) ? l.target.id : l.target;
+        var s = idToI[src + ""];
+        var t = idToI[tgt + ""];
+        b[s][t] = "" + l.label;
+        b[t][s] = "-" + l.label;
+    }
+    var frozenStr = ids.map(id => {
+        var node = nodes.find(nn => (nn.id + "") === id);
+        return node && node.frozen ? "1" : "0";
+    }).join("");
+    return frozenStr + "|" + b.map(r => r.join(",")).join(";");
+}
+
+function snapshotQuiver(nodes, links) {
+    return {
+        nodes: nodes.map(n => ({
+            id: n.id, color: n.color, x: n.x, y: n.y, label: n.label, frozen: n.frozen
+        })),
+        links: links.map(l => ({
+            source: (l.source && l.source.id !== undefined) ? l.source.id : l.source,
+            target: (l.target && l.target.id !== undefined) ? l.target.id : l.target,
+            color: l.color, label: l.label
+        }))
+    };
+}
+
+function addQuiverNode(sig, snap) {
+    if (mutationGraph.nodesBySig[sig]) return mutationGraph.nodesBySig[sig];
+    var node = { id: sig, label: "" + mutationGraph.nextLabel++, snap: snap };
+    mutationGraph.nodesBySig[sig] = node;
+    mutationGraph.nodesList.push(node);
+    return node;
+}
+
+function addMutationEdge(a, b, label, vid) {
+    var key = a < b ? a + "##" + b : b + "##" + a;
+    if (mutationGraph.edgesKey[key]) return false;
+    mutationGraph.edgesKey[key] = true;
+    mutationGraph.edges.push({ source: a, target: b, label: label, vid: vid });
+    return true;
+}
+
+function recordMutationInGraph(beforeSnap, afterSnap, mutatedVertexId, mutatedLabel) {
+    if (!mutationGraph.enabled) return;
+    var beforeSig = quiverSig(beforeSnap.nodes, beforeSnap.links);
+    var afterSig = quiverSig(afterSnap.nodes, afterSnap.links);
+    var beforeNew = !mutationGraph.nodesBySig[beforeSig];
+    var afterNew = !mutationGraph.nodesBySig[afterSig];
+    addQuiverNode(beforeSig, beforeSnap);
+    addQuiverNode(afterSig, afterSnap);
+    var fromIdx = -1;
+    for (var i = 0; i < mutationGraph.nodesList.length; i++) {
+        if (mutationGraph.nodesList[i].id === beforeSig) { fromIdx = i; break; }
+    }
+    mutationGraph.ops.push({ f: fromIdx, v: mutatedVertexId });
+    var edgeNew = false;
+    if (beforeSig !== afterSig) edgeNew = addMutationEdge(beforeSig, afterSig, mutatedLabel, mutatedVertexId);
+    mutationGraph.currentSig = afterSig;
+    if (beforeNew || afterNew || edgeNew) {
+        renderMutationGraph();
+    } else {
+        updateMutationGraphHighlight();
+    }
+}
+
+function mutateSnap(snap, vertexId) {
+    var nodes = snap.nodes;
+    var idToI = {};
+    var iToId = {};
+    for (var i = 0; i < nodes.length; i++) {
+        idToI[nodes[i].id] = i;
+        iToId[i] = nodes[i].id;
+    }
+    if (idToI[vertexId] === undefined) return snap;
+    var ncols = nodes.length;
+    var bMat = makeArr(ncols, i => makeArr(ncols, j => BigInt(0)));
+    for (var k = 0; k < snap.links.length; k++) {
+        var link = snap.links[k];
+        bMat[idToI[link.source]][idToI[link.target]] = BigInt(link.label);
+        bMat[idToI[link.target]][idToI[link.source]] = -BigInt(link.label);
+    }
+    var q = new Quiver(bMatrixToWeights(bMat));
+    q.mutate(idToI[vertexId], true);
+    var newLinks = [];
+    for (var i = 0; i < q.b_matrix.length; i++) {
+        for (var j = 0; j < q.b_matrix[i].length; j++) {
+            var value = q.b_matrix[i][j];
+            if (value > BigInt(0)) {
+                newLinks.push({
+                    source: iToId[i], target: iToId[j],
+                    color: "white", label: "" + value
+                });
+            }
+        }
+    }
+    return { nodes: nodes.map(n => ({...n})), links: newLinks };
+}
+
+function pathToSeed() {
+    if (mutationGraph.nodesList.length <= 1) return [];
+    var seedSig = mutationGraph.nodesList[0].id;
+    if (mutationGraph.currentSig === seedSig) return [];
+    var adj = {};
+    for (var i = 0; i < mutationGraph.edges.length; i++) {
+        var e = mutationGraph.edges[i];
+        var s = (e.source && e.source.id !== undefined) ? e.source.id : e.source;
+        var t = (e.target && e.target.id !== undefined) ? e.target.id : e.target;
+        if (!adj[s]) adj[s] = [];
+        if (!adj[t]) adj[t] = [];
+        adj[s].push({ to: t, vid: e.vid });
+        adj[t].push({ to: s, vid: e.vid });
+    }
+    var visited = {};
+    visited[mutationGraph.currentSig] = true;
+    var queue = [{ sig: mutationGraph.currentSig, path: [] }];
+    while (queue.length > 0) {
+        var cur = queue.shift();
+        if (cur.sig === seedSig) return cur.path;
+        var neighbors = adj[cur.sig] || [];
+        for (var i = 0; i < neighbors.length; i++) {
+            var nb = neighbors[i];
+            if (visited[nb.to]) continue;
+            visited[nb.to] = true;
+            queue.push({ sig: nb.to, path: cur.path.concat([+nb.vid]) });
+        }
+    }
+    return [];
+}
+
+function applyMutationSequence(snap, vids) {
+    var cur = snap;
+    for (var i = 0; i < vids.length; i++) cur = mutateSnap(cur, String(vids[i]));
+    return cur;
+}
+
+function serializeMutationGraph() {
+    if (!mutationGraph.baseSnap || mutationGraph.nodesList.length === 0) return null;
+    var opsFlat = [];
+    for (var i = 0; i < mutationGraph.ops.length; i++) {
+        opsFlat.push(mutationGraph.ops[i].f, +mutationGraph.ops[i].v);
+    }
+    var positionsFlat = [];
+    for (var i = 0; i < mutationGraph.nodesList.length; i++) {
+        var n = mutationGraph.nodesList[i];
+        if (n.fx != null && n.fy != null) {
+            positionsFlat.push(i, Math.round(n.fx), Math.round(n.fy));
+        }
+    }
+    var currentIdx = -1;
+    for (var i = 0; i < mutationGraph.nodesList.length; i++) {
+        if (mutationGraph.nodesList[i].id === mutationGraph.currentSig) { currentIdx = i; break; }
+    }
+    var result = [pathToSeed(), opsFlat, positionsFlat, currentIdx];
+    if (customMutationGraphHeight !== null) result.push(Math.round(customMutationGraphHeight));
+    return result;
+}
+
+function restoreMutationGraph(data, currentSnap) {
+    var seedSnap = applyMutationSequence(currentSnap, data.t || []);
+    mutationGraph.baseSnap = seedSnap;
+    mutationGraph.ops = data.o || [];
+    mutationGraph.nodesBySig = {};
+    mutationGraph.nodesList = [];
+    mutationGraph.edges = [];
+    mutationGraph.edgesKey = {};
+    mutationGraph.nextLabel = 0;
+
+    var baseSig = quiverSig(seedSnap.nodes, seedSnap.links);
+    addQuiverNode(baseSig, seedSnap);
+
+    for (var i = 0; i < mutationGraph.ops.length; i++) {
+        var op = mutationGraph.ops[i];
+        var fromNode = mutationGraph.nodesList[op.f];
+        if (!fromNode) continue;
+        var newSnap = mutateSnap(fromNode.snap, op.v);
+        var newSig = quiverSig(newSnap.nodes, newSnap.links);
+        addQuiverNode(newSig, newSnap);
+        var vnode = fromNode.snap.nodes.find(n => n.id === op.v);
+        var label = vnode ? vnode.label : "";
+        if (fromNode.id !== newSig) addMutationEdge(fromNode.id, newSig, label, op.v);
+    }
+
+    var positions = data.p || {};
+    for (var k in positions) {
+        var idx = parseInt(k);
+        var pos = positions[k];
+        if (mutationGraph.nodesList[idx]) {
+            mutationGraph.nodesList[idx].fx = pos[0];
+            mutationGraph.nodesList[idx].fy = pos[1];
+            mutationGraph.nodesList[idx].x = pos[0];
+            mutationGraph.nodesList[idx].y = pos[1];
+        }
+    }
+
+    var ci = data.c != null ? data.c : 0;
+    if (mutationGraph.nodesList[ci]) {
+        mutationGraph.currentSig = mutationGraph.nodesList[ci].id;
+    } else {
+        mutationGraph.currentSig = mutationGraph.nodesList[0].id;
+    }
+    mutationGraph.enabled = true;
+    document.getElementById("mutationGraphPanel").style.display = "block";
+    document.getElementById("mutationGraphButton").textContent = "HIDE MUTATION GRAPH";
+    renderMutationGraph();
+}
+
+function triggerURLUpdate() {
+    if (!simulation) return;
+    var curNodes = simulation.nodes().map(n => ({
+        id: n.id, color: n.color, x: n.x, y: n.y, label: n.label, frozen: n.frozen
+    }));
+    var curLinks = nodeLinks.map(l => ({
+        source: l.source.id, target: l.target.id, color: l.color, label: l.label
+    }));
+    updateURL(curNodes, curLinks);
+}
+
+function resetMutationGraph() {
+    mutationGraph.nodesBySig = {};
+    mutationGraph.nodesList = [];
+    mutationGraph.edges = [];
+    mutationGraph.edgesKey = {};
+    mutationGraph.currentSig = null;
+    mutationGraph.nextLabel = 0;
+    if (mutationGraphSim) { mutationGraphSim.stop(); mutationGraphSim = null; }
+    if (mutationGraph.enabled) {
+        seedCurrentQuiver();
+        renderMutationGraph();
+    }
+}
+
+function seedCurrentQuiver() {
+    var curNodes = simulation.nodes().map(n => ({
+        id: n.id, color: n.color, x: n.x, y: n.y, label: n.label, frozen: n.frozen
+    }));
+    var curLinks = nodeLinks.map(l => ({
+        source: l.source.id, target: l.target.id, color: l.color, label: l.label
+    }));
+    var sig = quiverSig(curNodes, curLinks);
+    var snap = snapshotQuiver(curNodes, curLinks);
+    mutationGraph.baseSnap = snap;
+    mutationGraph.ops = [];
+    addQuiverNode(sig, snap);
+    mutationGraph.currentSig = sig;
+}
+
+function toggleMutationGraph() {
+    mutationGraph.enabled = !mutationGraph.enabled;
+    var panel = document.getElementById("mutationGraphPanel");
+    var btn = document.getElementById("mutationGraphButton");
+    if (mutationGraph.enabled) {
+        panel.style.display = "block";
+        btn.textContent = "HIDE MUTATION GRAPH";
+        seedCurrentQuiver();
+        renderMutationGraph();
+    } else {
+        panel.style.display = "none";
+        btn.textContent = "SHOW MUTATION GRAPH";
+    }
+}
+
+function loadQuiverSnap(snap) {
+    svg.selectAll("*").remove();
+    ForceGraph({
+        nodes: snap.nodes.map(n => ({...n})),
+        links: snap.links.map(l => ({...l}))
+    });
+}
+
+var mutationGraphSim = null;
+
+var mgResize = { dragging: false, startY: 0, startH: 0 };
+var customMutationGraphHeight = null;
+function mgGetClientY(e) {
+    if (e.touches && e.touches.length > 0) return e.touches[0].clientY;
+    if (e.changedTouches && e.changedTouches.length > 0) return e.changedTouches[0].clientY;
+    return e.clientY;
+}
+function mgResizeStart(e) {
+    mgResize.dragging = true;
+    mgResize.startY = mgGetClientY(e);
+    mgResize.startH = document.getElementById('mutationGraphPanel').offsetHeight;
+    e.preventDefault();
+}
+function mgResizeMove(e) {
+    if (!mgResize.dragging) return;
+    var dy = mgResize.startY - mgGetClientY(e);
+    var newH = Math.max(80, Math.min(window.innerHeight - 50, mgResize.startH + dy));
+    document.getElementById('mutationGraphPanel').style.height = newH + 'px';
+    customMutationGraphHeight = newH;
+    if (mutationGraphSim) {
+        var rect = d3.select("#mutationGraphSvg").node().getBoundingClientRect();
+        mutationGraphSim.force("center", d3.forceCenter(rect.width / 2, rect.height / 2));
+        mutationGraphSim.alpha(0.05).restart();
+    }
+    e.preventDefault();
+}
+function mgResizeEnd() {
+    var wasDragging = mgResize.dragging;
+    mgResize.dragging = false;
+    if (wasDragging) triggerURLUpdate();
+}
+document.addEventListener('mousemove', mgResizeMove);
+document.addEventListener('mouseup', mgResizeEnd);
+document.addEventListener('touchmove', mgResizeMove, { passive: false });
+document.addEventListener('touchend', mgResizeEnd);
+document.addEventListener('touchcancel', mgResizeEnd);
+
+function updateMutationGraphHighlight() {
+    var mSvg = d3.select("#mutationGraphSvg");
+    mSvg.selectAll("circle.mg-node")
+        .attr("fill", d => d.id === mutationGraph.currentSig ? "#fff" : "#222");
+    mSvg.selectAll("text.mg-label")
+        .attr("fill", d => d.id === mutationGraph.currentSig ? "#000" : "#fff");
+}
+
+function renderMutationGraph() {
+    var mSvg = d3.select("#mutationGraphSvg");
+    mSvg.selectAll("*").remove();
+
+    var rect = mSvg.node().getBoundingClientRect();
+    var w = rect.width, h = rect.height;
+
+    // Use persistent objects so existing x/y/vx/vy survive across renders.
+    var nodes = mutationGraph.nodesList;
+    var links = mutationGraph.edges;
+
+    if (mutationGraphSim) mutationGraphSim.stop();
+
+    mutationGraphSim = d3.forceSimulation(nodes)
+        .alpha(0.3)
+        .force("link", d3.forceLink(links).id(d => d.id).distance(60))
+        .force("charge", d3.forceManyBody().strength(-150))
+        .force("center", d3.forceCenter(w / 2, h / 2));
+
+    var link = mSvg.append("g")
+        .attr("stroke", "rgba(255,255,255,0.4)")
+        .attr("stroke-width", 1.5)
+        .selectAll("line").data(links).join("line");
+
+    var linkLabel = mSvg.append("g")
+        .selectAll("text").data(links).join("text")
+        .attr("class", "mg-link-label")
+        .text(d => d.label != null ? d.label : "")
+        .attr("font-family", "sans-serif")
+        .attr("font-size", "11px")
+        .attr("text-anchor", "middle")
+        .attr("fill", "rgba(255,255,255,0.85)")
+        .attr("paint-order", "stroke")
+        .attr("stroke", "rgba(10,10,10,0.9)")
+        .attr("stroke-width", "3px")
+        .style("pointer-events", "none");
+
+    var node = mSvg.append("g")
+        .selectAll("circle").data(nodes).join("circle")
+        .attr("class", "mg-node")
+        .attr("r", 14)
+        .attr("fill", d => d.id === mutationGraph.currentSig ? "#fff" : "#222")
+        .attr("stroke", "#fff")
+        .attr("stroke-width", 1.5)
+        .style("cursor", "pointer")
+        .on("click", function(event, d) {
+            if (event.defaultPrevented) return;
+            loadQuiverSnap(d.snap);
+            mutationGraph.currentSig = d.id;
+            updateMutationGraphHighlight();
+        })
+        .call(d3.drag()
+            .on("start", function(event, d) {
+                if (!event.active) mutationGraphSim.alphaTarget(0.2).restart();
+                d.fx = d.x; d.fy = d.y;
+            })
+            .on("drag", function(event, d) {
+                d.fx = event.x; d.fy = event.y;
+            })
+            .on("end", function(event, d) {
+                if (!event.active) mutationGraphSim.alphaTarget(0);
+                // Keep d.fx, d.fy set so node stays pinned where dropped.
+                triggerURLUpdate();
+            }));
+
+    var label = mSvg.append("g")
+        .selectAll("text").data(nodes).join("text")
+        .attr("class", "mg-label")
+        .text(d => d.label)
+        .attr("font-family", "sans-serif")
+        .attr("font-size", "12px")
+        .attr("text-anchor", "middle")
+        .attr("fill", d => d.id === mutationGraph.currentSig ? "#000" : "#fff")
+        .style("pointer-events", "none");
+
+    mutationGraphSim.on("tick", () => {
+        var r = mSvg.node().getBoundingClientRect();
+        var pad = 18;
+        for (var i = 0; i < nodes.length; i++) {
+            var d = nodes[i];
+            if (d.x < pad) { d.x = pad; if (d.vx) d.vx = 0; }
+            if (d.x > r.width - pad) { d.x = r.width - pad; if (d.vx) d.vx = 0; }
+            if (d.y < pad) { d.y = pad; if (d.vy) d.vy = 0; }
+            if (d.y > r.height - pad) { d.y = r.height - pad; if (d.vy) d.vy = 0; }
+        }
+        link.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+            .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+        linkLabel.attr("x", d => (d.source.x + d.target.x) / 2)
+                 .attr("y", d => (d.source.y + d.target.y) / 2 - 3);
+        node.attr("cx", d => d.x).attr("cy", d => d.y);
+        label.attr("x", d => d.x).attr("y", d => d.y + 4);
+    });
+}
+
 function applyPrincipalFraming() {
     var currentNodes = simulation.nodes().map(node => ({
         id: node.id,
@@ -298,6 +770,7 @@ function applyPrincipalFraming() {
 
     svg.selectAll("*").remove();
     ForceGraph({ nodes: newNodes, links: newLinks });
+    resetMutationGraph();
 }
 
 function setModifyingState(state) {
@@ -601,6 +1074,7 @@ svg.on("click", function(event) {
       }, {
           // ... any other options you want to pass
       });
+      resetMutationGraph();
    }
 });     // .attr("style", "max-width: 100%; height: auto; height: intrinsic;");
   
@@ -891,6 +1365,17 @@ svg.on("click", function(event) {
               label: node.label,
               frozen: node.frozen
             }));
+
+            if (mutationGraph.enabled) {
+                var beforeLinks = nodeLinks.map(l => ({
+                    source: l.source.id, target: l.target.id,
+                    color: l.color, label: l.label
+                }));
+                var beforeSnap = snapshotQuiver(currentNodes, beforeLinks);
+                var afterSnap = snapshotQuiver(currentNodes, newLinks);
+                recordMutationInGraph(beforeSnap, afterSnap, event.subject.id, event.subject.label);
+            }
+
             setTimeout(() => {
               // Clear existing SVG
               svg.selectAll("*").remove();
@@ -939,8 +1424,8 @@ svg.on("click", function(event) {
                   ForceGraph({
                       nodes: resultNodes,
                       links: currentLinks
-                  });    
-              
+                  });
+                  resetMutationGraph();
               }, 1);
       }
       if (modifyingState == FREEZE_VERTEX_STATE) {
@@ -973,6 +1458,7 @@ svg.on("click", function(event) {
                   nodes: resultNodes,
                   links: currentLinks
               });
+              resetMutationGraph();
           }, 1);
       }
       if (modifyingState == DELETE_VERTEX_STATE) {
@@ -1010,7 +1496,7 @@ svg.on("click", function(event) {
                 }
             }
 
-            setTimeout(() => {            
+            setTimeout(() => {
               // Clear existing SVG
               svg.selectAll("*").remove();
 
@@ -1018,13 +1504,14 @@ svg.on("click", function(event) {
               ForceGraph({
                   nodes: resultNodes,
                   links: resultLinks
-              });        
+              });
+              resetMutationGraph();
             }, 1);
-          
+
       }
-      
+
     }
-    
+
     
     
     
@@ -1137,6 +1624,7 @@ svg.on("click", function(event) {
                       nodes: currentNodes,
                       links: newLinks
                   });
+                  resetMutationGraph();
               }, 1);
           }
       }
@@ -1565,10 +2053,12 @@ function updateURL(nodes, links) {
 
 
     var data = [weightsStr, names, pos, frozen];
-    
+    var mgArr = serializeMutationGraph();
+    if (mgArr) for (var i = 0; i < mgArr.length; i++) data.push(mgArr[i]);
+
     document.getElementById("bMatrixField").value = weightsStrs.join(",")
-    
-    curHash = encodeURI(JSON.stringify(data));
+
+    curHash = "#" + encodeURI(JSON.stringify(data));
     window.location.hash = curHash;
 }
 
@@ -1600,6 +2090,27 @@ function loadGraphFromHash() {
             console.log("Got hash:" + hash);
             var parsed = JSON.parse(hash);
             var edgesStr = parsed[0], names = parsed[1], pos = parsed[2], frozen = parsed[3] || [];
+            var mgData = null;
+            if (parsed.length >= 8) {
+                var tArr = parsed[4] || [];
+                var opsFlat = parsed[5] || [];
+                var posFlat = parsed[6] || [];
+                var cIdx = parsed[7];
+                var opsRebuilt = [];
+                for (var oi = 0; oi < opsFlat.length; oi += 2) {
+                    opsRebuilt.push({ f: opsFlat[oi], v: String(opsFlat[oi + 1]) });
+                }
+                var posRebuilt = {};
+                for (var pi = 0; pi < posFlat.length; pi += 3) {
+                    posRebuilt[posFlat[pi]] = [posFlat[pi + 1], posFlat[pi + 2]];
+                }
+                mgData = { t: tArr, o: opsRebuilt, p: posRebuilt, c: cIdx };
+                if (parsed.length >= 9) {
+                    customMutationGraphHeight = parsed[8];
+                    var mgPanel = document.getElementById("mutationGraphPanel");
+                    if (mgPanel) mgPanel.style.height = customMutationGraphHeight + "px";
+                }
+            }
             var nodes = [];
 
             for (var i = 0; i < names.length; i++) {
@@ -1654,7 +2165,14 @@ function loadGraphFromHash() {
               ForceGraph({
                   nodes: nodes,
                   links: newLinks
-              });    
+              });
+              if (mgData) {
+                  var currentSnap = {
+                      nodes: nodes.map(n => ({...n})),
+                      links: newLinks.map(l => ({...l}))
+                  };
+                  restoreMutationGraph(mgData, currentSnap);
+              }
               return true;
     }
     else {
