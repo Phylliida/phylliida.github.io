@@ -47,6 +47,22 @@
     gap: 1rem;
     padding: 1rem;
     min-width: 200px;
+    position: relative;
+  }
+
+  .extras-panel {
+    position: absolute;
+    left: calc(100% + 0.5rem);
+    top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 1rem;
+    background: rgba(20, 20, 20, 0.95);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    z-index: 10;
+    box-shadow: 0 0 12px rgba(0, 0, 0, 0.6);
   }
   
   .graph-container {
@@ -130,7 +146,13 @@ body {
 <div class="selectedButton" >B Matrix</div>
 <br />
 <input id="bMatrixField" value="0" class="selectedButton" readonly=true />
+<br />
+<button id="extrasButton" class="defaultButton" onclick="toggleExtrasPanel();">EXTRAS</button>
 
+<div id="extrasPanel" class="extras-panel" style="display:none;">
+  <button id="freezeVertexButton" class="defaultButton" onclick="setModifyingState(FREEZE_VERTEX_STATE);">FREEZE VERTEX (F)</button>
+  <button id="principalFramingButton" class="defaultButton" onclick="applyPrincipalFraming();">PRINCIPAL FRAMING</button>
+</div>
 
  </div>
   
@@ -204,6 +226,7 @@ var CREATE_VERTEX_STATE = "Create vertex";
 var CREATE_EDGE_STATE = "Create edge";
 var DELETE_VERTEX_STATE = "Delete vertex";
 var DELETE_EDGE_STATE = "Delete edge";
+var FREEZE_VERTEX_STATE = "Freeze vertex";
 
 var modifyingState = MUTATE_STATE;
 
@@ -216,6 +239,65 @@ function UpdateState() {
     document.getElementById("createEdgeButton").className = (modifyingState == CREATE_EDGE_STATE) ? "selectedButton" : "defaultButton";
     document.getElementById("createEdgeLabel").className = (modifyingState == CREATE_EDGE_STATE) ? "selectedButton" : "defaultButton";
     document.getElementById("deleteVertexButton").className = (modifyingState == DELETE_VERTEX_STATE) ? "selectedButton" : "defaultButton";
+    document.getElementById("freezeVertexButton").className = (modifyingState == FREEZE_VERTEX_STATE) ? "selectedButton" : "defaultButton";
+    document.getElementById("extrasButton").className = (modifyingState == FREEZE_VERTEX_STATE) ? "selectedButton" : "defaultButton";
+}
+
+function toggleExtrasPanel() {
+    var panel = document.getElementById("extrasPanel");
+    panel.style.display = (panel.style.display === "none") ? "flex" : "none";
+}
+
+function applyPrincipalFraming() {
+    var currentNodes = simulation.nodes().map(node => ({
+        id: node.id,
+        color: node.color,
+        x: node.x,
+        y: node.y,
+        label: node.label,
+        frozen: node.frozen
+    }));
+    var currentLinks = nodeLinks.map(link => ({
+        source: link.source.id,
+        target: link.target.id,
+        color: link.color,
+        label: link.label
+    }));
+
+    var maxId = 0;
+    if (currentNodes.length > 0) {
+        maxId = Math.max(...currentNodes.map(n =>
+            parseInt((n.id + "").replace(/[^0-9]/g, '')) || 0
+        ));
+    }
+
+    var newNodes = [...currentNodes];
+    var newLinks = [...currentLinks];
+    var offset = 80;
+
+    for (var i = 0; i < currentNodes.length; i++) {
+        var orig = currentNodes[i];
+        if (orig.frozen) continue;
+        maxId += 1;
+        var newId = maxId.toString();
+        newNodes.push({
+            id: newId,
+            color: "white",
+            x: orig.x,
+            y: orig.y - offset,
+            label: orig.label + "'",
+            frozen: true
+        });
+        newLinks.push({
+            source: newId,
+            target: orig.id,
+            color: "white",
+            label: "1"
+        });
+    }
+
+    svg.selectAll("*").remove();
+    ForceGraph({ nodes: newNodes, links: newLinks });
 }
 
 function setModifyingState(state) {
@@ -249,7 +331,10 @@ function keyupHandle(e) {
     if (e.code + "" == "KeyC") {
         modifyingState = DELETE_EDGE_STATE;
     }
-    
+    if (e.code + "" == "KeyF") {
+        modifyingState = FREEZE_VERTEX_STATE;
+    }
+
     UpdateState();
 }
 
@@ -277,7 +362,8 @@ window.addEventListener('resize', () => {
           color: node.color,
           x: node.x,
           y: node.y,
-          label: node.label
+          label: node.label,
+          frozen: node.frozen
       }));
 
       // Get current links
@@ -295,7 +381,7 @@ window.addEventListener('resize', () => {
       ForceGraph({
           nodes: currentNodes,
           links: currentLinks
-      });    
+      });
 });
 
 document.addEventListener('keypress', logKey);
@@ -386,6 +472,7 @@ svg = d3.select("svg");
         fx: node.x !== undefined ? node.x : undefined,
         fy: node.y !== undefined ? node.y : undefined,
         label: node.label !== undefined ? node.label : undefined,
+        frozen: node.frozen === true,
   }));
   links = d3.map(links, (_, i) => ({source: LS[i], target: LT[i], color: LINKCOLOR[i], label: LABELLINKMAP[i]}));
   nodeLinks = links;
@@ -466,7 +553,8 @@ svg.on("click", function(event) {
           color: node.color,
           x: node.x,
           y: node.y,
-          label: node.label
+          label: node.label,
+          frozen: node.frozen
       }));
 
       // Generate new node ID (find max ID and increment)
@@ -488,7 +576,8 @@ svg.on("click", function(event) {
           color: "white",
           x: x,
           y: y,
-          label: newNodeId
+          label: newNodeId,
+          frozen: false
       };
 
       // Create new nodes array with existing nodes and new node
@@ -594,7 +683,7 @@ svg.on("click", function(event) {
   link.attr("stroke", l => {return l.color;} );
   if (W) link.attr("stroke-width", ({index: i}) => W[i]);
   if (G) node.attr("stroke", ({index: i}) => COLORMAP[i]);  // Apply color to stroke instead of fill
-  if (G) node.attr("fill", ({index: i}) => "black");  // Apply color to stroke instead of fill
+  if (G) node.attr("fill", d => d.frozen ? "#555" : "black");
   if (T) node.append("title").text(({index: i}) => T[i]);
   if (invalidation != null) invalidation.then(() => simulation.stop());
 
@@ -754,7 +843,7 @@ svg.on("click", function(event) {
           .attr("y2", sourceNode.y);
       }
       if (modifyingState == MUTATE_STATE) {
-        
+           if (event.subject.frozen) return;
            var mutateId = event.subject.id;
            // get bmat
            var ncols = nodes.length;
@@ -799,9 +888,10 @@ svg.on("click", function(event) {
               color: node.color,
               x: node.x,
               y: node.y,
-              label: node.label
+              label: node.label,
+              frozen: node.frozen
             }));
-            setTimeout(() => {            
+            setTimeout(() => {
               // Clear existing SVG
               svg.selectAll("*").remove();
 
@@ -809,7 +899,7 @@ svg.on("click", function(event) {
               ForceGraph({
                   nodes: currentNodes,
                   links: newLinks
-              });        
+              });
             }, 1);
 
       }
@@ -824,7 +914,8 @@ svg.on("click", function(event) {
                       color: node.color,
                       x: node.x,
                       y: node.y,
-                      label: node.label
+                      label: node.label,
+                      frozen: node.frozen
                 };
                 if (node.id == event.subject.id) {
                     newNode.label = CURRENT_VERTEX_LABEL;
@@ -852,20 +943,53 @@ svg.on("click", function(event) {
               
               }, 1);
       }
+      if (modifyingState == FREEZE_VERTEX_STATE) {
+          var id = event.subject.id;
+          var resultNodes = [];
+          for (var i = 0; i < simulation.nodes().length; i++) {
+              var node = simulation.nodes()[i];
+              var newNode = {
+                  id: node.id,
+                  color: node.color,
+                  x: node.x,
+                  y: node.y,
+                  label: node.label,
+                  frozen: node.frozen
+              };
+              if (node.id == id) {
+                  newNode.frozen = !node.frozen;
+              }
+              resultNodes.push(newNode);
+          }
+          const currentLinks = nodeLinks.map(link => ({
+              source: link.source.id,
+              target: link.target.id,
+              color: link.color,
+              label: link.label
+          }));
+          setTimeout(() => {
+              svg.selectAll("*").remove();
+              ForceGraph({
+                  nodes: resultNodes,
+                  links: currentLinks
+              });
+          }, 1);
+      }
       if (modifyingState == DELETE_VERTEX_STATE) {
           var id = event.subject.id;
-          
+
           var resultNodes = []
-          
+
           for(var i = 0; i < simulation.nodes().length; i++){
             var node = simulation.nodes()[i];
-            if (node.id + "" !== id  + "") {            
+            if (node.id + "" !== id  + "") {
                 resultNodes.push({
                   id: node.id,
                   color: node.color,
                   x: node.x,
                   y: node.y,
-                  label: node.label
+                  label: node.label,
+                  frozen: node.frozen
                 });
             }
           }
@@ -929,7 +1053,8 @@ svg.on("click", function(event) {
             color: node.color,
             x: node.x,
             y: node.y,
-            label: node.label
+            label: node.label,
+            frozen: node.frozen
         }));
         
         const currentLinks = nodeLinks.map(link => ({
@@ -969,9 +1094,10 @@ svg.on("click", function(event) {
                       color: node.color,
                       x: node.x,
                       y: node.y,
-                      label: node.label
+                      label: node.label,
+                      frozen: node.frozen
                   }));
-                    
+
                   console.log(startId + " start id and " + endId + " endId");
                   var present = false;
                   var newLinks = [];
@@ -1035,7 +1161,8 @@ svg.on("click", function(event) {
                 color: node.color,
                 x: node.x,
                 y: node.y,
-                label: node.label
+                label: node.label,
+                frozen: node.frozen
             }));
             
             const currentLinks = nodeLinks.map(link => ({
@@ -1423,10 +1550,11 @@ var curHash = "";
 function updateURL(nodes, links) {
     var names = nodes.map(n => n.label);
     var pos = nodes.map(n => [Math.round(n.x), Math.round(n.y)]);
+    var frozen = nodes.map(n => n.frozen ? 1 : 0);
 
     var bMat = GetBMatrix(nodes, links);
    var weightsStrs = [];
-   
+
     var ncols = nodes.length;
     for (var i = 0; i < ncols; i++) {
         for (var j = 0; j < ncols; j++) {
@@ -1435,8 +1563,8 @@ function updateURL(nodes, links) {
     }
    var weightsStr = "____[" + weightsStrs.join(",") + END_WEIGHTS_PREFIX;
 
-        
-    var data = [weightsStr, names, pos];
+
+    var data = [weightsStr, names, pos, frozen];
     
     document.getElementById("bMatrixField").value = weightsStrs.join(",")
     
@@ -1470,16 +1598,18 @@ function loadGraphFromHash() {
     if (window.location.hash) {
             var hash = decodeURI(window.location.hash).substring(1); // remove the #
             console.log("Got hash:" + hash);
-            var [edgesStr, names, pos] = JSON.parse(hash);
+            var parsed = JSON.parse(hash);
+            var edgesStr = parsed[0], names = parsed[1], pos = parsed[2], frozen = parsed[3] || [];
             var nodes = [];
-            
+
             for (var i = 0; i < names.length; i++) {
                 nodes.push({
                     x: parseFloat(pos[i][0]),
                     y: parseFloat(pos[i][1]),
-                    label: names[i][0] + "",
+                    label: names[i].trim() + "",
                     id: i + "",
                     color: "white",
+                    frozen: frozen[i] == 1,
                 });
             }
             
