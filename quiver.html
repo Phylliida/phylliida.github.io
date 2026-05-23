@@ -99,6 +99,15 @@
     background: rgba(255, 255, 255, 0.5);
     border-radius: 2px;
   }
+  @media (pointer: coarse) {
+    .mutation-graph-handle {
+      height: 42px;
+    }
+    .mutation-graph-handle::after {
+      width: 60px;
+      height: 5px;
+    }
+  }
   .mg-confirm-panel {
     position: fixed;
     top: 50%;
