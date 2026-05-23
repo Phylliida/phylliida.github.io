@@ -87,6 +87,29 @@
   .mutation-graph-handle:hover {
     background: rgba(255, 255, 255, 0.4);
   }
+  .mg-confirm-panel {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(20, 20, 20, 0.98);
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    border-radius: 6px;
+    padding: 1.5rem 2rem;
+    z-index: 100;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+    color: rgba(255, 255, 255, 0.9);
+    text-align: center;
+  }
+  .mg-confirm-msg {
+    font-size: 16px;
+    margin-bottom: 1rem;
+  }
+  .mg-confirm-buttons {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+  }
   .mutation-graph-panel svg {
     width: 100%;
     height: 100%;
@@ -184,6 +207,16 @@ body {
   <button id="freezeVertexButton" class="defaultButton" onclick="setModifyingState(FREEZE_VERTEX_STATE);">FREEZE VERTEX (F)</button>
   <button id="principalFramingButton" class="defaultButton" onclick="applyPrincipalFraming();">PRINCIPAL FRAMING</button>
   <button id="mutationGraphButton" class="defaultButton" onclick="toggleMutationGraph();">SHOW MUTATION GRAPH</button>
+  <button id="freezeMgButton" class="defaultButton" onclick="toggleMutationGraphFreeze();">FREEZE MUTATION GRAPH</button>
+  <button id="deleteMgButton" class="defaultButton" onclick="confirmDeleteMutationGraph();">DELETE MUTATION GRAPH</button>
+</div>
+
+<div id="mgConfirmPanel" class="mg-confirm-panel" style="display:none;">
+  <div class="mg-confirm-msg">Delete mutation graph?</div>
+  <div class="mg-confirm-buttons">
+    <button class="defaultButton" onclick="cancelDeleteMutationGraph();">CANCEL</button>
+    <button class="defaultButton" onclick="performDeleteMutationGraph();">DELETE</button>
+  </div>
 </div>
 
  </div>
@@ -493,6 +526,7 @@ function restoreMutationGraph(data, currentSnap) {
     }
 
     var positions = data.p || {};
+    var anyPos = false;
     for (var k in positions) {
         var idx = parseInt(k);
         var pos = positions[k];
@@ -501,8 +535,11 @@ function restoreMutationGraph(data, currentSnap) {
             mutationGraph.nodesList[idx].fy = pos[1];
             mutationGraph.nodesList[idx].x = pos[0];
             mutationGraph.nodesList[idx].y = pos[1];
+            anyPos = true;
         }
     }
+    mutationGraphFrozen = anyPos;
+    updateFreezeMgButtonText();
 
     var ci = data.c != null ? data.c : 0;
     if (mutationGraph.nodesList[ci]) {
@@ -556,6 +593,43 @@ function seedCurrentQuiver() {
     mutationGraph.currentSig = sig;
 }
 
+function confirmDeleteMutationGraph() {
+    if (mutationGraph.ops.length > 0 || mutationGraph.nodesList.length > 1) {
+        document.getElementById("mgConfirmPanel").style.display = "block";
+    } else {
+        performDeleteMutationGraph();
+    }
+}
+
+function cancelDeleteMutationGraph() {
+    document.getElementById("mgConfirmPanel").style.display = "none";
+}
+
+function performDeleteMutationGraph() {
+    document.getElementById("mgConfirmPanel").style.display = "none";
+    mutationGraph.enabled = false;
+    mutationGraph.baseSnap = null;
+    mutationGraph.ops = [];
+    mutationGraph.nodesBySig = {};
+    mutationGraph.nodesList = [];
+    mutationGraph.edges = [];
+    mutationGraph.edgesKey = {};
+    mutationGraph.currentSig = null;
+    mutationGraph.nextLabel = 0;
+    mutationGraphFrozen = false;
+    updateFreezeMgButtonText();
+    customMutationGraphHeight = null;
+    if (mutationGraphSim) { mutationGraphSim.stop(); mutationGraphSim = null; }
+    var panel = document.getElementById("mutationGraphPanel");
+    if (panel) {
+        panel.style.display = "none";
+        panel.style.height = "";
+    }
+    var btn = document.getElementById("mutationGraphButton");
+    if (btn) btn.textContent = "SHOW MUTATION GRAPH";
+    triggerURLUpdate();
+}
+
 function toggleMutationGraph() {
     mutationGraph.enabled = !mutationGraph.enabled;
     var panel = document.getElementById("mutationGraphPanel");
@@ -572,9 +646,20 @@ function toggleMutationGraph() {
 }
 
 function loadQuiverSnap(snap) {
+    var posById = {};
+    if (simulation && typeof simulation.nodes === 'function') {
+        var curNodes = simulation.nodes();
+        for (var i = 0; i < curNodes.length; i++) {
+            posById[curNodes[i].id] = { x: curNodes[i].x, y: curNodes[i].y };
+        }
+    }
+    var mergedNodes = snap.nodes.map(n => {
+        var p = posById[n.id];
+        return p ? { ...n, x: p.x, y: p.y } : { ...n };
+    });
     svg.selectAll("*").remove();
     ForceGraph({
-        nodes: snap.nodes.map(n => ({...n})),
+        nodes: mergedNodes,
         links: snap.links.map(l => ({...l}))
     });
 }
@@ -583,6 +668,29 @@ var mutationGraphSim = null;
 
 var mgResize = { dragging: false, startY: 0, startH: 0 };
 var customMutationGraphHeight = null;
+var mutationGraphFrozen = false;
+
+function updateFreezeMgButtonText() {
+    var btn = document.getElementById("freezeMgButton");
+    if (btn) btn.textContent = mutationGraphFrozen ? "UNFREEZE MUTATION GRAPH" : "FREEZE MUTATION GRAPH";
+}
+
+function toggleMutationGraphFreeze() {
+    mutationGraphFrozen = !mutationGraphFrozen;
+    for (var i = 0; i < mutationGraph.nodesList.length; i++) {
+        var n = mutationGraph.nodesList[i];
+        if (mutationGraphFrozen) {
+            n.fx = n.x;
+            n.fy = n.y;
+        } else {
+            n.fx = null;
+            n.fy = null;
+        }
+    }
+    updateFreezeMgButtonText();
+    if (mutationGraphSim) mutationGraphSim.alpha(0.1).restart();
+    triggerURLUpdate();
+}
 function mgGetClientY(e) {
     if (e.touches && e.touches.length > 0) return e.touches[0].clientY;
     if (e.changedTouches && e.changedTouches.length > 0) return e.changedTouches[0].clientY;
@@ -687,7 +795,10 @@ function renderMutationGraph() {
             })
             .on("end", function(event, d) {
                 if (!event.active) mutationGraphSim.alphaTarget(0);
-                // Keep d.fx, d.fy set so node stays pinned where dropped.
+                if (!mutationGraphFrozen) {
+                    d.fx = null;
+                    d.fy = null;
+                }
                 triggerURLUpdate();
             }));
 
