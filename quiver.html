@@ -371,9 +371,13 @@ function snapshotQuiver(nodes, links) {
     };
 }
 
-function addQuiverNode(sig, snap) {
+function addQuiverNode(sig, snap, initialPos) {
     if (mutationGraph.nodesBySig[sig]) return mutationGraph.nodesBySig[sig];
     var node = { id: sig, label: "" + mutationGraph.nextLabel++, snap: snap };
+    if (initialPos) {
+        node.x = initialPos.x;
+        node.y = initialPos.y;
+    }
     mutationGraph.nodesBySig[sig] = node;
     mutationGraph.nodesList.push(node);
     return node;
@@ -394,7 +398,15 @@ function recordMutationInGraph(beforeSnap, afterSnap, mutatedVertexId, mutatedLa
     var beforeNew = !mutationGraph.nodesBySig[beforeSig];
     var afterNew = !mutationGraph.nodesBySig[afterSig];
     addQuiverNode(beforeSig, beforeSnap);
-    addQuiverNode(afterSig, afterSnap);
+    var beforeNode = mutationGraph.nodesBySig[beforeSig];
+    var afterInitPos = null;
+    if (afterNew && beforeNode && beforeNode.x != null) {
+        afterInitPos = {
+            x: beforeNode.x + (Math.random() - 0.5) * 30,
+            y: beforeNode.y + (Math.random() - 0.5) * 30
+        };
+    }
+    addQuiverNode(afterSig, afterSnap, afterInitPos);
     var fromIdx = -1;
     for (var i = 0; i < mutationGraph.nodesList.length; i++) {
         if (mutationGraph.nodesList[i].id === beforeSig) { fromIdx = i; break; }
@@ -517,7 +529,7 @@ function restoreMutationGraph(data, currentSnap) {
     mutationGraph.nextLabel = 0;
 
     var baseSig = quiverSig(seedSnap.nodes, seedSnap.links);
-    addQuiverNode(baseSig, seedSnap);
+    addQuiverNode(baseSig, seedSnap, { x: 0, y: 0 });
 
     for (var i = 0; i < mutationGraph.ops.length; i++) {
         var op = mutationGraph.ops[i];
@@ -525,7 +537,14 @@ function restoreMutationGraph(data, currentSnap) {
         if (!fromNode) continue;
         var newSnap = mutateSnap(fromNode.snap, op.v);
         var newSig = quiverSig(newSnap.nodes, newSnap.links);
-        addQuiverNode(newSig, newSnap);
+        var initPos = null;
+        if (fromNode.x != null) {
+            initPos = {
+                x: fromNode.x + (Math.random() - 0.5) * 30,
+                y: fromNode.y + (Math.random() - 0.5) * 30
+            };
+        }
+        addQuiverNode(newSig, newSnap, initPos);
         var vnode = fromNode.snap.nodes.find(n => n.id === op.v);
         var label = vnode ? vnode.label : "";
         if (fromNode.id !== newSig) addMutationEdge(fromNode.id, newSig, label, op.v);
@@ -685,6 +704,7 @@ function applyMutationGraphZoom() {
     var cx = rect.width / 2, cy = rect.height / 2;
     d3.select("#mutationGraphSvg").select("g.mg-viewport")
         .attr("transform", "translate(" + cx + "," + cy + ") scale(" + mutationGraphZoom + ") translate(" + (-cx) + "," + (-cy) + ")");
+    if (mutationGraphSim) mutationGraphSim.alpha(0.1).restart();
 }
 
 function mgZoomIn() {
@@ -739,9 +759,33 @@ function mgResizeMove(e) {
     customMutationGraphHeight = newH;
     if (mutationGraphSim) {
         var rect = d3.select("#mutationGraphSvg").node().getBoundingClientRect();
-        mutationGraphSim.force("center", d3.forceCenter(rect.width / 2, rect.height / 2));
+        var rectW = rect.width, rectH = newH;
+        mutationGraphSim.force("center", d3.forceCenter(rectW / 2, rectH / 2));
+        var k = mutationGraphZoom || 1;
+        var pad = 18 / k;
+        var cx = rectW / 2, cy = rectH / 2;
+        var halfW = rectW / (2 * k);
+        var halfH = rectH / (2 * k);
+        var minX = cx - halfW + pad, maxX = cx + halfW - pad;
+        var minY = cy - halfH + pad, maxY = cy + halfH - pad;
+        for (var i = 0; i < mutationGraph.nodesList.length; i++) {
+            var d = mutationGraph.nodesList[i];
+            if (d.x < minX) d.x = minX;
+            if (d.x > maxX) d.x = maxX;
+            if (d.y < minY) d.y = minY;
+            if (d.y > maxY) d.y = maxY;
+            if (d.fx != null) {
+                if (d.fx < minX) d.fx = minX;
+                if (d.fx > maxX) d.fx = maxX;
+            }
+            if (d.fy != null) {
+                if (d.fy < minY) d.fy = minY;
+                if (d.fy > maxY) d.fy = maxY;
+            }
+        }
         mutationGraphSim.alpha(0.05).restart();
     }
+    applyMutationGraphZoom();
     e.preventDefault();
 }
 function mgResizeEnd() {
@@ -845,13 +889,19 @@ function renderMutationGraph() {
 
     mutationGraphSim.on("tick", () => {
         var r = mSvg.node().getBoundingClientRect();
-        var pad = 18;
+        var k = mutationGraphZoom || 1;
+        var pad = 18 / k;
+        var cx = r.width / 2, cy = r.height / 2;
+        var halfW = r.width / (2 * k);
+        var halfH = r.height / (2 * k);
+        var minX = cx - halfW + pad, maxX = cx + halfW - pad;
+        var minY = cy - halfH + pad, maxY = cy + halfH - pad;
         for (var i = 0; i < nodes.length; i++) {
             var d = nodes[i];
-            if (d.x < pad) { d.x = pad; if (d.vx) d.vx = 0; }
-            if (d.x > r.width - pad) { d.x = r.width - pad; if (d.vx) d.vx = 0; }
-            if (d.y < pad) { d.y = pad; if (d.vy) d.vy = 0; }
-            if (d.y > r.height - pad) { d.y = r.height - pad; if (d.vy) d.vy = 0; }
+            if (d.x < minX) { d.x = minX; if (d.vx) d.vx = 0; }
+            if (d.x > maxX) { d.x = maxX; if (d.vx) d.vx = 0; }
+            if (d.y < minY) { d.y = minY; if (d.vy) d.vy = 0; }
+            if (d.y > maxY) { d.y = maxY; if (d.vy) d.vy = 0; }
         }
         link.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
             .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
