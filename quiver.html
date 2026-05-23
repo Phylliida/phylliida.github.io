@@ -1076,20 +1076,25 @@ var mgZoomAnchorY = 7;  // top middle of the resize handle (which is 14px tall)
 
 function mgViewportInfo(rectW, rectH) {
     var k = mutationGraphZoom || 1;
-    var pad = 18 / k;
+    var pad = mgImageSize / 2;
     var ax = rectW / 2, ay = mgZoomAnchorY;
+    var handleEl = document.querySelector(".mutation-graph-handle");
+    var handleH = handleEl ? handleEl.getBoundingClientRect().height : 14;
+    var handleBottomCoord = (handleH - ay) / k + ay;
     var visX0 = ax * (1 - 1 / k);
     var visY0 = ay * (1 - 1 / k);
     var visW = rectW / k;
     var visH = rectH / k;
+    var minX = visX0 + pad;
+    var maxX = visX0 + visW - pad;
+    var minY = handleBottomCoord + pad;
+    var maxY = visY0 + visH - pad;
     return {
         anchorX: ax, anchorY: ay,
-        minX: visX0 + pad,
-        maxX: visX0 + visW - pad,
-        minY: visY0 + pad,
-        maxY: visY0 + visH - pad,
-        centerX: visX0 + visW / 2,
-        centerY: visY0 + visH / 2
+        minX: minX, maxX: maxX,
+        minY: minY, maxY: maxY,
+        centerX: (minX + maxX) / 2,
+        centerY: (minY + maxY) / 2
     };
 }
 
