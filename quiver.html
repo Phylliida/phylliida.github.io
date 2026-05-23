@@ -401,6 +401,10 @@ function addQuiverNode(sig, snap, initialPos) {
     if (initialPos) {
         node.x = initialPos.x;
         node.y = initialPos.y;
+        if (mutationGraphFrozen) {
+            node.fx = initialPos.x;
+            node.fy = initialPos.y;
+        }
     }
     mutationGraph.nodesBySig[sig] = node;
     mutationGraph.nodesList.push(node);
@@ -1246,7 +1250,14 @@ function renderMutationGraph() {
                 d.fx = d.x; d.fy = d.y;
             })
             .on("drag", function(event, d) {
-                d.fx = event.x; d.fy = event.y;
+                var r = mSvg.node().getBoundingClientRect();
+                var info = mgViewportInfo(r.width, r.height);
+                var nx = event.x, ny = event.y;
+                if (nx < info.minX) nx = info.minX;
+                if (nx > info.maxX) nx = info.maxX;
+                if (ny < info.minY) ny = info.minY;
+                if (ny > info.maxY) ny = info.maxY;
+                d.fx = nx; d.fy = ny;
             })
             .on("end", function(event, d) {
                 if (!event.active) mutationGraphSim.alphaTarget(0);
@@ -1270,7 +1281,7 @@ function renderMutationGraph() {
         .attr("class", "mg-link-label")
         .text(d => d.label != null ? d.label : "")
         .attr("font-family", "sans-serif")
-        .attr("font-size", "11px")
+        .attr("font-size", "16.5px")
         .attr("text-anchor", "middle")
         .attr("fill", "rgba(255,255,255,0.85)")
         .attr("paint-order", "stroke")
