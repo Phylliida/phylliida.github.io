@@ -707,27 +707,74 @@ function extractPngText(pngBytes, keyword) {
     return null;
 }
 
+function ensureMutationGraphFrozen() {
+    if (!mutationGraph.enabled) return;
+    if (mutationGraphFrozen) return;
+    mutationGraphFrozen = true;
+    for (var i = 0; i < mutationGraph.nodesList.length; i++) {
+        var n = mutationGraph.nodesList[i];
+        n.fx = n.x;
+        n.fy = n.y;
+    }
+    updateFreezeMgButtonText();
+    if (mutationGraphSim) mutationGraphSim.alpha(0.05).restart();
+    triggerURLUpdate();
+}
+
+function renderSvgToImage(svgEl, w, h) {
+    return new Promise(function(resolve, reject) {
+        var clone = svgEl.cloneNode(true);
+        clone.setAttribute("width", w);
+        clone.setAttribute("height", h);
+        clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+        var svgStr = new XMLSerializer().serializeToString(clone);
+        var blob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
+        var url = URL.createObjectURL(blob);
+        var img = new Image();
+        img.onload = function() { URL.revokeObjectURL(url); resolve(img); };
+        img.onerror = function(e) { URL.revokeObjectURL(url); reject(e); };
+        img.src = url;
+    });
+}
+
 function exportQuiverPng() {
+    ensureMutationGraphFrozen();
     var mainSvg = document.querySelector(".graph-container > svg");
     if (!mainSvg) return;
-    var rect = mainSvg.getBoundingClientRect();
-    var w = Math.round(rect.width), h = Math.round(rect.height);
-    var clone = mainSvg.cloneNode(true);
-    clone.setAttribute("width", w);
-    clone.setAttribute("height", h);
-    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-    var svgStr = new XMLSerializer().serializeToString(clone);
-    var svgBlob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
-    var url = URL.createObjectURL(svgBlob);
-    var img = new Image();
-    img.onload = function() {
+    var mainRect = mainSvg.getBoundingClientRect();
+    var w = Math.round(mainRect.width), h = Math.round(mainRect.height);
+
+    var mgPanel = document.getElementById("mutationGraphPanel");
+    var mgVisible = mgPanel && mgPanel.style.display !== "none" && mutationGraph.enabled;
+    var mgSvgEl = mgVisible ? document.getElementById("mutationGraphSvg") : null;
+    var mgRect = mgPanel && mgVisible ? mgPanel.getBoundingClientRect() : null;
+
+    var promises = [renderSvgToImage(mainSvg, w, h)];
+    if (mgSvgEl) {
+        var mgSvgRect = mgSvgEl.getBoundingClientRect();
+        promises.push(renderSvgToImage(mgSvgEl, Math.round(mgSvgRect.width), Math.round(mgSvgRect.height)));
+    }
+
+    Promise.all(promises).then(function(images) {
         var canvas = document.createElement("canvas");
         canvas.width = w; canvas.height = h;
         var ctx = canvas.getContext("2d");
         ctx.fillStyle = "#111";
         ctx.fillRect(0, 0, w, h);
-        ctx.drawImage(img, 0, 0, w, h);
-        URL.revokeObjectURL(url);
+        ctx.drawImage(images[0], 0, 0, w, h);
+        if (images[1]) {
+            var mgX = mgRect.left - mainRect.left;
+            var mgY = mgRect.top - mainRect.top;
+            var mgW = mgRect.width, mgH = mgRect.height;
+            // Match on-screen styling: dark translucent backdrop + lighter top-bar strip.
+            ctx.fillStyle = "rgba(10,10,10,0.5)";
+            ctx.fillRect(mgX, mgY, mgW, mgH);
+            ctx.fillStyle = "rgba(255,255,255,0.15)";
+            ctx.fillRect(mgX, mgY, mgW, 14);
+            ctx.fillStyle = "rgba(255,255,255,0.5)";
+            ctx.fillRect(mgX + mgW / 2 - 20, mgY + 5, 40, 3);
+            ctx.drawImage(images[1], mgX, mgY, mgW, mgH);
+        }
         canvas.toBlob(function(blob) {
             blob.arrayBuffer().then(function(buf) {
                 var pngBytes = new Uint8Array(buf);
@@ -745,12 +792,10 @@ function exportQuiverPng() {
                 setTimeout(function() { URL.revokeObjectURL(dlUrl); }, 200);
             });
         }, "image/png");
-    };
-    img.onerror = function() {
-        URL.revokeObjectURL(url);
-        alert("Failed to render SVG for export");
-    };
-    img.src = url;
+    }).catch(function(e) {
+        alert("Failed to render for export");
+        console.error(e);
+    });
 }
 
 function importQuiverPng(file) {
@@ -956,14 +1001,39 @@ var customMutationGraphHeight = null;
 var mutationGraphFrozen = false;
 var mutationGraphZoom = 1.0;
 
+var mgZoomAnchorY = 7;  // top middle of the resize handle (which is 14px tall)
+
+function mgViewportInfo(rectW, rectH) {
+    var k = mutationGraphZoom || 1;
+    var pad = 18 / k;
+    var ax = rectW / 2, ay = mgZoomAnchorY;
+    var visX0 = ax * (1 - 1 / k);
+    var visY0 = ay * (1 - 1 / k);
+    var visW = rectW / k;
+    var visH = rectH / k;
+    return {
+        anchorX: ax, anchorY: ay,
+        minX: visX0 + pad,
+        maxX: visX0 + visW - pad,
+        minY: visY0 + pad,
+        maxY: visY0 + visH - pad,
+        centerX: visX0 + visW / 2,
+        centerY: visY0 + visH / 2
+    };
+}
+
 function applyMutationGraphZoom() {
     var svgNode = document.getElementById("mutationGraphSvg");
     if (!svgNode) return;
     var rect = svgNode.getBoundingClientRect();
-    var cx = rect.width / 2, cy = rect.height / 2;
+    var ax = rect.width / 2, ay = mgZoomAnchorY;
     d3.select("#mutationGraphSvg").select("g.mg-viewport")
-        .attr("transform", "translate(" + cx + "," + cy + ") scale(" + mutationGraphZoom + ") translate(" + (-cx) + "," + (-cy) + ")");
-    if (mutationGraphSim) mutationGraphSim.alpha(0.1).restart();
+        .attr("transform", "translate(" + ax + "," + ay + ") scale(" + mutationGraphZoom + ") translate(" + (-ax) + "," + (-ay) + ")");
+    if (mutationGraphSim) {
+        var info = mgViewportInfo(rect.width, rect.height);
+        mutationGraphSim.force("center", d3.forceCenter(info.centerX, info.centerY));
+        mutationGraphSim.alpha(0.1).restart();
+    }
 }
 
 function mgZoomIn() {
@@ -1019,21 +1089,15 @@ function mgResizeMove(e) {
     if (mutationGraphSim) {
         var rect = d3.select("#mutationGraphSvg").node().getBoundingClientRect();
         var rectW = rect.width, rectH = newH;
-        mutationGraphSim.force("center", d3.forceCenter(rectW / 2, rectH / 2));
+        var info = mgViewportInfo(rectW, rectH);
+        mutationGraphSim.force("center", d3.forceCenter(info.centerX, info.centerY));
         if (!mutationGraphFrozen) {
-            var k = mutationGraphZoom || 1;
-            var pad = 18 / k;
-            var cx = rectW / 2, cy = rectH / 2;
-            var halfW = rectW / (2 * k);
-            var halfH = rectH / (2 * k);
-            var minX = cx - halfW + pad, maxX = cx + halfW - pad;
-            var minY = cy - halfH + pad, maxY = cy + halfH - pad;
             for (var i = 0; i < mutationGraph.nodesList.length; i++) {
                 var d = mutationGraph.nodesList[i];
-                if (d.x < minX) d.x = minX;
-                if (d.x > maxX) d.x = maxX;
-                if (d.y < minY) d.y = minY;
-                if (d.y > maxY) d.y = maxY;
+                if (d.x < info.minX) d.x = info.minX;
+                if (d.x > info.maxX) d.x = info.maxX;
+                if (d.y < info.minY) d.y = info.minY;
+                if (d.y > info.maxY) d.y = info.maxY;
             }
         }
         mutationGraphSim.alpha(0.05).restart();
@@ -1080,12 +1144,13 @@ function renderMutationGraph() {
 
     var mgNodeRadius = mgImageSize / 2;
     var mgMinEdge = mgNodeRadius * 2 + 5;
+    var initInfo = mgViewportInfo(w, h);
     mutationGraphSim = d3.forceSimulation(nodes)
         .alpha(0.3)
         .force("link", d3.forceLink(links).id(d => d.id).distance(Math.max(mgMinEdge + 25, 80)))
         .force("charge", d3.forceManyBody().strength(-200))
         .force("collide", d3.forceCollide(mgMinEdge / 2))
-        .force("center", d3.forceCenter(w / 2, h / 2));
+        .force("center", d3.forceCenter(initInfo.centerX, initInfo.centerY));
 
     var viewport = mSvg.append("g").attr("class", "mg-viewport");
 
@@ -1149,19 +1214,13 @@ function renderMutationGraph() {
     mutationGraphSim.on("tick", () => {
         if (!mutationGraphFrozen) {
             var r = mSvg.node().getBoundingClientRect();
-            var k = mutationGraphZoom || 1;
-            var pad = 18 / k;
-            var cx = r.width / 2, cy = r.height / 2;
-            var halfW = r.width / (2 * k);
-            var halfH = r.height / (2 * k);
-            var minX = cx - halfW + pad, maxX = cx + halfW - pad;
-            var minY = cy - halfH + pad, maxY = cy + halfH - pad;
+            var info = mgViewportInfo(r.width, r.height);
             for (var i = 0; i < nodes.length; i++) {
                 var d = nodes[i];
-                if (d.x < minX) { d.x = minX; if (d.vx) d.vx = 0; }
-                if (d.x > maxX) { d.x = maxX; if (d.vx) d.vx = 0; }
-                if (d.y < minY) { d.y = minY; if (d.vy) d.vy = 0; }
-                if (d.y > maxY) { d.y = maxY; if (d.vy) d.vy = 0; }
+                if (d.x < info.minX) { d.x = info.minX; if (d.vx) d.vx = 0; }
+                if (d.x > info.maxX) { d.x = info.maxX; if (d.vx) d.vx = 0; }
+                if (d.y < info.minY) { d.y = info.minY; if (d.vy) d.vy = 0; }
+                if (d.y > info.maxY) { d.y = info.maxY; if (d.vy) d.vy = 0; }
             }
         }
         link.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
