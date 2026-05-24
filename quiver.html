@@ -1426,6 +1426,7 @@ function renderMutationGraph() {
                 if (!mutationGraphFrozen) {
                     d.fx = null;
                     d.fy = null;
+                    return;
                 }
                 triggerURLUpdate();
             }));
