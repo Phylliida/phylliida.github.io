@@ -64,6 +64,25 @@
     z-index: 10;
     box-shadow: 0 0 12px rgba(0, 0, 0, 0.6);
   }
+  .popup-wrapper {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  .saving-panel {
+    position: absolute;
+    left: calc(100% + 0.5rem);
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 1rem;
+    background: rgba(20, 20, 20, 0.95);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    z-index: 10;
+    box-shadow: 0 0 12px rgba(0, 0, 0, 0.6);
+  }
 
   .mutation-graph-panel {
     position: absolute;
@@ -233,9 +252,12 @@ body {
   <button id="mgZoomInButton" class="defaultButton" onclick="mgZoomIn();">+ ZOOM MUTATION GRAPH</button>
   <button id="mgZoomOutButton" class="defaultButton" onclick="mgZoomOut();">- ZOOM MUTATION GRAPH</button>
   <button id="deleteMgButton" class="defaultButton" onclick="confirmDeleteMutationGraph();">DELETE MUTATION GRAPH</button>
-  <button id="exportPngButton" class="defaultButton" onclick="exportQuiverPng();">EXPORT IMAGE (data in metadata)</button>
-  <button id="exportJsonButton" class="defaultButton" onclick="exportQuiverJson();">EXPORT JSON (alternative format)</button>
-  <button id="importPngButton" class="defaultButton" onclick="openImportDialog();">IMPORT (or drop here)</button>
+  <button id="savingButton" class="defaultButton" onclick="toggleSavingPanel();">SAVING</button>
+  <div id="savingPanel" class="saving-panel" style="display:none;">
+    <button id="exportPngButton" class="defaultButton" onclick="exportQuiverPng();">EXPORT DATA IMAGE (encoded in metadata)</button>
+    <button id="exportJsonButton" class="defaultButton" onclick="exportQuiverJson();">EXPORT JSON (alternative format)</button>
+    <button id="importPngButton" class="defaultButton" onclick="openImportDialog();">IMPORT DATA IMAGE OR JSON<br>(or drop here)</button>
+  </div>
 </div>
 
 <div id="mgConfirmPanel" class="mg-confirm-panel" style="display:none;">
@@ -341,6 +363,13 @@ function UpdateState() {
 
 function toggleExtrasPanel() {
     var panel = document.getElementById("extrasPanel");
+    var opening = panel.style.display === "none";
+    panel.style.display = opening ? "flex" : "none";
+    if (!opening) document.getElementById("savingPanel").style.display = "none";
+}
+
+function toggleSavingPanel() {
+    var panel = document.getElementById("savingPanel");
     panel.style.display = (panel.style.display === "none") ? "flex" : "none";
 }
 
