@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Burning extremal P_k-free graphs</title>
+<style>
+  :root {
+    --bg: #fafafa;
+    --fg: #222;
+    --accent: #c0392b;
+    --burned: #555;
+    --pending: #fff;
+    --source: #f1c40f;
+    --edge: #bbb;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    margin: 0;
+    padding: 20px 28px;
+    max-width: 1240px;
+  }
+  h1 { margin-top: 0; font-size: 1.4rem; }
+  p.intro { max-width: 70ch; line-height: 1.45; }
+  .panel {
+    margin: 12px 0;
+    padding: 10px 14px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+  }
+  details summary { cursor: pointer; font-weight: 600; }
+  details p, details ul, details table { line-height: 1.5; }
+  .family-toggle { display: inline-flex; gap: 0; border: 1px solid #888; border-radius: 6px; overflow: hidden; }
+  .family-toggle button {
+    background: #fff;
+    border: 0;
+    padding: 6px 14px;
+    font: inherit;
+    cursor: pointer;
+    border-right: 1px solid #ccc;
+  }
+  .family-toggle button:last-child { border-right: 0; }
+  .family-toggle button.active { background: var(--accent); color: white; }
+  .controls {
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .controls label { display: inline-flex; gap: 6px; align-items: center; }
+  .controls input[type=range] { width: 160px; }
+  .controls button.action {
+    padding: 4px 12px;
+    border: 1px solid #888;
+    background: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    font: inherit;
+  }
+  .controls button.action:hover { background: #f0f0f0; }
+  .controls button.action.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  #info code { background: #f0f0f0; padding: 1px 5px; border-radius: 3px; }
+  #info .props { color: #666; font-size: 0.95rem; line-height: 1.5; }
+  svg {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    display: block;
+  }
+  .legend {
+    display: inline-flex;
+    gap: 18px;
+    margin: 8px 0;
+    font-size: 0.85rem;
+    color: #555;
+    flex-wrap: wrap;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .swatch { width: 14px; height: 14px; border-radius: 50%; border: 1px solid #333; display: inline-block; }
+  .m-row.hidden { display: none; }
+  footer { margin-top: 30px; color: #888; font-size: 0.85rem; }
+  table { border-collapse: collapse; margin: 6px 0; font-size: 0.9rem; }
+  table th, table td { padding: 3px 10px; }
+  table thead tr { border-bottom: 1px solid #aaa; }
+</style>
+</head>
+<body>
+<h1>Burning the tight extremal P<sub>k</sub>-free graphs</h1>
+
+<p class="intro">
+Pick a target burning number <em>n</em>, choose which extremal family to look at,
+and watch the optimal single-source burning round by round.
+Both families come from arXiv:2402.18984v5; the comparison is the interesting bit.
+</p>
+
+<details class="panel" open>
+  <summary>About the two families</summary>
+  <p>
+    Antony &amp; Chandran et al.'s upper bound says
+    <code>b(G) ≤ ⌈(k+1)/2⌉</code> for any connected P<sub><em>k</em></sub>-free graph G.
+    Two extremal-example families try to match it:
+  </p>
+  <ul>
+    <li>
+      <strong>Paper's spider</strong> <code>𝒫<sub>r</sub></code>: one branching vertex,
+      <em>r</em> legs of length <em>r</em>−1.  Has <code>r(r−1)+1 = r²−r+1</code> vertices,
+      is <strong>P<sub>2r</sub>-free</strong>, and has burning number exactly <em>r</em>.
+      Indexed against <em>k</em>: setting <em>r</em> = ⌊<em>k</em>/2⌋ gives a
+      P<sub><em>k</em></sub>-free graph with <code>b = ⌊k/2⌋</code> — one short of the
+      upper bound <code>⌈(k+1)/2⌉</code>.  Hence the paper says "tight up to additive 1."
+    </li>
+    <li>
+      <strong>Our G̃<sub>t</sub>(m)</strong>: <em>K<sub>m,m</sub></em> between inner
+      vertices <code>x<sub>1</sub>,…,x<sub>m</sub></code> and
+      <code>y<sub>1</sub>,…,y<sub>m</sub></code>, with a length-<em>t</em> pendant path
+      attached to each inner vertex.  Has <code>2m(t+1)</code> vertices, is
+      <strong>P<sub>2t+4</sub>-free</strong>, and (when <em>m</em> ≥ <em>t</em>+3) has
+      burning number exactly <em>t</em>+3 — <strong>matching the upper bound exactly</strong>.
+      Taking <em>t</em>=1, <em>m</em>=4 recovers the paper's special "Fig. 3a" graph G̃.
+    </li>
+  </ul>
+  <table>
+    <thead>
+      <tr>
+        <th><em>k</em></th><th>Upper bound</th><th>Spider 𝒫<sub>r</sub></th><th>G̃<sub>t</sub>(m)</th>
+      </tr>
+    </thead>
+    <tbody style="font-family: monospace;">
+      <tr><td>4</td><td>3</td><td>2 (𝒫₂)</td><td><strong>3</strong> (G̃₀(3)=K₃,₃)</td></tr>
+      <tr><td>5</td><td>3</td><td>2</td><td><strong>3</strong> (K₃,₃)</td></tr>
+      <tr><td>6</td><td>4</td><td>3 (𝒫₃)</td><td><strong>4</strong> (G̃₁(4)=paper's G̃)</td></tr>
+      <tr><td>7</td><td>4</td><td>3</td><td><strong>4</strong> (G̃₁(4))</td></tr>
+      <tr><td>8</td><td>5</td><td>4 (𝒫₄)</td><td><strong>5</strong> (G̃₂(5))</td></tr>
+      <tr><td>9</td><td>5</td><td>4</td><td><strong>5</strong> (G̃₂(5))</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Below, the <em>n</em> slider is the burning number you want to achieve.
+    For the spider this means <em>r = n</em>; for G̃<sub>t</sub>(m) it means
+    <em>t = n−3</em>, with <em>m</em> defaulting to <em>n</em> (the minimum
+    that keeps the bound tight).
+  </p>
+</details>
+
+<div class="panel">
+  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+    <span style="font-weight: 600;">Family:</span>
+    <div class="family-toggle">
+      <button id="fam-gtilde" class="active">G̃<sub>t</sub>(m) (ours)</button>
+      <button id="fam-spider">Spider 𝒫<sub>r</sub> (paper)</button>
+    </div>
+  </div>
+  <div class="controls">
+    <label>n (burning number / total rounds):
+      <input type="range" id="n-slider" min="3" max="20" value="4" step="1">
+      <span id="n-val">4</span>
+    </label>
+    <label class="m-row">m (override, default = n):
+      <input type="range" id="m-slider" min="2" max="20" value="4" step="1">
+      <span id="m-val">4</span>
+    </label>
+    <button id="play-btn" class="action primary">▶ Play</button>
+    <button id="step-btn" class="action">Step ▸</button>
+    <button id="reset-btn" class="action">⟲ Reset</button>
+  </div>
+  <div id="recommendation" style="margin-top: 8px; font-size: 0.88rem; color: #666;"></div>
+</div>
+
+<div class="legend">
+  <span><span class="swatch" style="background: var(--source);"></span> source (lit round 1)</span>
+  <span><span class="swatch" style="background: var(--accent);"></span> newly lit this round</span>
+  <span><span class="swatch" style="background: var(--burned);"></span> already burned</span>
+  <span><span class="swatch" style="background: var(--pending);"></span> unburned</span>
+</div>
+
+<div id="info" class="panel">
+  <div><strong id="round-display">Round 0 / 4</strong></div>
+  <div class="props" id="props"></div>
+  <div class="props" style="margin-top: 6px; padding-top: 6px; border-top: 1px dashed #ddd;">
+    <strong>Why only one source?</strong>  In the burning protocol you do
+    light a new source every round (one per round, on an unburned vertex if
+    one is available).  But both of these graphs are
+    <em>single-source-optimal</em>: the highlighted source has eccentricity
+    exactly <em>b</em>−1, so its expanding fire reaches every vertex by
+    round <em>b</em> without needing help.  The protocol still requires
+    sources <em>b<sub>2</sub>, …, b<sub>b</sub></em>, but they can be chosen
+    arbitrarily on the unburned set — they don't make the burning shorter,
+    so we omit them visually.  See proof below.
+  </div>
+</div>
+
+<details class="panel">
+  <summary>Definition: P<sub>k</sub>-free, and why our families are P<sub>k</sub>-free</summary>
+  <p>
+    <em>P<sub>k</sub></em> denotes the path on <em>k</em> vertices: distinct
+    vertices <em>v<sub>1</sub>, …, v<sub>k</sub></em> with edges
+    <em>v<sub>i</sub>v<sub>i+1</sub></em> for <em>i</em> = 1, …, <em>k</em>−1
+    and no others.  A graph <em>G</em> is <strong>P<sub>k</sub>-free</strong>
+    if no <em>k</em>-vertex subset <em>S</em> ⊆ <em>V(G)</em> has its induced
+    subgraph <em>G[S]</em> isomorphic to <em>P<sub>k</sub></em>.  Equivalently,
+    every sequence of <em>k</em> distinct vertices either fails to have
+    consecutive vertices adjacent, or has a "chord" — an edge between two
+    non-consecutive vertices in the sequence.
+  </p>
+
+  <p><strong>Lemma (spider).</strong>
+    The spider <em>𝒫<sub>r</sub></em> with <em>r</em> legs of length
+    <em>r</em>−1 is <strong>P<sub>2r</sub>-free</strong>, and contains an
+    induced <em>P<sub>2r−1</sub></em>.</p>
+
+  <p style="padding-left: 18px;">
+    <em>Proof.</em>  An induced <em>P<sub>2r−1</sub></em>: walk from a leaf
+    tip on one leg through the centre to a leaf tip on another leg.  That
+    gives (<em>r</em>−1) + 1 + (<em>r</em>−1) = 2<em>r</em>−1 vertices in a
+    row; no chords exist because vertices on different legs are non-adjacent
+    except through the centre, and consecutive chain vertices are the only
+    same-leg adjacencies.
+  </p>
+  <p style="padding-left: 18px;">
+    No longer induced path exists.  Any induced path that meets more than
+    one leg has to pass through the centre (the only point of contact
+    between legs), and the centre can only be entered and exited once on
+    a simple path.  So an induced path uses at most 2 legs plus the centre,
+    contributing at most (<em>r</em>−1) + 1 + (<em>r</em>−1) = 2<em>r</em>−1
+    vertices.  Hence <em>𝒫<sub>r</sub></em> is <em>P<sub>2r</sub></em>-free. ∎
+  </p>
+
+  <p><strong>Lemma (G̃<sub>t</sub>(m)).</strong>
+    For <em>m</em> ≥ 2, <em>G̃<sub>t</sub>(m)</em> is
+    <strong>P<sub>2t+4</sub>-free</strong>, and contains an induced
+    <em>P<sub>2t+3</sub></em>.</p>
+
+  <p style="padding-left: 18px;">
+    <em>Proof.</em>  An induced <em>P<sub>2t+3</sub></em>: for distinct
+    <em>a</em>, <em>c</em> ∈ [<em>m</em>] and any <em>b</em> ∈ [<em>m</em>],
+    the sequence
+    <em>x<sub>a</sub><sup>(t)</sup> – x<sub>a</sub><sup>(t−1)</sup> – … –
+    x<sub>a</sub> – y<sub>b</sub> – x<sub>c</sub> – x<sub>c</sub><sup>(1)</sup>
+    – … – x<sub>c</sub><sup>(t)</sup></em> has
+    <em>t</em> + 1 + 1 + 1 + <em>t</em> = 2<em>t</em>+3 vertices.  Each
+    consecutive pair is an edge.  No chords: pendant vertices are only
+    adjacent to their chain neighbours; <em>x<sub>a</sub></em> and
+    <em>x<sub>c</sub></em> are both on the <em>x</em>-side of the
+    bipartition so non-adjacent; <em>x<sub>a</sub>y<sub>b</sub></em>
+    and <em>y<sub>b</sub>x<sub>c</sub></em> are already in the path.
+  </p>
+  <p style="padding-left: 18px;">
+    No longer induced path exists.  Look at any induced path <em>P</em>
+    in <em>G̃<sub>t</sub>(m)</em> and its <strong>inner trace</strong> —
+    the sub-sequence of <em>P</em>'s vertices that lie in <em>K<sub>m,m</sub></em>
+    (i.e. at chain position 0).  This inner trace is an induced path
+    <em>inside K<sub>m,m</sub></em>.  But the longest induced path in a
+    complete bipartite graph has at most 3 vertices: any sequence
+    <em>u<sub>1</sub> – u<sub>2</sub> – u<sub>3</sub> – u<sub>4</sub></em>
+    with <em>u<sub>1</sub>, u<sub>3</sub></em> on one side and
+    <em>u<sub>2</sub>, u<sub>4</sub></em> on the other forces the chord
+    <em>u<sub>1</sub>u<sub>4</sub></em>.  So the inner trace has ≤ 3 vertices.
+  </p>
+  <p style="padding-left: 18px;">
+    The rest of <em>P</em> consists of pendant chain segments attached at
+    the inner trace's two endpoints (the only way to leave the
+    <em>K<sub>m,m</sub></em> bipartite core).  Each such tail has ≤ <em>t</em>
+    pendant vertices (the chain has only <em>t</em> vertices beyond its
+    inner attachment).  So
+    |<em>P</em>| ≤ <em>t</em> + 3 + <em>t</em> = 2<em>t</em> + 3,
+    hence <em>G̃<sub>t</sub>(m)</em> is
+    <em>P<sub>2t+4</sub></em>-free. ∎
+  </p>
+
+  <p>
+    The two bounds line up with the slider as follows.  At the same value
+    of <em>n</em> (= burning number), the two families are
+    <em>P<sub>k</sub></em>-free for <em>different</em> values of <em>k</em>:
+  </p>
+  <table>
+    <thead>
+      <tr><th>family</th><th>P<sub>k</sub>-free for</th><th>at slider <em>n</em></th></tr>
+    </thead>
+    <tbody style="font-family: monospace;">
+      <tr><td>Spider 𝒫<sub>r</sub></td><td><em>k</em> = 2<em>r</em></td><td><em>k</em> = 2<em>n</em></td></tr>
+      <tr><td>G̃<sub>t</sub>(m)</td><td><em>k</em> = 2<em>t</em>+4</td><td><em>k</em> = 2<em>n</em>−2</td></tr>
+    </tbody>
+  </table>
+  <p>
+    This is the punchline: at <em>any</em> fixed <em>k</em>, take the
+    family that <em>is</em> P<sub><em>k</em></sub>-free and look at the
+    burning number it forces.  The spider sets <em>r</em> = ⌊<em>k</em>/2⌋
+    and gets <code>b = ⌊k/2⌋</code>; G̃<sub>t</sub>(m) sets
+    <em>t</em> = (<em>k</em>−4)/2 (taking <em>k</em> even) and gets
+    <code>b = t+3 = (k+2)/2 = ⌈(k+1)/2⌉</code> — exactly the upper bound.
+  </p>
+</details>
+
+<details class="panel">
+  <summary>Proof that both families are single-source optimal</summary>
+  <p>
+    A graph G is <em>single-source optimal</em> iff
+    <code>b(G) = rad(G) + 1</code>, where <code>rad(G)</code> is the radius
+    (the minimum, over all vertices <em>v</em>, of <em>v</em>'s eccentricity).
+    The inequality <code>b(G) ≤ rad(G) + 1</code> holds for every connected
+    graph — pick a centre <em>v</em>, light it first, and the fire fills
+    every distance-<em>j</em> shell by round <em>j</em>+1, finishing by
+    round <code>ecc(v) + 1 = rad(G) + 1</code>.  So single-source optimality
+    is purely a question of whether the matching <em>lower</em> bound
+    <code>b(G) ≥ rad(G) + 1</code> holds.
+  </p>
+
+  <p><strong>Lemma (spider).</strong>
+    For the spider <code>𝒫<sub>r</sub></code> with <em>r</em> ≥ 2 legs of
+    length <em>r</em>−1, <code>b(𝒫<sub>r</sub>) = r</code>.</p>
+
+  <p style="padding-left: 18px;">
+    <em>Proof.</em>  The radius is achieved at the centre <em>c</em>
+    (every vertex is within distance <em>r</em>−1 of <em>c</em>; every
+    non-centre vertex has a non-centre vertex at distance more than
+    <em>r</em>−1), so <code>rad(𝒫<sub>r</sub>) = r − 1</code> and the
+    upper bound gives <code>b ≤ r</code>.
+  </p>
+  <p style="padding-left: 18px;">
+    For the lower bound, suppose a burning sequence
+    <em>b<sub>1</sub>, …, b<sub>r−1</sub></em> of length <em>r</em>−1 worked.
+    The spider has <em>r</em> leaf tips (one per leg), pairwise at distance
+    2(<em>r</em>−1).  Each tip <em>ℓ</em> must be covered by some
+    <em>b<sub>i</sub></em> at distance ≤ (<em>r</em>−1)−<em>i</em>.  By
+    pigeonhole on <em>r</em> tips into <em>r</em>−1 sources, two leaf tips
+    <em>ℓ<sub>1</sub>, ℓ<sub>2</sub></em> share a source <em>b<sub>i</sub></em>:
+    <code>d(b<sub>i</sub>, ℓ<sub>1</sub>) ≤ r−1−i</code> and
+    <code>d(b<sub>i</sub>, ℓ<sub>2</sub>) ≤ r−1−i</code>.  The triangle
+    inequality then gives
+    <code>2(r−1) = d(ℓ<sub>1</sub>, ℓ<sub>2</sub>) ≤ 2(r−1−i)</code>,
+    forcing <em>i</em> ≤ 0, which is impossible (sources are indexed
+    from 1).  So <code>b ≥ r</code>.  ∎
+  </p>
+
+  <p>
+    <strong>Lemma (G̃<sub>t</sub>(m)).</strong>  If <em>m</em> ≥ <em>t</em>+3
+    then <code>b(G̃<sub>t</sub>(m)) = t + 3</code>.</p>
+
+  <p style="padding-left: 18px;">
+    <em>Proof.</em>  An inner vertex <em>x<sub>a</sub></em> has distances
+    <code>0</code> to itself, <code>s</code> to its own pendant
+    <em>x<sub>a</sub><sup>(s)</sup></em>, <code>1</code> to any
+    <em>y<sub>j</sub></em>, <code>1+s</code> to any
+    <em>y<sub>j</sub><sup>(s)</sup></em>, <code>2</code> to a different
+    inner <em>x<sub>b</sub></em>, and <code>2+s</code> to its pendant
+    <em>x<sub>b</sub><sup>(s)</sup></em>.  Maximum: <em>t</em>+2 (at
+    <em>x<sub>b</sub><sup>(t)</sup></em>, <em>b</em> ≠ <em>a</em>).
+    So <code>ecc(x<sub>a</sub>) = t + 2</code>; you can check every other
+    vertex has eccentricity at least this big, hence
+    <code>rad = t + 2</code> and <code>b ≤ t + 3</code>.
+  </p>
+  <p style="padding-left: 18px;">
+    For the lower bound, suppose
+    <em>b<sub>1</sub>, …, b<sub>t+2</sub></em> of length <em>t</em>+2 worked.
+    Look at the <em>m</em> "<em>y</em>-side tips"
+    <em>T<sub>Y</sub> = {y<sub>c</sub><sup>(t)</sup> : c ∈ [m]}</em>.
+    For each tip <em>y<sub>c</sub><sup>(t)</sup></em>, the closed ball
+    of radius <em>d</em> around it is:
+    just the chain <em>{y<sub>c</sub><sup>(0)</sup>, …, y<sub>c</sub><sup>(t)</sup>}</em>
+    for <em>d</em> ≤ <em>t</em>, the chain together with every inner
+    <em>x<sub>k</sub></em> for <em>d</em> = <em>t</em>+1, and the chain
+    together with the inner <em>x</em>'s, their pendants and every
+    <em>y<sub>j</sub></em> for <em>d</em> = <em>t</em>+2.
+  </p>
+  <p style="padding-left: 18px;">
+    For <em>i</em> ≥ 2, the depth budget <em>t</em>+2−<em>i</em> is at most
+    <em>t</em>, so <em>b<sub>i</sub></em> can only sit on a single <em>y</em>-chain,
+    hence covers at most one tip in <em>T<sub>Y</sub></em>.  For <em>i</em>=1
+    the depth budget is <em>t</em>+1, so <em>b<sub>1</sub></em> reaches some
+    tip in <em>T<sub>Y</sub></em> iff it lies on that tip's chain or is one of the
+    inner <em>x<sub>k</sub></em>'s.  But each <em>x<sub>k</sub></em> reaches only
+    one <em>y</em>-tip too: <code>d(x<sub>k</sub>, y<sub>c</sub><sup>(t)</sup>) = t+1</code>
+    forces <em>x<sub>k</sub></em>-on-chain only when <em>k</em>=<em>c</em>, and
+    going through cross-edges gives distance <em>t</em>+1 only for
+    <em>c</em>=<em>k</em>.  (Symmetrically for the <em>x</em>-side tips.)
+  </p>
+  <p style="padding-left: 18px;">
+    So whatever <em>b<sub>1</sub></em> is, between the two tip-sides at
+    least <em>m</em>−1 tips remain uncovered after the first source.
+    The remaining <em>t</em>+1 sources cover at most <em>t</em>+1 tips on
+    that side (one each, as argued above).  Hence we need
+    <em>m</em>−1 ≤ <em>t</em>+1, i.e. <em>m</em> ≤ <em>t</em>+2,
+    contradicting <em>m</em> ≥ <em>t</em>+3.  So no length-(<em>t</em>+2)
+    burning sequence works, and <code>b ≥ t + 3</code>.  ∎
+  </p>
+
+  <p>
+    Both proofs identify a set of "far apart" target vertices (leaf tips in
+    the spider, pendant chain tips in G̃<sub>t</sub>(m)) and use a counting
+    argument to show that no shorter burning sequence can cover them all.
+    Since the radius witness already achieves the matching upper bound, the
+    single source at the centre (resp. at any inner <em>x<sub>a</sub></em>)
+    is genuinely optimal — and the extra sources <em>b<sub>2</sub>, …</em>
+    that the protocol forces you to add are pure formality.
+  </p>
+</details>
+
+<svg id="graph" width="1180" height="680" viewBox="0 0 1180 680"></svg>
+
+<footer>
+  See <code>WRITEUP.md</code> and <code>burning_pk_analysis.md</code> for the math,
+  and <code>burning-pk-lean/Burning/</code> for the Lean 4 formal proofs.
+</footer>
+
+<script>
+'use strict';
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const SUBS = '₀₁₂₃₄₅₆₇₈₉';
+const SUPS = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+
+const subscript = n => String(n).split('').map(d => SUBS[+d]).join('');
+const superscript = n => String(n).split('').map(d => SUPS[+d]).join('');
+
+function el(name, attrs, text) {
+  const e = document.createElementNS(SVG_NS, name);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+// ============ Graph constructors ============
+
+function buildGtilde(t, m) {
+  const vertices = [];
+  const edges = [];
+  for (const side of ['x', 'y']) {
+    for (let i = 0; i < m; i++) {
+      for (let s = 0; s <= t; s++) {
+        vertices.push({ id: `${side}${i}_${s}`, side, mIdx: i, pos: s });
+      }
+    }
+  }
+  for (const side of ['x', 'y']) {
+    for (let i = 0; i < m; i++) {
+      for (let s = 0; s < t; s++) edges.push([`${side}${i}_${s}`, `${side}${i}_${s + 1}`]);
+    }
+  }
+  for (let i = 0; i < m; i++) {
+    for (let j = 0; j < m; j++) edges.push([`x${i}_0`, `y${j}_0`]);
+  }
+  const adj = new Map();
+  for (const v of vertices) adj.set(v.id, []);
+  for (const [a, b] of edges) { adj.get(a).push(b); adj.get(b).push(a); }
+  return { vertices, edges, adj, family: 'gtilde', t, m, sourceId: 'x0_0', rounds: t + 3 };
+}
+
+function buildSpider(r) {
+  // 1 center + r legs of length r-1 vertices each (r-1 edges per leg).
+  // Special-case r = 1: just a single vertex.
+  const vertices = [{ id: 'c', role: 'center', leg: -1, pos: 0 }];
+  const edges = [];
+  for (let i = 0; i < r; i++) {
+    for (let j = 1; j <= r - 1; j++) {
+      vertices.push({ id: `l${i}_${j}`, role: 'leg', leg: i, pos: j });
+    }
+    if (r >= 2) edges.push(['c', `l${i}_1`]);
+    for (let j = 1; j < r - 1; j++) edges.push([`l${i}_${j}`, `l${i}_${j + 1}`]);
+  }
+  const adj = new Map();
+  for (const v of vertices) adj.set(v.id, []);
+  for (const [a, b] of edges) { adj.get(a).push(b); adj.get(b).push(a); }
+  return { vertices, edges, adj, family: 'spider', r, sourceId: 'c', rounds: r };
+}
+
+// ============ BFS ============
+
+function bfs(graph, source) {
+  const dist = new Map();
+  dist.set(source, 0);
+  const queue = [source];
+  while (queue.length) {
+    const u = queue.shift();
+    const du = dist.get(u);
+    for (const v of graph.adj.get(u)) if (!dist.has(v)) { dist.set(v, du + 1); queue.push(v); }
+  }
+  return dist;
+}
+
+// ============ Layout ============
+
+function layoutGtilde(graph, w, h) {
+  const positions = new Map();
+  const cx = w / 2;
+  const innerGap = Math.min(280, 60 + 40 * (graph.t + 1));
+  const pendantStep = Math.max(22, Math.min(46, 480 / (graph.t + 1)));
+  const xInnerX = cx - innerGap / 2;
+  const yInnerX = cx + innerGap / 2;
+  const topPad = 40, bottomPad = 40;
+  const rowHeight = graph.m > 1 ? (h - topPad - bottomPad) / (graph.m - 1) : 0;
+  for (const v of graph.vertices) {
+    const yc = topPad + v.mIdx * rowHeight;
+    if (v.side === 'x') positions.set(v.id, { x: xInnerX - v.pos * pendantStep, y: yc });
+    else                positions.set(v.id, { x: yInnerX + v.pos * pendantStep, y: yc });
+  }
+  return positions;
+}
+
+function layoutSpider(graph, w, h) {
+  const positions = new Map();
+  const cx = w / 2, cy = h / 2;
+  const r = graph.r;
+  const maxRadius = Math.min(w, h) / 2 - 30;
+  const step = r > 1 ? maxRadius / (r - 1) : maxRadius;
+  positions.set('c', { x: cx, y: cy });
+  for (let i = 0; i < r; i++) {
+    const theta = (i / r) * 2 * Math.PI - Math.PI / 2;
+    for (let j = 1; j <= r - 1; j++) {
+      positions.set(`l${i}_${j}`, {
+        x: cx + j * step * Math.cos(theta),
+        y: cy + j * step * Math.sin(theta)
+      });
+    }
+  }
+  return positions;
+}
+
+// ============ Labels ============
+
+function labelGtilde(v) {
+  const sym = v.side;
+  const sub = subscript(v.mIdx + 1);
+  if (v.pos === 0) return `${sym}${sub}`;
+  const sup = superscript(v.pos);
+  return `${sym}${sub}${sup === '¹' ? "'" : '⁽' + sup + '⁾'}`;
+}
+
+function labelSpider(v) {
+  if (v.role === 'center') return 'c';
+  return `v${subscript(v.leg + 1)}${superscript(v.pos)}`;
+}
+
+// ============ Rendering ============
+
+function nodeSizeFor(graph) {
+  // Shrink nodes as graphs grow
+  const n = graph.vertices.length;
+  if (n <= 24) return { r: 11, font: 11, showLabels: true };
+  if (n <= 80) return { r: 7,  font: 9,  showLabels: true };
+  if (n <= 200) return { r: 5, font: 0,  showLabels: false };
+  return { r: 3, font: 0, showLabels: false };
+}
+
+function render(graph, positions, distMap, currentRound) {
+  const svg = document.getElementById('graph');
+  svg.innerHTML = '';
+  const sz = nodeSizeFor(graph);
+  const label = graph.family === 'gtilde' ? labelGtilde : labelSpider;
+
+  for (const [a, b] of graph.edges) {
+    const pa = positions.get(a), pb = positions.get(b);
+    svg.appendChild(el('line', {
+      x1: pa.x, y1: pa.y, x2: pb.x, y2: pb.y,
+      stroke: 'var(--edge)', 'stroke-width': graph.vertices.length > 80 ? '0.6' : '1'
+    }));
+  }
+
+  for (const v of graph.vertices) {
+    const p = positions.get(v.id);
+    const d = distMap.get(v.id) ?? Infinity;
+    let fill, stroke = '#222', strokeWidth = sz.r > 6 ? '1.2' : '0.6';
+    if (currentRound === 0) {
+      fill = (v.id === graph.sourceId) ? 'var(--source)' : 'var(--pending)';
+    } else if (d < currentRound - 1) {
+      fill = 'var(--burned)';
+    } else if (d === currentRound - 1) {
+      fill = 'var(--accent)';
+      strokeWidth = sz.r > 6 ? '2' : '1';
+    } else {
+      fill = 'var(--pending)';
+    }
+    if (v.id === graph.sourceId && fill !== 'var(--accent)') {
+      stroke = '#b58900';
+      strokeWidth = sz.r > 6 ? '2.5' : '1.5';
+    }
+    svg.appendChild(el('circle', {
+      cx: p.x, cy: p.y, r: sz.r, fill, stroke, 'stroke-width': strokeWidth
+    }));
+    if (sz.showLabels) {
+      svg.appendChild(el('text', {
+        x: p.x, y: p.y - sz.r - 4, 'text-anchor': 'middle',
+        'font-size': sz.font, 'font-family': 'serif', 'font-style': 'italic',
+        fill: '#333'
+      }, label(v)));
+    }
+  }
+}
+
+// ============ State + control ============
+
+let state = {
+  family: 'gtilde', n: 4, m: 4, round: 0,
+  graph: null, positions: null, dist: null, timer: null
+};
+
+function rebuild() {
+  state.n = parseInt(document.getElementById('n-slider').value, 10);
+  state.m = parseInt(document.getElementById('m-slider').value, 10);
+  document.getElementById('n-val').textContent = state.n;
+  document.getElementById('m-val').textContent = state.m;
+
+  if (state.family === 'gtilde') {
+    const t = Math.max(0, state.n - 3);
+    state.graph = buildGtilde(t, state.m);
+    state.positions = layoutGtilde(state.graph, 1180, 680);
+  } else {
+    state.graph = buildSpider(state.n);
+    state.positions = layoutSpider(state.graph, 1180, 680);
+  }
+  state.dist = bfs(state.graph, state.graph.sourceId);
+  state.round = 0;
+  pause();
+  render(state.graph, state.positions, state.dist, state.round);
+  updateInfo();
+}
+
+function updateInfo() {
+  const g = state.graph;
+  const round = state.round;
+  const upper = k => Math.ceil((k + 1) / 2);
+  let headline = '', chain = '';
+  if (g.family === 'gtilde') {
+    const k = 2 * g.t + 4;
+    const ub = upper(k);
+    const tight = g.m >= g.t + 3;
+    const actual = tight ? g.rounds : `≤ ${g.rounds}`;
+    const verdict = tight
+      ? `<span style="color: var(--accent); font-weight: 600;">Our construction shows b(G) = ${g.rounds} — matching the upper bound exactly.</span>`
+      : `<span style="color: #888;">Since m=${g.m} < t+3=${g.t + 3}, the lower-bound argument doesn't apply; this single-source burning still finishes in ${g.rounds} rounds (so b(G) ≤ ${g.rounds}), but the true b(G) may be smaller.</span>`;
+    headline = `<strong>G̃<sub>${g.t}</sub>(${g.m})</strong> &mdash; ${g.vertices.length} vertices, single source at <em>x₁</em>.`;
+    chain = `
+      <div style="font-family: 'SF Mono', Consolas, monospace; line-height: 1.7; margin-top: 4px;">
+        The graph is P<sub>${k}</sub>-free,&nbsp;&nbsp;so <em>k</em> = ${k}.<br>
+        Paper's upper bound: &nbsp;&nbsp;b(G) ≤ ⌈(<em>k</em>+1)/2⌉<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= ⌈(${k}+1)/2⌉<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= ${ub}
+      </div>
+      <div style="margin-top: 4px;">${verdict}</div>
+    `;
+  } else {
+    const k = 2 * g.r;
+    const ub = upper(k);
+    const gap = ub - g.rounds;
+    headline = `<strong>Spider 𝒫<sub>${g.r}</sub></strong> (one center, ${g.r} legs of length ${g.r - 1}) &mdash; ${g.vertices.length} vertices, single source at the centre.`;
+    chain = `
+      <div style="font-family: 'SF Mono', Consolas, monospace; line-height: 1.7; margin-top: 4px;">
+        The graph is P<sub>${k}</sub>-free,&nbsp;&nbsp;so <em>k</em> = ${k}.<br>
+        Paper's upper bound: &nbsp;&nbsp;b(G) ≤ ⌈(<em>k</em>+1)/2⌉<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= ⌈(${k}+1)/2⌉<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= ${ub}
+      </div>
+      <div style="margin-top: 4px;">
+        <span style="color: #888;">Spider achieves b(G) = ${g.rounds} = ⌊<em>k</em>/2⌋ &mdash; ${gap === 0 ? 'matching the upper bound' : `<strong>${gap}</strong> short of the upper bound`}.</span>
+      </div>
+    `;
+  }
+  document.getElementById('props').innerHTML = `${headline}${chain}`;
+  document.getElementById('round-display').innerHTML = `Round ${round} / ${g.rounds}`;
+
+  // Recommendation note (below the sliders, dynamic w/ family + values)
+  const recEl = document.getElementById('recommendation');
+  if (g.family === 'gtilde') {
+    const needed = g.t + 3;  // = n
+    if (g.m >= needed) {
+      recEl.innerHTML =
+        `<strong>✓ Tight regime.</strong>  We recommend <code>m = n</code> ` +
+        `(currently m=${g.m}, n=${state.n}): the lower-bound argument needs ` +
+        `<em>m</em> ≥ <em>t</em>+3 = ${needed} so that b(G̃<sub>${g.t}</sub>(${g.m})) = ${needed}.  ` +
+        `Bumping <em>m</em> higher still keeps the bound tight; the graph just gets bigger.`;
+      recEl.style.color = '#287d3c';
+    } else {
+      recEl.innerHTML =
+        `<strong>⚠ Not in the tight regime.</strong>  We recommend <code>m = n</code> ` +
+        `(currently m=${g.m} &lt; n=${state.n} = <em>t</em>+3).  The lower-bound ` +
+        `argument needs <em>m</em> ≥ <em>t</em>+3 = ${needed}; with fewer chains, ` +
+        `the burning number may actually be smaller than ${needed} and a clever ` +
+        `multi-source strategy could finish in fewer rounds than this single-source animation shows.`;
+      recEl.style.color = '#a04500';
+    }
+  } else {
+    recEl.innerHTML =
+      `Spider has no <em>m</em> parameter — it is fully determined by <em>r</em> = n.`;
+    recEl.style.color = '#666';
+  }
+}
+
+function step() {
+  if (state.round < state.graph.rounds) {
+    state.round += 1;
+    render(state.graph, state.positions, state.dist, state.round);
+    updateInfo();
+  } else pause();
+}
+
+function play() {
+  if (state.timer || state.round >= state.graph.rounds) return;
+  document.getElementById('play-btn').textContent = '⏸ Pause';
+  state.timer = setInterval(() => {
+    if (state.round >= state.graph.rounds) { pause(); return; }
+    step();
+  }, 850);
+}
+
+function pause() {
+  if (state.timer) { clearInterval(state.timer); state.timer = null; }
+  document.getElementById('play-btn').textContent = '▶ Play';
+}
+
+function togglePlay() {
+  if (state.timer) pause();
+  else if (state.round < state.graph.rounds) play();
+}
+
+function reset() {
+  pause();
+  state.round = 0;
+  render(state.graph, state.positions, state.dist, state.round);
+  updateInfo();
+}
+
+function setFamily(fam) {
+  state.family = fam;
+  document.getElementById('fam-gtilde').classList.toggle('active', fam === 'gtilde');
+  document.getElementById('fam-spider').classList.toggle('active', fam === 'spider');
+  // hide m slider for spider
+  document.querySelector('.m-row').classList.toggle('hidden', fam !== 'gtilde');
+  rebuild();
+}
+
+// ============ Wire-up ============
+
+document.getElementById('n-slider').addEventListener('input', () => {
+  const n = parseInt(document.getElementById('n-slider').value, 10);
+  if (state.family === 'gtilde') {
+    const mSlider = document.getElementById('m-slider');
+    if (parseInt(mSlider.value, 10) < n) mSlider.value = String(n);
+  }
+  rebuild();
+});
+document.getElementById('m-slider').addEventListener('input', rebuild);
+document.getElementById('play-btn').addEventListener('click', togglePlay);
+document.getElementById('step-btn').addEventListener('click', step);
+document.getElementById('reset-btn').addEventListener('click', reset);
+document.getElementById('fam-gtilde').addEventListener('click', () => setFamily('gtilde'));
+document.getElementById('fam-spider').addEventListener('click', () => setFamily('spider'));
+
+rebuild();
+</script>
+</body>
+</html>
