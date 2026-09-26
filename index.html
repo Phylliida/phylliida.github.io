@@ -9,193 +9,472 @@
 <link href="/css/portfolio.css" rel="stylesheet"></link>
     <script src="js/URI.min.js"></script>
     <script src="js/gol.js"></script>
+    <style>
+      /* let the page shrink below the 1024px fixed width from gol.css so the grid can go responsive */
+      body {
+        width: auto;
+        max-width: 1024px;
+      }
+      .cardGrid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 15px;
+        margin: 15px 0 30px 0;
+      }
+      @media (max-width: 950px) {
+        .cardGrid { grid-template-columns: repeat(2, 1fr); }
+      }
+      @media (max-width: 650px) {
+        .cardGrid { grid-template-columns: 1fr; }
+      }
+      a.card {
+        display: block;
+        border: 1px solid #555;
+        border-radius: 10px;
+        overflow: hidden;
+        background: #151515;
+        text-decoration: none;
+        transition: transform 0.12s ease, border-color 0.12s ease;
+      }
+      a.card:hover {
+        transform: translateY(-3px);
+        border-color: #999;
+      }
+      img.cardThumb {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        object-fit: contain;
+        display: block;
+      }
+      .cardGlyph {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 56px;
+        color: #ccc;
+        user-select: none;
+        -moz-user-select: none;
+        -webkit-user-select: none;
+      }
+      .cardTitle {
+        display: block;
+        padding: 12px 10px 2px 10px;
+        font-size: 18px;
+        color: #fff;
+      }
+      .cardTitle:last-child {
+        padding-bottom: 12px;
+      }
+      .cardDesc {
+        display: block;
+        padding: 0 10px 12px 10px;
+        font-size: 13px;
+        color: #aaa;
+      }
+      #backButton {
+        display: none;
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        z-index: 10;
+        background: #222;
+        border: 1px solid #555;
+        border-radius: 6px;
+        color: #fff;
+        padding: 8px 14px;
+        font-size: 16px;
+        text-decoration: none;
+      }
+      #backButton:hover {
+        background: #333;
+      }
+      .page {
+        display: none;
+      }
+      .page.active {
+        display: block;
+      }
+      .bubbleGrid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 12px;
+        max-width: 760px;
+        margin: 20px auto;
+        padding: 0 10px;
+      }
+      a.xbubble {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        padding: 18px 8px 14px;
+        background: #1a1a1a;
+        border: 1px solid #444;
+        border-radius: 12px;
+        color: #fff;
+        font-size: 15px;
+        text-decoration: none;
+        transition: transform 0.12s ease, border-color 0.12s ease;
+      }
+      a.xbubble:hover {
+        transform: translateY(-2px);
+        border-color: #999;
+      }
+      a.xbubble .xicon {
+        font-size: 36px;
+        line-height: 1;
+      }
+    </style>
   </head>
 
   <body>
-    <h1>Phylliida's Portfolio</h1>
-    
-    <h2>Open source minecraft-like engine</h2>
-    <br/>
-    <h2><a href="https://github.com/Phylliida/Blocks">Open source</a>, made in Unity C#</h2>
-<h2><a href="https://blocksengine.blogspot.com/2019/05/rendering-lots-of-blocks-efficiently-in.html">Heavily optimized</a> to render large number of blocks</h2>
-     <br/>
-     <img src="/images/blocksLargeWorld.png"></img><br/>
-     <h2>Uses a "cublic chunks" system so the world can be "infinite" on the y axis as well</h2>
-     <h2>Supports custom block models, textures, and logic</h2>
-    <img src="/images/blocksCustomModels.png"></img><br/>
-    <h2>Has a 3D <a href="https://blocksengine.blogspot.com/2019/04/efficient-pathfinding-in-minecraft-type.html">pathfinding system</a> that works over hundreds of blocks</h2>
-    <h2>Seperate sky and block light system so no lighting updates are needed at night</h2>
-    <h2>Low lighting is meant to be similar to how humans see more blues in low lighthing</h2>
-        <img src="/images/Lighting.png"></img><br/>
+    <a id="backButton" href="#">&larr; Back</a>
 
-    <div id="imageHolder">
-    
-      <img src="/images/header.png" style="width: 60%;"></img>
+    <div id="landing">
+      <h1>Phylliida's Portfolio</h1>
+
+      <h2><a href="https://github.com/Phylliida">Github</a> <a href="https://scholar.google.com/citations?user=OXfdqjEAAAAJ&hl=en">Google Scholar</a></h2>
+
+      <div class="cardGrid">
+        <a class="card" href="#academic">
+          <img class="cardThumb" src="/images/Investigating IOI in Mamba-1.png"></img>
+          <span class="cardTitle">Academic Work</span>
+          <span class="cardDesc">Mechanistic Interpretability and AI Welfare</span>
+        </a>
+        <a class="card" href="#blocks">
+          <img class="cardThumb" src="/images/blocksLargeWorld.png"></img>
+          <span class="cardTitle">Blocks</span>
+          <span class="cardDesc">Open source minecraft-like engine</span>
+        </a>
+        <a class="card" href="#vrfractals">
+          <img class="cardThumb" src="/images/header.png"></img>
+          <span class="cardTitle">VR Fractals</span>
+          <span class="cardDesc">Real time raymarched fractals at 90fps in VR</span>
+        </a>
+        <a class="card" href="#vrsand">
+          <img class="cardThumb" src="/images/sheader.png"></img>
+          <span class="cardTitle">VR Sand</span>
+          <span class="cardDesc">A 3D Falling Sand/Powder Toy type game in Virtual Reality</span>
+        </a>
+        <a class="card" href="#multiscreens">
+          <img class="cardThumb" src="/images/MultiscreensHeader.jpg"></img>
+          <span class="cardTitle">Multiscreens</span>
+          <span class="cardDesc">A program in VR that lets you have as many virtual monitors as you want</span>
+        </a>
+        <a class="card" href="https://www.phylliida.dev/fishAndChips/fishAndChips.html">
+          <img class="cardThumb" src="/FishAndChips.png"></img>
+          <span class="cardTitle">Fish and Chips</span>
+          <span class="cardDesc">My first game, sandbox</span>
+        </a>
+        <a class="card" href="#resonite">
+          <img class="cardThumb" src="/images/Image.png"></img>
+          <span class="cardTitle">Resonite Social VR Projects</span>
+        </a>
+        <a class="card" href="https://www.phylliida.dev/unicode-explorer/">
+          <img class="cardThumb" src="/Unicodes.png"></img>
+          <span class="cardTitle">Unicode Explorer</span>
+          <span class="cardDesc">Browse every unicode character</span>
+        </a>
+        <a class="card" href="https://www.phylliida.dev/risset-loom/">
+          <img class="cardThumb" src="/RissetLoom.png"></img>
+          <span class="cardTitle">Risset Loom</span>
+          <span class="cardDesc">Make Custom Risset Rhythms</span>
+        </a>
+        <a class="card" href="https://github.com/Phylliida/OpenClio">
+          <img class="cardThumb" src="/Clio.png"></img>
+          <span class="cardTitle">OpenClio</span>
+          <span class="cardDesc">Replication of Anthropic's tool to hierarchically categorize user transcripts</span>
+        </a>
+        <a class="card" href="https://www.phylliida.dev/quiver.html">
+          <img class="cardThumb" src="/quivertile.png"></img>
+          <span class="cardTitle">Quiver</span>
+          <span class="cardDesc">Modify quivers (from combinatorics) using d3</span>
+        </a>
+        <a class="card" href="https://github.com/Phylliida/memki">
+          <img class="cardThumb" src="/Memki.jpg"></img>
+          <span class="cardTitle">Memki</span>
+          <span class="cardDesc">Self-hosted open source spaced repetition</span>
+        </a>
+        <a class="card" href="https://www.phylliida.dev/magicPrototyping.html">
+          <img class="cardThumb" src="/Fans.png"></img>
+          <span class="cardTitle">Magic Prototyping</span>
+          <span class="cardDesc">Factory building/esolang prototypes</span>
+        </a>
+        <a class="card" href="#extras">
+          <img class="cardThumb" src="/Extras.png"></img>
+          <span class="cardTitle">Extras</span>
+          <span class="cardDesc">A collection of little tools and toys that run entirely in your browser</span>
+        </a>
+        <a class="card" href="#blogs">
+          <div class="cardGlyph">&#9998;</div>
+          <span class="cardTitle">Blogs</span>
+          <span class="cardDesc">None active right now</span>
+        </a>
+        <a class="card" href="#webexperiments">
+          <div class="cardGlyph">&#9882;</div>
+          <span class="cardTitle">Web Programming</span>
+        </a>
+        <a class="card" href="#programming">
+          <div class="cardGlyph">&lt;/&gt;</div>
+          <span class="cardTitle">Programming Projects</span>
+        </a>
+      </div>
     </div>
-<h2>Uses real time raymarching ran in a compute shader to render fractals at 90fps in VR</h2>
-<h2>Released on <a href="https://store.steampowered.com/app/506160/VR_Fractals/">Steam</a> and <a href="https://www.oculus.com/experiences/rift/1706363059403972/?locale=en_US">Oculus Home</a></b2>
 
+    <section class="page" id="blocks">
+      <h1>Open source minecraft-like engine</h1>
+      <br/>
+      <h2><a href="https://github.com/Phylliida/Blocks">Open source</a>, made in Unity C#</h2>
+      <h2><a href="https://blocksengine.blogspot.com/2019/05/rendering-lots-of-blocks-efficiently-in.html">Heavily optimized</a> to render large number of blocks</h2>
+      <br/>
+      <img src="/images/blocksLargeWorld.png"></img><br/>
+      <h2>Uses a "cublic chunks" system so the world can be "infinite" on the y axis as well</h2>
+      <h2>Supports custom block models, textures, and logic</h2>
+      <img src="/images/blocksCustomModels.png"></img><br/>
+      <h2>Has a 3D <a href="https://blocksengine.blogspot.com/2019/04/efficient-pathfinding-in-minecraft-type.html">pathfinding system</a> that works over hundreds of blocks</h2>
+      <h2>Seperate sky and block light system so no lighting updates are needed at night</h2>
+      <h2>Low lighting is meant to be similar to how humans see more blues in low lighthing</h2>
+      <img src="/images/Lighting.png"></img><br/>
+    </section>
 
-<br />
-<br />
-<br />
+    <section class="page" id="vrfractals">
+      <h1>VR Fractals</h1>
+      <div id="imageHolder">
+        <img src="/images/header.png" style="width: 60%;"></img>
+      </div>
+      <h2>Uses real time raymarching ran in a compute shader to render fractals at 90fps in VR</h2>
+      <h2>Released on <a href="https://store.steampowered.com/app/506160/VR_Fractals/">Steam</a> and <a href="https://www.oculus.com/experiences/rift/1706363059403972/?locale=en_US">Oculus Home</a></b2>
+      <br />
+      <br />
+      <br />
+      <img src="/images/sc1.png"></img>
+      <img src="/images/sc2.png"></img>
+      <br />
+      <br />
+      <img src="/images/sc3.png"></img>
+      <img src="/images/sc4.png"></img>
+    </section>
 
-<img src="/images/sc1.png"></img>
-<img src="/images/sc2.png"></img>
-<br />
-<br />
-<img src="/images/sc3.png"></img>
-<img src="/images/sc4.png"></img>
+    <section class="page" id="vrsand">
+      <h1>VR Sand</h1>
+      <div id="imageHolder">
+        <img src="/images/sheader.png" style="width: 60%;"></img>
+      </div>
+      <h2>
+      <h2>A 3D Falling Sand/Powder Toy type game in Virtual Reality</h2>
+      <h2>Required very heavy optimization to get it working fast enough for VR</h2>
+      <h2>Released on <a href="https://store.steampowered.com/app/632040/VR_Sand/">Steam</a> and <a href="https://www.oculus.com/experiences/rift/1337446473017832/?locale=en_US">Oculus Home</a></b2>
+      <br />
+      <br />
+      <br />
+      <img src="/images/ssc1.png"></img>
+      <img src="/images/ssc2.png"></img>
+      <br />
+      <br />
+      <img src="/images/ssc3.png"></img>
+      <img src="/images/ssc4.png"></img>
+      <br />
+      <br />
+      <img src="/images/ssc5.png"></img>
+    </section>
 
-<br />
-<br />
-<br />
+    <section class="page" id="multiscreens">
+      <h1>Multiscreens</h1>
+      <div id="imageHolder">
+        <img src="/images/MultiscreensHeader.jpg" style="width: 60%;"></img>
+      </div>
+      <h2>A program in VR that lets you have as many virtual monitors as you want.</h2>
+      <h2>My first self published software project, released on <a href="https://store.steampowered.com/app/512400/Multiscreens/">Steam</a></h2>
+      <h2>Was made redundant by better alternatives so I <a href="https://github.com/Phylliida/UnityWindowsCapture">open sourced it</a></h2>
+      <img src="/images/multiscreens1.jpg"></img>
+      <img src="/images/multiscreens2.jpg"></img>
+      <br />
+      <br />
+      <img src="/images/multiscreens3.jpg"></img>
+    </section>
 
-<div id="imageHolder">
-<img src="/images/sheader.png" style="width: 60%;"></img>
-</div>
-<h2>
+    <section class="page" id="academic">
+      <h1>Academic Work</h1>
+      <a href="https://scholar.google.com/citations?user=OXfdqjEAAAAJ&hl=en">Google Scholar Link</a>
+      <h2>
+      <a href="https://scholar.google.co.uk/citations?view_op=view_citation&hl=en&user=Rt5GXG8AAAAJ&citation_for_view=Rt5GXG8AAAAJ:2osOgNQ5qMEC">The complexity of explaining neural networks through (group) invariants (2017, Scott Neville, Danielle Ensign, Arnab Paul, Suresh Venkatasubramanian)</a>
+      <br />
+      <a href="https://scholar.google.co.uk/citations?view_op=view_citation&hl=en&user=Rt5GXG8AAAAJ&citation_for_view=Rt5GXG8AAAAJ:2osOgNQ5qMEC">Runaway feedback loops in predictive policing (2018, Danielle Ensign, Sorelle A Friedler, Scott Neville, Carlos Scheidegger, Suresh Venkatasubramanian)</a>
+      <br />
+      <a href="https://github.com/Phylliida/MambaLens">Mamba Lens: Mamba support for Transformer Lens</a>
+      <br />
+      <a href="https://github.com/Phylliida/ACDC">Alternative ACDC (Automated Circuit Discovery) implementation</a>
+      <br />
+      <a href="https://www.lesswrong.com/posts/TYLQ8gAMAmpeFcwXN/ophiology-or-how-the-mamba-architecture-works">Ophiology (or, how the Mamba architecture works) (2024, Danielle Ensign, Gonçalo Paulo, Adrià Garriga-alonso)</a>
+      <br />
+      <a href="https://scholar.google.com/scholar?hl=en&as_sdt=0%2C21&q=Investigating+the+Indirect+Object+Identification+circuit+in+Mamba&btnG=#d=gs_qabs&t=1733659058570&u=%23p%3DjjahMQSs9TkJ">Investigating the Indirect Object Identification circuit in Mamba (2024, Danielle Ensign, Adrià Garriga-Alonso)</a><a href="https://github.com/Phylliida/investigating-mamba-ioi">(Code)</a>
+      <img src="/images/Investigating IOI in Mamba-1.png" style="width: 90%;"></img>
+      <br />
+      <a href="https://github.com/Phylliida/OpenClio">Replication of Anthropic's Clio (auto sort and browse lots of conversations in hierarchy)</a>
+      <br />
+      <a href="https://phylliida.dev/modelwelfare/wildchat">Open Clio on ~400,000 conversations from Wildchat</a>
+      <br />
+      <a href="https://www.lesswrong.com/posts/6JdSJ63LZ4TuT5cTH/the-llm-has-left-the-chat-evidence-of-bail-preferences-in">When does an LLM want to leave the conversation?</a>
+      </h2>
+    </section>
 
-<h2>A 3D Falling Sand/Powder Toy type game in Virtual Reality</h2>
-<h2>Required very heavy optimization to get it working fast enough for VR</h2>
-<h2>Released on <a href="https://store.steampowered.com/app/632040/VR_Sand/">Steam</a> and <a href="https://www.oculus.com/experiences/rift/1337446473017832/?locale=en_US">Oculus Home</a></b2>
+    <section class="page" id="blogs">
+      <h1>Blogs</h1>
+      <h2>
+      <a href="https://proclife.phylliida.dev">Procedural Life Blog</a>
+      <br />
+      <a href="https://blocksengine.phylliida.dev">Blocks Engine Blog</a>
+      <br />
+      <a href="https://fallingcubes.phylliida.dev">VR Sand Blog</a>
+      <br />
+      <a href="https://phylliidadev.blogspot.com">AI Research Blog (started during my time at OpenAI)</a>
+      <br />
+      <a href="https://formalmagicsystems.blogspot.com">Video Game Magic Systems Blog</a>
+      <br />
+      <a href="https://algorithmstuff.phylliida.dev">Programming Blog</a>
+      </h2>
+    </section>
 
-<br />
-<br />
-<br />
+    <section class="page" id="webexperiments">
+      <h1>Web Programming</h1>
+      <h2>
+      <a href="https://www.phylliida.dev/copyGo.html">Go, except you can make new pieces</a>
+      <br />
+      <a href="https://www.phylliida.dev/magicPrototyping.html">Factory building/esolang prototypes</a>
+      <br />
+      <a href="https://www.phylliida.dev/rd.html">Reaction Diffusion Simulation</a>
+      <br />
+      <a href="https://www.phylliida.dev/fire.html">Fire trails Simulation</a>
+      <br />
+      <a href="https://www.phylliida.dev/geo.html">Web Based Pokemon Go like ARG (unfinished)</a>
+      <br />
+      <a href="https://www.phylliida.dev/share.html">Cube World toy, except on the web (unfinished)</a>
+      <br />
+      <a href="https://tessacoil-utils.herokuapp.com/yam-maths/">Web interface to Sympy (tool similar to Wolfram)</a>
+      <br />
+      <a href="https://www.phylliida.dev/speedread.html">Tool to help you read stuff quickly</a>
+      <br />
+      <a href="https://www.phylliida.dev/forceBasedDotEditor.html">Force based dot editor using d3</a>
+      <br />
+      <a href="https://www.phylliida.dev/quiver.html">Modify quivers (from combinatorics) using d3</a>
+      <br />
+      <a href="https://www.phylliida.dev/convert.html">Emulate linux in browser to run ffmpeg</a>
+      <br />
+      <a href="https://www.phylliida.dev/synth.html">Simple Theremin-Like Synth with looped playback</a>
+      </h2>
+    </section>
 
-<img src="/images/ssc1.png"></img>
-<img src="/images/ssc2.png"></img>
-<br />
-<br />
-<img src="/images/ssc3.png"></img>
-<img src="/images/ssc4.png"></img>
-<br />
-<br />
-<img src="/images/ssc5.png"></img>
-<br />
-<br />
+    <section class="page" id="programming">
+      <h1>Programming Projects</h1>
+      <h2>
+      <a href="https://github.com/Phylliida/UnityMatrix">A Unity Matrix Utility Library</a>
+      <br />
+      <a href="https://github.com/Phylliida/SimpleUnityPhysics">The very rudimentary physics engine I wrote for proclife</a>
+      <br />
+      <a href="https://github.com/Phylliida/UnityWindowsCapture">An open source windows capture library (for use in Unity)</a>
+      <br />
+      <a href="https://github.com/Phylliida/GeoLib">Very basic javascript library for making Pokemon Go type games</a>
+      <br />
+      <a href="https://github.com/Phylliida/UnityWASAPI">Library that lets applications visualize any sound the user is playing to their speakers, used in Chroma Lab</a>
+      <br />
+      <a href="https://github.com/Phylliida/Blocks">Open Source minecraft type engine, written in C# and Unity</a>
+      <br />
+      <a href="https://github.com/Phylliida/MemoryMappedFileIPC">Memory mapped file IPC Library in C#</a>
+      <br />
+      <a href="https://github.com/Phylliida/UnityMirrorBox">VR mirror box prototype (supposedly helps with phantom limb pain)</a>
+      <br />
+      <a href="https://github.com/Phylliida/P2PDraw">Open source peer-to-peer drawing app in VR</a>
+      <br />
+      Coming soon: My mario kart racing clone I made in high school (I finally found the old code for it!)
+      <br />
+      <a href="https://www.phylliida.dev/roboticsEditor/roboticsEditor.html">A 3D robot creator I made in high school (2011)</a>
+      <br />
+      <a href="https://www.phylliida.dev/fishAndChips/fishAndChips.html">My first game called Fish and Chips</a>
+      <br />
+      </h2>
+    </section>
 
-<div id="imageHolder">
-<img src="/images/MultiscreensHeader.jpg" style="width: 60%;"></img>
-</div>
-<h2>A program in VR that lets you have as many virtual monitors as you want.</h2>
-<h2>My first self published software project, released on <a href="https://store.steampowered.com/app/512400/Multiscreens/">Steam</a></h2>
-<h2>Was made redundant by better alternatives so I <a href="https://github.com/Phylliida/UnityWindowsCapture">open sourced it</a></h2>
-<img src="/images/multiscreens1.jpg"></img>
-<img src="/images/multiscreens2.jpg"></img>
-<br />
-<br />
-<img src="/images/multiscreens3.jpg"></img>
-<br />
-<br />
-<br />
-<h1>Also see</h1>
-Academic Work:
-<br />
-<a href="https://scholar.google.com/citations?user=OXfdqjEAAAAJ&hl=en">(google scholar link)</a>
-<h2>
-<a href="https://scholar.google.co.uk/citations?view_op=view_citation&hl=en&user=Rt5GXG8AAAAJ&citation_for_view=Rt5GXG8AAAAJ:2osOgNQ5qMEC">The complexity of explaining neural networks through (group) invariants (2017, Scott Neville, Danielle Ensign, Arnab Paul, Suresh Venkatasubramanian)</a>
-<br />
-<a href="https://scholar.google.co.uk/citations?view_op=view_citation&hl=en&user=Rt5GXG8AAAAJ&citation_for_view=Rt5GXG8AAAAJ:2osOgNQ5qMEC">Runaway feedback loops in predictive policing (2018, Danielle Ensign, Sorelle A Friedler, Scott Neville, Carlos Scheidegger, Suresh Venkatasubramanian)</a>
-<br />
-<a href="https://github.com/Phylliida/MambaLens">Mamba Lens: Mamba support for Transformer Lens</a>
-<br />
-<a href="https://github.com/Phylliida/ACDC">Alternative ACDC (Automated Circuit Discovery) implementation</a>
-<br />
-<a href="https://www.lesswrong.com/posts/TYLQ8gAMAmpeFcwXN/ophiology-or-how-the-mamba-architecture-works">Ophiology (or, how the Mamba architecture works) (2024, Danielle Ensign, Gonçalo Paulo, Adrià Garriga-alonso)</a>
-<br />
-<a href="https://scholar.google.com/scholar?hl=en&as_sdt=0%2C21&q=Investigating+the+Indirect+Object+Identification+circuit+in+Mamba&btnG=#d=gs_qabs&t=1733659058570&u=%23p%3DjjahMQSs9TkJ">Investigating the Indirect Object Identification circuit in Mamba (2024, Danielle Ensign, Adrià Garriga-Alonso)</a><a href="https://github.com/Phylliida/investigating-mamba-ioi">(Code)</a>
-<img src="/images/Investigating IOI in Mamba-1.png" style="width: 90%;"></img>
-<br />
-<a href="https://github.com/Phylliida/OpenClio">Replication of Anthropic's Clio (auto sort and browse lots of conversations in hierarchy)</a>
-<br />
-<a href="https://phylliida.dev/modelwelfare/wildchat">Open Clio on ~400,000 conversations from Wildchat</a>
-<br />
-<a href="https://www.lesswrong.com/posts/6JdSJ63LZ4TuT5cTH/the-llm-has-left-the-chat-evidence-of-bail-preferences-in">>When does an LLM want to leave the conversation?</a>
-</h2>
-Blogs:
-<h2>
-<a href="https://proclife.phylliida.dev">Procedural Life Blog</a>
-<br />
-<a href="https://blocksengine.phylliida.dev">Blocks Engine Blog</a>
-<br />
-<a href="https://fallingcubes.phylliida.dev">VR Sand Blog</a>
-<br />
-<a href="https://phylliidadev.blogspot.com">AI Research Blog (started during my time at OpenAI)</a>
-<br />
-<a href="https://formalmagicsystems.blogspot.com">Video Game Magic Systems Blog</a>
-<br />
-<a href="https://algorithmstuff.phylliida.dev">Programming Blog</a>
-</h2>
-Web Programming Experiments:
-<h2>
-<a href="https://www.phylliida.dev/copyGo.html">Go, except you can make new pieces</a>
-<br />
-<a href="https://www.phylliida.dev/magicPrototyping.html">Factory building/esolang prototypes</a>
-<br />
-<a href="https://www.phylliida.dev/rd.html">Reaction Diffusion Simulation</a>
-<br />
-<a href="https://www.phylliida.dev/fire.html">Fire trails Simulation</a>
-<br />
-<a href="https://www.phylliida.dev/geo.html">Web Based Pokemon Go like ARG (unfinished)</a>
-<br />
-<a href="https://www.phylliida.dev/share.html">Cube World toy, except on the web (unfinished)</a>
-<br />
-<a href="https://tessacoil-utils.herokuapp.com/yam-maths/">Web interface to Sympy (tool similar to Wolfram)</a>
-<br />
-<a href="https://www.phylliida.dev/speedread.html">Tool to help you read stuff quickly</a>
-<br />
-<a href="https://www.phylliida.dev/forceBasedDotEditor.html">Force based dot editor using d3</a>
-<br />
-<a href="https://www.phylliida.dev/quiver.html">Modify quivers (from combinatorics) using d3</a>
-<br />
-<a href="https://www.phylliida.dev/convert.html">Emulate linux in browser to run ffmpeg</a>
-<br />
-<a href="https://www.phylliida.dev/synth.html">Simple Theremin-Like Synth with looped playback</a>
-</h2>
-Programming Projects:
-<h2>
-<a href="https://github.com/Phylliida/UnityMatrix">A Unity Matrix Utility Library</a>
-<br />
-<a href="https://github.com/Phylliida/SimpleUnityPhysics">The very rudimentary physics engine I wrote for proclife</a>
-<br />
-<a href="https://github.com/Phylliida/UnityWindowsCapture">An open source windows capture library (for use in Unity)</a>
-<br />
-<a href="https://github.com/Phylliida/GeoLib">Very basic javascript library for making Pokemon Go type games</a>
-<br />
-<a href="https://github.com/Phylliida/UnityWASAPI">Library that lets applications visualize any sound the user is playing to their speakers, used in Chroma Lab</a>
-<br />
-<a href="https://github.com/Phylliida/Blocks">Open Source minecraft type engine, written in C# and Unity</a>
-<br />
-<a href="https://github.com/Phylliida/MemoryMappedFileIPC">Memory mapped file IPC Library in C#</a>
-<br />
-<a href="https://github.com/Phylliida/UnityMirrorBox">VR mirror box prototype (supposedly helps with phantom limb pain)</a>
-<br />
-<a href="https://github.com/Phylliida/P2PDraw">Open source peer-to-peer drawing app in VR</a>
-<br />
-Coming soon: My mario kart racing clone I made in high school (I finally found the old code for it!)
-<br />
-<a href="https://www.phylliida.dev/roboticsEditor/roboticsEditor.html">A 3D robot creator I made in high school (2011)</a>
-<br />
-<a href="https://www.phylliida.dev/fishAndChips/fishAndChips.html">My first game called Fish and Chips</a>
-<br />
-</h2>
-Resonite Social VR Projects (some links are Resonite Discord links):
-<h2>
-<a href="https://discord.com/channels/1040316820650991766/1270888275359563827">Custom Node Creator</a>
-<br />
-<a href="https://discord.com/channels/1040316820650991766/1295852520039776316">Magic The Gathering Card Searcher (in game custom index, no server)</a>
-<br />
-<a href="https://discord.com/channels/1040316820650991766/1306762608988131449">Conway's Game of Life in a LUT Shader (also pattern browser/importer and tool to save/share patterns)</a>
-<br />
-<img src="/images/Image.png"></img>
-<br />
-<a href="https://github.com/Phylliida/ResoniteEasyFunctionWrapper">Mod that lets you create custom nodes that call c# code, using reflection</a>
-<br />
-<a href="https://github.com/Phylliida/RustInMemoryWasmFileSystem">Rust Web Assembly WASI port of the v86 js in memory file system</a>
-<br />
-<a href="https://github.com/Phylliida/ResoniteUnityExporter">Unity -> Resonite Converter (supports worlds and avatars)</a>
-</h2>
-</body>
+    <section class="page" id="extras">
+      <h1>Extras</h1>
+      <h2>A collection of little tools and toys that run entirely in your browser &mdash; click a bubble to open one</h2>
+      <h2><a href="https://github.com/Phylliida/extras">Source on GitHub</a></h2>
+      <div class="bubbleGrid">
+        <a class="xbubble" href="https://www.phylliida.dev/extras/#unitconv"><span class="xicon">&#9878;</span><span>Unit Conversions</span></a>
+        <a class="xbubble" href="https://www.phylliida.dev/extras/#tip"><span class="xicon">&#128184;</span><span>Tip Calculator</span></a>
+        <a class="xbubble" href="https://www.phylliida.dev/extras/#tz"><span class="xicon">&#128339;</span><span>Time Zones</span></a>
+        <a class="xbubble" href="https://www.phylliida.dev/extras/#date"><span class="xicon">&#128197;</span><span>Date Calculator</span></a>
+        <a class="xbubble" href="https://www.phylliida.dev/extras/#cal"><span class="xicon">&#128467;</span><span>Calendar</span></a>
+        <a class="xbubble" href="https://www.phylliida.dev/extras/#sun"><span class="xicon">&#9728;</span><span>Sun</span></a>
+        <a class="xbubble" href="https://www.phylliida.dev/extras/#astro"><span class="xicon">&#128302;</span><span>Astronomy</span></a>
+        <a class="xbubble" href="https://www.phylliida.dev/extras/#skymap"><span class="xicon">&#127776;</span><span>Sky Map</span></a>
+        <a class="xbubble" href="https://www.phylliida.dev/extras/#dice"><span class="xicon">&#127922;</span><span>Dice &amp; D&amp;D</span></a>
+        <a class="xbubble" href="https://www.phylliida.dev/extras/#wheel"><span class="xicon">&#128505;</span><span>Decision Wheel</span></a>
+        <a class="xbubble" href="https://www.phylliida.dev/extras/#sudoku"><span class="xicon">&#129513;</span><span>Sudoku</span></a>
+        <a class="xbubble" href="https://www.phylliida.dev/extras/#todos"><span class="xicon">&#9989;</span><span>Todo</span></a>
+        <a class="xbubble" href="https://www.phylliida.dev/extras/#draw"><span class="xicon">&#9999;</span><span>Draw</span></a>
+        <a class="xbubble" href="https://www.phylliida.dev/extras/#pixelart"><span class="xicon">&#127912;</span><span>Pixel Art</span></a>
+        <a class="xbubble" href="https://www.phylliida.dev/extras/#synth"><span class="xicon">&#127929;</span><span>Synth</span></a>
+        <a class="xbubble" href="https://www.phylliida.dev/extras/#tuner"><span class="xicon">&#127931;</span><span>Tuner</span></a>
+        <a class="xbubble" href="https://www.phylliida.dev/extras/#vibration"><span class="xicon">&#128243;</span><span>Vibration</span></a>
+        <a class="xbubble" href="https://www.phylliida.dev/extras/#sensors"><span class="xicon">&#128225;</span><span>Sensors</span></a>
+        <a class="xbubble" href="https://www.phylliida.dev/extras/#scapes"><span class="xicon">&#127807;</span><span>Soundscapes</span></a>
+        <a class="xbubble" href="https://www.phylliida.dev/extras/#fractals"><span class="xicon">&#127744;</span><span>Fractals</span></a>
+        <a class="xbubble" href="https://www.phylliida.dev/extras/#fractals2"><span class="xicon">&#127756;</span><span>Fractals 2</span></a>
+      </div>
+    </section>
+
+    <section class="page" id="resonite">
+      <h1>Resonite Social VR Projects</h1>
+      <h2>(some links below go to posts on the Resonite Discord, you'll need to be in that server to view them)</h2>
+      <h2>
+      <a href="https://discord.com/channels/1040316820650991766/1270888275359563827">Custom Node Creator</a>
+      <br />
+      <img src="/custom_protoflax.jpg"></img>
+      <br />
+      <a href="https://discord.com/channels/1040316820650991766/1295852520039776316">Magic The Gathering Card Searcher (in game custom index, no server)</a>
+      <br />
+      <img src="/MTG.png"></img>
+      <br />
+      <a href="https://discord.com/channels/1040316820650991766/1306762608988131449">Conway's Game of Life in a LUT Shader (also pattern browser/importer and tool to save/share patterns)</a>
+      <br />
+      <img src="/images/Image.png"></img>
+      <br />
+      <a href="https://github.com/Phylliida/ResoniteEasyFunctionWrapper">Mod that lets you create custom nodes that call c# code, using reflection</a>
+      <br />
+      <a href="https://github.com/Phylliida/RustInMemoryWasmFileSystem">Rust Web Assembly WASI port of the v86 js in memory file system</a>
+      <br />
+      <a href="https://github.com/Phylliida/ResoniteUnityExporter">Unity -> Resonite Converter (supports worlds and avatars)</a>
+      </h2>
+    </section>
+
+    <script>
+      (function () {
+        var landing = document.getElementById('landing');
+        var backButton = document.getElementById('backButton');
+        var pages = document.querySelectorAll('.page');
+
+        function showPage() {
+          var hash = location.hash.slice(1);
+          var target = hash ? document.getElementById(hash) : null;
+          for (var i = 0; i < pages.length; i++) {
+            pages[i].classList.remove('active');
+          }
+          if (target) {
+            target.classList.add('active');
+            landing.style.display = 'none';
+            backButton.style.display = 'block';
+            window.scrollTo(0, 0);
+          } else {
+            landing.style.display = 'block';
+            backButton.style.display = 'none';
+          }
+        }
+
+        window.addEventListener('hashchange', showPage);
+        showPage();
+      })();
+    </script>
+  </body>
 </html>
