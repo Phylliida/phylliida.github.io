@@ -3329,7 +3329,8 @@ function maFrozenNote(input) {
 function maRenderRunning() {
     var input = maState.input, el = document.getElementById("maStatus");
     var secs = ((Date.now() - maState.t0) / 1000).toFixed(1), p = maState.progress, prog = "";
-    if (p) prog = (p.components > 1 ? "component " + (p.component + 1) + "/" + p.components + ", " : "") + "linear order " + p.order + "/" + p.orders + " &middot; ";
+    if (p) prog = (p.components > 1 ? "component " + (p.component + 1) + "/" + p.components + ", " : "") + maEsc(p.unit || "linear order") + " " + p.order + "/" + p.orders +
+                  (p.steps != null ? ", " + Number(p.steps).toLocaleString() + " descent steps" : "") + " &middot; ";
     el.innerHTML = '<div class="ma-verdict ma-running">running&hellip;</div><div class="ma-line ma-dim">' + prog + secs + " s</div>";
 }
 
@@ -3379,9 +3380,12 @@ function runMutationAcyclicTest() {
         maShowButtons(false, true);
         return;
     }
-    if (n >= 6) {
+    // both engines run orders 'auto' by default (filters, SELECT: one class of Lambda(B) chosen in polynomial time, with
+    // the class search as fallback); orders 'all' (?maorders=all) tries all n! linear orders, hence the warning
+    var orders = maOrders(), slowWarn = "";
+    if (n >= 6 && orders === "all") {
         var f = 1; for (var i = 2; i <= n; i++) f *= i;
-        body += '<div class="ma-line ma-warn">Rank ' + n + ": a NO answer has to try all " + f.toLocaleString() + " linear orders, which can take a long time. You can cancel.</div>";
+        slowWarn = '<div class="ma-line ma-warn">Rank ' + n + ": with all linear orders (orders 'all') a NO answer has to try all " + f.toLocaleString() + " linear orders, which can take a long time. You can cancel.</div>";
     }
     document.getElementById("maBody").innerHTML = body;
     maState.t0 = Date.now();
@@ -3394,47 +3398,160 @@ function runMutationAcyclicTest() {
         if (!msg || msg.id !== id) return;
         if (msg.type === "progress") { maState.progress = msg; return; }
         maStopWorker();
-        if (msg.type === "result") maShowResult(input, msg.result, msg.paths);
+        if (msg.type === "result") maShowResult(input, msg.result, msg.paths, { engine: msg.engine || "js", note: msg.engineNote || null });
         else maShowError(msg.message);
     };
-    var worker = null;
-    try {
-        if (!maState.workerUrl)
-            maState.workerUrl = URL.createObjectURL(new Blob([MutationAcyclic.workerSource()], { type: "text/javascript" }));
-        worker = new Worker(maState.workerUrl);
-    } catch (e) { worker = null; }
-    if (worker) {
-        maState.worker = worker;
-        worker.onmessage = function (ev) { handle(ev.data); };
-        worker.onerror = function (ev) { if (ev.preventDefault) ev.preventDefault(); handle({ type: "error", id: id, message: "worker error: " + (ev.message || "unknown") }); };
-        worker.postMessage({ cmd: "decide", id: id, B: Bs });
-    } else {
-        // no Web Worker available (e.g. a restrictive file:// setup): run on the main thread
-        document.getElementById("maBody").innerHTML += '<div class="ma-line ma-warn">Web Workers are unavailable here, so the test runs on the main thread and the page freezes until it finishes.</div>';
-        setTimeout(function () {
+    // the WebAssembly engine (Rust, /wasm/) is fetched and compiled once; the worker falls back to the JS solver
+    maLoadWasm().then(function () {
+        if (id !== maState.runId || !maState.running) return;            // cancelled meanwhile
+        var useWasm = !!maWasm.module && !maForceJs();
+        if (slowWarn) document.getElementById("maBody").innerHTML += slowWarn;
+        var worker = null;
+        try {
+            var key = useWasm ? "wasm" : "js";
+            if (!maState.workerUrls) maState.workerUrls = {};
+            if (!maState.workerUrls[key])
+                maState.workerUrls[key] = URL.createObjectURL(new Blob([maWorkerSource(useWasm)], { type: "text/javascript" }));
+            worker = new Worker(maState.workerUrls[key]);
+        } catch (e) { worker = null; }
+        if (worker) {
+            maState.worker = worker;
+            worker.onmessage = function (ev) { handle(ev.data); };
+            worker.onerror = function (ev) { if (ev.preventDefault) ev.preventDefault(); handle({ type: "error", id: id, message: "worker error: " + (ev.message || "unknown") }); };
+            var why = useWasm ? null : (maForceJs() ? "the JavaScript engine was requested (?maengine=js)" : (maWasm.error ? "WebAssembly engine unavailable: " + maWasm.error : null));
+            worker.postMessage({ cmd: "decide", id: id, B: Bs, orders: orders, wasmModule: useWasm ? maWasm.module : null, wasmError: why });
+        } else {
+            // no Web Worker available (e.g. a restrictive file:// setup): run the JS solver on the main thread
+            document.getElementById("maBody").innerHTML += '<div class="ma-line ma-warn">Web Workers are unavailable here, so the test runs on the main thread and the page freezes until it finishes.</div>';
+            setTimeout(function () {
+                try {
+                    var r = MutationAcyclic.decide(Bs, { orders: orders });
+                    handle({ type: "result", id: id, result: MutationAcyclic.toPlain(r), paths: MutationAcyclic.toPlain(MutationAcyclic.pathsOf(r, Bs.length)),
+                             engine: "js", engineNote: "no Web Worker: ran on the main thread" });
+                } catch (e) { handle({ type: "error", id: id, message: String(e && e.message || e) }); }
+            }, 50);
+        }
+    });
+}
+
+// ---- WebAssembly engine ---------------------------------------------------------------------------------------------
+// /wasm/mutation_acyclic.js (wasm-bindgen glue, --target no-modules) and /wasm/mutation_acyclic_bg.wasm are built from
+// quiver-mutation/rust (the same exact algorithm, ported to Rust; same answers, paths and certificates as the JS solver).
+// The page fetches both once, compiles the module, and hands the compiled module to each worker together with the
+// glue source, so the worker itself needs no network access. Any failure falls back to the JS solver.
+var maWasm = { promise: null, glue: null, module: null, error: null };
+
+function maForceJs() {
+    return window.MA_FORCE_JS === true || /[?&]maengine=js(&|$)/.test(location.search);
+}
+
+/** the solver mode: 'auto' (default, both engines), or 'all' / 'proper' via window.MA_ORDERS or ?maorders=... */
+function maOrders() {
+    var m = /[?&]maorders=(auto|all|proper)(&|$)/.exec(location.search);
+    var o = typeof window.MA_ORDERS === "string" ? window.MA_ORDERS : (m ? m[1] : "auto");
+    return o === "all" || o === "proper" ? o : "auto";
+}
+
+function maLoadWasm() {
+    if (maWasm.promise) return maWasm.promise;
+    maWasm.promise = new Promise(function (resolve) {
+        var fail = function (e) { maWasm.error = String(e && e.message || e); resolve(false); };
+        try {
+            if (typeof WebAssembly !== "object" || typeof fetch !== "function") throw new Error("this browser has no WebAssembly");
+            var base = new URL("/wasm/", location.href).href;
+            var get = function (name, kind) {
+                return fetch(base + name).then(function (r) {
+                    if (!r.ok) throw new Error("HTTP " + r.status + " for /wasm/" + name);
+                    return kind === "text" ? r.text() : r.arrayBuffer();
+                });
+            };
+            Promise.all([get("mutation_acyclic.js", "text"),
+                         get("mutation_acyclic_bg.wasm", "bytes").then(function (buf) { return WebAssembly.compile(buf); })])
+                .then(function (v) { maWasm.glue = v[0]; maWasm.module = v[1]; resolve(true); }, fail);
+        } catch (e) { fail(e); }
+    });
+    return maWasm.promise;
+}
+
+/** worker source: the JS solver (fallback), the wasm-bindgen glue when available, and maWorkerBoot. */
+function maWorkerSource(useWasm) {
+    return MutationAcyclic.workerSource() + "\n" + (useWasm ? maWasm.glue + "\n" : "") + "(" + maWorkerBoot.toString() + ")();\n";
+}
+
+/** runs inside the worker; replaces the JS-only handler installed by MutationAcyclic.workerSource(). Protocol:
+ *  main -> worker {cmd: "decide", id, B, wasmModule?, wasmError?}; worker -> main {type: "progress" | "result" |
+ *  "error", id, ...}, results carry engine ("wasm" or "js") and engineNote. */
+function maWorkerBoot() {
+    var wasmReady = false;
+    self.onmessage = function (ev) {
+        var msg = ev.data || {};
+        if (msg.cmd !== "decide") return;
+        var lastPost = 0;
+        var progress = function (ci, nc, oi, no, unit, steps) {
+            var t = Date.now();
+            if (t - lastPost > 150 || oi === no) {
+                lastPost = t;
+                self.postMessage({ type: "progress", id: msg.id, component: ci, components: nc, order: oi, orders: no, unit: unit || "linear order",
+                                   steps: steps == null ? null : steps });
+            }
+        };
+        var note = msg.wasmError || null;
+        if (msg.wasmModule && typeof wasm_bindgen !== "function") note = "WebAssembly glue missing in the worker, so the JavaScript engine was used";
+        if (msg.wasmModule && typeof wasm_bindgen === "function") {
             try {
-                var r = MutationAcyclic.decide(Bs);
-                handle({ type: "result", id: id, result: MutationAcyclic.toPlain(r), paths: MutationAcyclic.toPlain(MutationAcyclic.pathsOf(r, Bs.length)) });
-            } catch (e) { handle({ type: "error", id: id, message: String(e && e.message || e) }); }
-        }, 50);
-    }
+                if (!wasmReady) { wasm_bindgen.initSync({ module: msg.wasmModule }); wasmReady = true; }
+                // the Rust engine's default mode 'auto' (filters, classes of Lambda(B); write-up Sections 7-8)
+                var out = JSON.parse(wasm_bindgen.decide_json(JSON.stringify(msg.B), msg.orders || "auto", progress));
+                if (out.error) throw new Error(out.error);
+                self.postMessage({ type: "result", id: msg.id, result: out.result, paths: out.paths, engine: "wasm" });
+                return;
+            } catch (e) {
+                note = "WebAssembly engine failed (" + String(e && e.message || e) + "), so the JavaScript engine was used";
+            }
+        }
+        try {
+            // the JS solver's default mode 'auto', as in the Python reference: filters, the combinatorial YES path, SELECT
+            // (one class of Lambda(B) chosen in polynomial time, descents there only), the class search as fallback
+            var res = MutationAcyclic.decide(msg.B, { orders: msg.orders || "auto", progress: progress });
+            self.postMessage({ type: "result", id: msg.id, result: MutationAcyclic.toPlain(res),
+                               paths: MutationAcyclic.toPlain(MutationAcyclic.pathsOf(res, msg.B.length)), engine: "js", engineNote: note });
+        } catch (e) {
+            self.postMessage({ type: "error", id: msg.id, message: String(e && e.message || e) });
+        }
+    };
+}
+
+if (typeof window !== "undefined") setTimeout(function () { try { maLoadWasm(); } catch (e) {} }, 1500);
+
+/** why a component is not mutation-acyclic, from the solver's reason (orders 'auto' of either engine, or 'all') */
+function maWhyNo(reason) {
+    if (!reason || /^no order gives a certificate/.test(reason)) return "no linear order of the vertices gives a certificate (Theorem D)";
+    return reason;
 }
 
 function maExplain(res, plan) {
     var comps = plan.comps, multi = comps.length > 1;
     if (res.answer === "NO") {
-        if (!multi) return "No linear order of the vertices gives a certificate, so by Theorem D the quiver is not mutation-acyclic.";
-        var bad = comps.filter(c => c.answer === "NO").length;
-        return bad + " of the " + comps.length + " connected components " + (bad === 1 ? "is" : "are") + " not mutation-acyclic (no linear order gives a certificate).";
+        if (!multi) return "Not mutation-acyclic: " + maWhyNo(comps[0].reason) + ".";
+        var bad = comps.filter(c => c.answer === "NO");
+        return bad.length + " of the " + comps.length + " connected components " + (bad.length === 1 ? "is" : "are") + " not mutation-acyclic (" +
+               bad.map(c => maWhyNo(c.reason)).filter((x, i, a) => a.indexOf(x) === i).join("; ") + ").";
     }
     if (multi) return "Each of the " + comps.length + " connected components is mutation equivalent to an acyclic quiver; the sequences are concatenated.";
-    var c = comps[0];
+    var c = comps[0], nm = c.steps.length + " mutation" + (c.steps.length === 1 ? "" : "s");
     if (c.kind === "acyclic-input") return "The quiver is already acyclic.";
-    if (c.kind === "mutation-path") return "Finite mutation class: a breadth-first search reached an acyclic quiver after " + c.steps.length + " mutation" + (c.steps.length === 1 ? "" : "s") + ".";
+    if (c.kind === "mutation-path" && /unforking/.test(c.reason || "")) return "Unforking at points of return and a short best-first search reached an acyclic quiver after " + nm + " (checked exactly).";
+    if (c.kind === "mutation-path") return "Finite mutation class: a breadth-first search reached an acyclic quiver after " + nm + ".";
     return "A c-vector certificate (Speyer–Thomas) was found and checked exactly; it yields " + c.steps.length + " mutation" + (c.steps.length === 1 ? "" : "s") + " to an acyclic quiver.";
 }
 
-function maShowResult(input, res, paths) {
+function maEngineLine(eng) {
+    if (!eng) return "";
+    var label = eng.engine === "wasm" ? "WebAssembly (Rust)" : "JavaScript";
+    return '<div class="ma-line ma-dim ma-engine">engine: ' + label + (eng.note ? " &middot; " + maEsc(eng.note) : "") + "</div>";
+}
+
+function maShowResult(input, res, paths, eng) {
     var plan;
     try { plan = maPlan(input, res, paths); } catch (e) { maShowError("could not apply the result: " + e.message); return; }
     maState.plan = plan;
@@ -3442,7 +3559,8 @@ function maShowResult(input, res, paths) {
     var secs = res.seconds != null ? res.seconds : (Date.now() - maState.t0) / 1000;
     document.getElementById("maStatus").innerHTML =
         '<div class="ma-verdict ' + (yes ? "ma-yes" : "ma-no") + '">' + (yes ? "YES" : "NO") + "</div>" +
-        '<div class="ma-line">' + maEsc(maExplain(res, plan)) + ' <span class="ma-dim">(' + Number(secs).toFixed(2) + " s)</span></div>";
+        '<div class="ma-line">' + maEsc(maExplain(res, plan)) + ' <span class="ma-dim">(' + Number(secs).toFixed(2) + " s)</span></div>" +
+        maEngineLine(eng);
     if (yes) {
         html += '<div class="ma-label">MUTATION SEQUENCE (left to right, editor vertex names)</div>';
         html += plan.names.length

@@ -7,13 +7,23 @@
  * isolating interval; signs are decided by interval evaluation with an exact zero test (gcd with the defining
  * polynomial).
  *
- *   YES answers carry a certificate re-checked by verifyCertificate(): c-vectors satisfying the Speyer-Thomas
- *   conditions (arXiv:1203.0277, Thms 1.4 and 7.2) or an explicit mutation sequence in finite type. Every YES also
- *   carries an explicit mutation sequence from the input to an acyclic quiver.
- *   NO answers rest on Theorem D of the write-up.
+ * The default mode orders 'auto' is the reference's _decide_auto: rigorous NO filters (vortex [Ne, Thm 4.4];
+ * mutation-cyclic 3-vertex full subquivers [BBH, BMR]), a combinatorial YES path (unforking + plateau search), then
+ * SELECT: one order of Lambda(B) in polynomial time (winding targets solved over Q, Bellman-Ford), the Perron rule for
+ * the single sign-passing class O^+ (selection theorem, writeup Section 8), and descents at O^+ only; if SELECT were
+ * ever inconclusive, the class search (one order per class of Lambda(B), interleaved descents, n+1 rule) runs as a
+ * fallback. Late filters (4-vertex subquivers, Coxeter-polynomial candidates) run after 4000 descent steps, and finite
+ * mutation type is settled by a search up to isomorphism. orders 'all' (all n! orders) remains available.
  *
- * The order of every computation that refines the isolating interval of rho is the same as in the Python reference,
- * so the two implementations follow identical paths and produce identical certificates.
+ *   YES answers carry a certificate re-checked by verifyCertificate(): c-vectors satisfying the Speyer-Thomas
+ *   conditions (arXiv:1203.0277, Thms 1.4 and 7.2) or an explicit mutation sequence. Every YES also carries an
+ *   explicit mutation sequence from the input to an acyclic quiver.
+ *   NO answers rest on Theorem D of the write-up and, in the default mode, on the selection theorem (Theorem 1).
+ *
+ * The order of every computation that refines the isolating interval of rho is the same as in the Python reference
+ * (including the spectral cache shared by orders with the same Coxeter polynomial and the comparison sequence of
+ * CPython's sort), so the two implementations follow identical paths and produce identical answers, reasons,
+ * certificates and scheduler statistics (checked by quiver-mutation/jsport).
  *
  * Works in the browser (global MutationAcyclic), in a Web Worker (MutationAcyclic.workerSource()) and under Node.
  */
@@ -717,21 +727,50 @@ function stepsAbove(L, U, ratio) {
 // one linear order
 // =====================================================================================================================
 
+// Spectral data and grids are cached by the characteristic polynomial f, as in the Python reference: orders with the
+// same Coxeter polynomial share one Rho, including its refinements, so the refinement state (and with it the grid
+// values s and the certificate windows) evolves exactly as in the reference. The caches are cleared at the start of
+// every top-level decide(); nested decides (4-vertex subquivers) share them.
+const SPEC_CACHE = new Map(), GRID_CACHE = new Map();
+
+/** 'unit', 'none', or the Rho of a strictly dominant real root rho > 1 of f; cached by (f, dominance). With
+ *  dominance = false the largest real root rho > 1 is returned if it is a simple root of f, without the Schur-Cohn
+ *  test, whose bit sizes grow exponentially with n (audit2 fix 6). SELECT uses this: at a mutation-acyclic input rho is strictly dominant anyway
+ *  (H5), and orders built this way are never given to gelfand() or window(), which need the gap. */
+function spectral(f, dominance) {
+    const key = f.join(',') + (dominance ? '|d' : '|n');
+    if (!SPEC_CACHE.has(key)) {
+        const g = stripCyclotomic(f); let res;
+        if (g.length <= 1) res = 'unit';
+        else {
+            const h = squarefreePart(g), iv = largestRootAboveOne(h);
+            if (iv === null) res = 'none';
+            else {
+                const R = new Rho(h, iv[0], iv[1]);
+                if (dominance) res = strictlyDominant(f, R) ? R : 'none';
+                else res = R.sign(R.reduce(pderiv(f))) !== 0 ? R : 'none';     // rho simple (H5)
+            }
+        }
+        if (SPEC_CACHE.size > 10000) { SPEC_CACHE.clear(); GRID_CACHE.clear(); }
+        SPEC_CACHE.set(key, res);
+    }
+    return SPEC_CACHE.get(key);
+}
+
 /** data for one linear order sigma: companion U, Coxeter matrix c, and, if c has a strictly dominant real
  *  eigenvalue rho > 1 (type 'wild'), the eigen-functionals lam_+, lam_- and eigenvectors y_+, y_- as integer
- *  polynomials in rho. Other types: 'unit' (cyclotomic characteristic polynomial) and 'none'. */
+ *  polynomials in rho. Other types: 'unit' (cyclotomic characteristic polynomial) and 'none'.
+ *  dominance = false skips the strict-dominance test (SELECT; see spectral()). */
 class ExactOrder {
-    constructor(B, order) {
+    constructor(B, order, dominance) {
+        if (dominance === undefined) dominance = true;
         this.order = order.slice(); const n = B.length; this.n = n;
         this.U = companion(B, order); this.c = coxeter(this.U); this.ci = coxeterInverse(this.U);
         const fl = flAdjugate(this.c), f = fl[0], Bs = fl[1]; this.f = f;
         this._pow = new Map([[0, identity(n)]]); this._gel = new Map();
-        const g = stripCyclotomic(f);
-        if (g.length <= 1) { this.type = 'unit'; return; }
-        const h = squarefreePart(g), iv = largestRootAboveOne(h);
-        if (iv === null) { this.type = 'none'; return; }
-        const R = new Rho(h, iv[0], iv[1]); this.R = R;
-        if (!strictlyDominant(f, R)) { this.type = 'none'; return; }
+        const spec = spectral(f, dominance);          // depends only on f (shared by orders with congruent companions)
+        if (spec === 'unit' || spec === 'none') { this.type = spec; return; }
+        const R = spec; this.R = R;
         // adj(rho I - c)_{ij} = sum_d (B_{n-1-d})_{ij} rho^d ;  rho^{n-1} adj(rho^{-1} I - c)_{ij} = sum_d (B_d)_{ij} rho^d
         const Pp = [], Pm = [];
         for (let i = 0; i < n; i++) {
@@ -775,8 +814,14 @@ class ExactOrder {
         return this._pow.get(m);
     }
 
-    /** 2n+1 rational values s_j with s_j^(8(2n+1)) in [rho^(8j-1), rho^(8j+1)], j = 0..2n. */
+    /** 2n+1 rational values s_j with s_j^(8(2n+1)) in [rho^(8j-1), rho^(8j+1)], j = 0..2n (cached by f). */
     grid() {
+        const key = this.f.join(',') + '|' + this.n;
+        if (!GRID_CACHE.has(key)) GRID_CACHE.set(key, this._grid());
+        return GRID_CACHE.get(key).slice();
+    }
+
+    _grid() {
         const n = this.n, K = 8 * (2 * n + 1), R = this.R, out = [Q1];
         for (let j = 1; j <= 2 * n; j++) {
             let Tlo, Thi;
@@ -900,6 +945,12 @@ function stOk(U, eps) {
 
 /** exact greedy height descent towards s lam_+ + lam_-/s. -> [kind, Gamma rows], kind in obtuse, stuck, zero, cap. */
 function descent(od, s, Ncap, Ecap) {
+    const g = descentGen(od, s, Ncap, Ecap, 0);
+    while (true) { const r = g.next(); if (r.done) return r.value; }
+}
+
+/** generator form of descent(): yields after every `chunk` steps (never if chunk is 0) and returns [kind, G]. */
+function* descentGen(od, s, Ncap, Ecap, chunk) {
     const R = od.R, n = od.n, S = sym(od.U), a = s.n, b = s.d;
     const Phi = range(n).map(k => R.reduce(padd(pscale(od.lp[k], a * a), pscale(od.lm[k], b * b))));
     const G = identity(n), Hs = Phi.slice(), sg = new Array(n).fill(1n);
@@ -938,6 +989,7 @@ function descent(od, s, Ncap, Ecap) {
         let mv = 0n;
         for (const x of v) if (babs(x) > mv) mv = babs(x);
         if (mv > Ecap) return ['cap', G];
+        if (chunk && steps % chunk === 0) yield steps;
     }
     return ['cap', G];
 }
@@ -1076,6 +1128,9 @@ function heapPop(h) {
     return top;
 }
 
+/** the list of a parent-linked path {k, up} (null = empty), root first */
+function unlinkPath(node) { const out = []; for (; node; node = node.up) out.push(node.k); return out.reverse(); }
+
 /** a mutation sequence taking B to an acyclic quiver, recovered from a c-vector certificate (best-first search on
  *  sum |C_ij| over the extended exchange matrix [B; C]). -> [path, acyclic quiver reached]. */
 function mutationPath(B, cert) {
@@ -1083,15 +1138,16 @@ function mutationPath(B, cert) {
     for (let a = 0; a < n; a++) for (let i = 0; i < n; i++) C[i][sigma[a]] = V[a][i];
     const key = (X, Y) => X.map(r => r.join(',')).join(';') + '|' + Y.map(r => r.join(',')).join(';');
     const norm = Y => { let s = 0n; for (const r of Y) for (const x of r) s += babs(x); return s; };
-    const heap = [{ f: norm(C), d: 0, c: 0, B: B, C: C, path: [] }], seen = new Set([key(B, C)]); let cnt = 0;
+    // paths are kept as parent-linked lists (the same paths as the reference's path + [k], in linear memory)
+    const heap = [{ f: norm(C), d: 0, c: 0, B: B, C: C, path: null }], seen = new Set([key(B, C)]); let cnt = 0;
     while (heap.length) {
         const e = heapPop(heap);
-        if (isAcyclic(e.B)) return [e.path, e.B];
+        if (isAcyclic(e.B)) return [unlinkPath(e.path), e.B];
         for (let k = 0; k < n; k++) {
             const bc = extendedMutate(e.B, e.C, k), kk = key(bc[0], bc[1]);
             if (seen.has(kk)) continue;
             seen.add(kk); cnt += 1;
-            heapPush(heap, { f: norm(bc[1]), d: e.d + 1, c: cnt, B: bc[0], C: bc[1], path: e.path.concat([k]) });
+            heapPush(heap, { f: norm(bc[1]), d: e.d + 1, c: cnt, B: bc[0], C: bc[1], path: { k: k, up: e.path } });
         }
     }
     throw new Error('no acyclic quiver reached; the certificate is not valid');
@@ -1181,22 +1237,75 @@ function verifyCertificate(B, cert) {
 // finite type, caps, main entry points
 // =====================================================================================================================
 
-/** breadth-first search over the quivers with all |b_ij| <= 2 that are mutation equivalent to B through such
- *  quivers (a finite set). -> [path, acyclic quiver] or null. Complete for finite mutation type (FST). */
+/** a canonical form of the quiver B under relabelling (a string): colour refinement (by colours and arrow weights of
+ *  the neighbours) plus individualization of the first non-singleton cell, minimised over the branches (a small
+ *  version of the method of nauty). Equal for isomorphic quivers, distinct otherwise. Same procedure as the Python
+ *  reference's canonical_form. */
+function canonicalForm(B) {
+    const n = B.length, W = B.map(r => r.map(x => Number(x)));
+    const cmpPair = (p, q) => (p[0] - q[0]) || (p[1] - q[1]);
+    const cmpSig = (s, t) => {                        // Python tuple order on (colour, sorted neighbour pairs)
+        if (s[0] !== t[0]) return s[0] - t[0];
+        const a = s[1], b = t[1];
+        for (let i = 0; i < a.length && i < b.length; i++) { const c = cmpPair(a[i], b[i]); if (c) return c; }
+        return a.length - b.length;
+    };
+    const nclasses = col => new Set(col).size;
+    const refine = col => {
+        while (true) {
+            const sig = [];
+            for (let v = 0; v < n; v++) {
+                const nb = [];
+                for (let w = 0; w < n; w++) if (W[v][w] !== 0) nb.push([col[w], W[v][w]]);
+                nb.sort(cmpPair);
+                sig.push([col[v], nb]);
+            }
+            const idx = range(n).sort((x, y) => cmpSig(sig[x], sig[y]));
+            const nw = new Array(n); let rank = -1;
+            for (let i = 0; i < n; i++) {
+                if (i === 0 || cmpSig(sig[idx[i - 1]], sig[idx[i]]) !== 0) rank++;
+                nw[idx[i]] = rank;
+            }
+            if (nclasses(nw) === nclasses(col)) return nw;
+            col = nw;
+        }
+    };
+    let best = null;
+    const search = col => {
+        col = refine(col);
+        if (nclasses(col) === n) {
+            const order = range(n).sort((x, y) => col[x] - col[y]), t = [];
+            for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) t.push(W[order[i]][order[j]]);
+            if (best === null || tupleCmp(t, best) < 0) best = t;
+            return;
+        }
+        const cnt = new Map();
+        for (const x of col) cnt.set(x, (cnt.get(x) || 0) + 1);
+        let c = null;
+        for (const [x, k] of cnt) if (k > 1 && (c === null || x < c)) c = x;
+        for (let v = 0; v < n; v++) {
+            if (col[v] !== c) continue;
+            search(col.map((x, w) => 2 * x + ((x > c || (x === c && w !== v)) ? 1 : 0)));
+        }
+    };
+    search(new Array(n).fill(0));
+    return best.join(',');
+}
+
+/** breadth-first search, up to isomorphism, over the quivers with all |b_ij| <= 2 that are mutation equivalent to B
+ *  through such quivers (a finite set). -> [path, acyclic quiver] or null. Complete for finite mutation type (FST):
+ *  acyclicity is invariant under relabelling, and mutations of isomorphic quivers are isomorphic. */
 function finiteSearch(B) {
     const n = B.length;
-    const key = n <= 6 ? (X => canonical(X).join(',')) : (X => X.map(r => r.join(',')).join(';'));
-    const seen = new Set([key(B)]), dq = [[B, []]]; let head = 0;
+    const seen = new Set([canonicalForm(B)]), dq = [[B, null]]; let head = 0;   // paths parent-linked
     while (head < dq.length) {
-        const X = dq[head][0], path = dq[head][1]; head++;
-        if (isAcyclic(X)) return [path, X];
+        const X = dq[head][0], path = dq[head][1]; dq[head] = null; head++;
+        if (isAcyclic(X)) return [unlinkPath(path), X];
         for (let k = 0; k < n; k++) {
             const Y = mutate(X, k);
-            let big = false;
-            for (const r of Y) { for (const x of r) if (babs(x) > 2n) { big = true; break; } if (big) break; }
-            if (big) continue;
-            const ky = key(Y);
-            if (!seen.has(ky)) { seen.add(ky); dq.push([Y, path.concat([k])]); }
+            if (maxAbs(Y) > 2n) continue;
+            const ky = canonicalForm(Y);
+            if (!seen.has(ky)) { seen.add(ky); dq.push([Y, { k: k, up: path }]); }
         }
     }
     return null;
@@ -1213,6 +1322,712 @@ function uniformCaps(n, beta) {
     return [N * (1n + R) ** N, factorial(n) * R ** N];
 }
 
+// =====================================================================================================================
+// Theorem P orders and rigorous NO filters (writeup Section 7, Corollary 7.4)
+// =====================================================================================================================
+
+function maxAbs(B) { let m = 0n; for (const r of B) for (const x of r) { const a = babs(x); if (a > m) m = a; } return m; }
+function sumAbs(B) { let s = 0n; for (const r of B) for (const x of r) s += babs(x); return s; }
+function submatrix(B, S) { return S.map(i => S.map(j => B[i][j])); }
+function pyTuple(v) { return '(' + v.join(', ') + (v.length === 1 ? ',' : '') + ')'; }   // Python str(tuple)
+function pyList(v) { return '[' + v.join(', ') + ']'; }                                  // Python str(list)
+function pyFloorDiv(a, b) {                           // Python a // b for BigInts
+    const q = a / b;
+    return (a % b !== 0n && ((a < 0n) !== (b < 0n))) ? q - 1n : q;
+}
+
+/** k-subsets of [0..n-1] in lexicographic order, like itertools.combinations(range(n), k). */
+function* combinations(n, k) {
+    if (k > n) return;
+    const c = range(k);
+    while (true) {
+        yield c.slice();
+        let i = k;
+        while (i > 0 && c[i - 1] === n - k + i - 1) i--;
+        if (i === 0) return;
+        c[i - 1]++;
+        for (let j = i; j < k; j++) c[j] = c[j - 1] + 1;
+    }
+}
+
+/** chordless cycles (length >= 3) of the underlying simple graph, each as a vertex list in traversal order. */
+function chordlessCycles(B) {
+    const n = B.length, out = [];
+    for (let k = 3; k <= n; k++) {
+        for (const S of combinations(n, k)) {
+            let bad = false;
+            for (const a of S) {
+                let d = 0;
+                for (const b of S) if (b !== a && B[a][b] !== 0n) d++;
+                if (d !== 2) { bad = true; break; }
+            }
+            if (bad) continue;
+            const cyc = [S[0]]; let prev = -1;
+            while (cyc.length < k) {
+                const last = cyc[cyc.length - 1];
+                let nxt = -1;
+                for (const b of S) if (B[last][b] !== 0n && b !== prev && !cyc.includes(b)) { nxt = b; break; }
+                if (nxt < 0) break;
+                prev = last; cyc.push(nxt);
+            }
+            if (cyc.length === k && B[cyc[k - 1]][cyc[0]] !== 0n) out.push(cyc);
+        }
+    }
+    return out;
+}
+
+/** order in Lambda(B): every chordless cycle has winding number 1 (oriented, traversed along its arrows) or 0. */
+function inLambda(B, order, cycles) {
+    const pos = new Map(); order.forEach((v, i) => pos.set(v, i));
+    for (const cyc of (cycles === undefined ? chordlessCycles(B) : cycles)) {
+        const k = cyc.length; let w = 0, fwd = true, bwd = true;
+        for (let i = 0; i < k; i++) {
+            const a = cyc[i], b = cyc[(i + 1) % k], x = B[a][b];
+            if (x > 0n && pos.get(a) > pos.get(b)) w++;
+            if (x < 0n && pos.get(a) < pos.get(b)) w--;
+            if (!(x > 0n)) fwd = false;
+            if (!(x < 0n)) bwd = false;
+        }
+        if (w !== (fwd ? 1 : (bwd ? -1 : 0))) return false;
+    }
+    return true;
+}
+
+function orientationKey(B, lam) {
+    const n = B.length, pos = new Array(n); lam.forEach((v, i) => { pos[v] = i; });
+    const out = [];
+    for (let v = 0; v < n; v++) for (let w = 0; w < n; w++) if (B[v][w] !== 0n && pos[v] < pos[w]) out.push(v + '>' + w);
+    return out.join(',');
+}
+
+/** one order in Lambda(B), or null: insert vertices one at a time into a cyclic order, pruning as soon as a chordless
+ *  cycle with all its vertices placed has the wrong winding number (it depends only on their cyclic order). */
+function lambdaElement(B, cycles) {
+    const n = B.length, order = [], seen = new Set(); let queue = [0];
+    while (order.length < n) {                         // BFS order, so that cycles close early
+        if (!queue.length) { let m = -1; for (let v = 0; v < n; v++) if (!seen.has(v)) { m = v; break; } queue = [m]; }
+        const v = queue.shift();
+        if (seen.has(v)) continue;
+        seen.add(v); order.push(v);
+        for (let w = 0; w < n; w++) if (B[v][w] !== 0n && !seen.has(w)) queue.push(w);
+    }
+    const closes = range(n).map(k => cycles.filter(c => c.includes(order[k]) && c.every(x => order.indexOf(x) <= k)));
+    const rec = (k, cyc) => {
+        if (k === n) return cyc;
+        const v = order[k];
+        for (let p = 1; p <= cyc.length; p++) {
+            const c2 = cyc.slice(0, p).concat([v], cyc.slice(p));
+            if (closes[k].every(c => inLambda(B, c2.filter(x => c.includes(x)), [c]))) {
+                const r = rec(k + 1, c2);
+                if (r) return r;
+            }
+        }
+        return null;
+    };
+    return rec(1, [order[0]]);
+}
+
+/** one linear order from each class of Lambda(B) under exchanges of adjacent vertices not joined by an arrow (a class =
+ *  the acyclic orientation the order induces), sorted. Empty iff B has no totally proper cyclic ordering.
+ *  n <= bruteForceMax: enumerate all (n-1)! cyclic orders. Larger n: one element by pruned insertion, then the rest by
+ *  source-to-sink flips (complete by Pretzel 1986: the winding numbers fix the circulations). */
+function lambdaClasses(B, bruteForceMax) {
+    if (bruteForceMax === undefined) bruteForceMax = 8;
+    const n = B.length, cycles = chordlessCycles(B), seen = new Map();
+    if (n <= bruteForceMax) {
+        for (const rest of permutations(range(n).slice(1))) {
+            const o = [0].concat(rest);
+            if (!inLambda(B, o, cycles)) continue;
+            for (let r = 0; r < n; r++) {
+                const lam = o.slice(r).concat(o.slice(0, r)), key = orientationKey(B, lam);
+                if (!seen.has(key)) seen.set(key, lam);
+            }
+        }
+        return Array.from(seen.values()).sort(tupleCmp);
+    }
+    const lam0 = lambdaElement(B, cycles);
+    if (lam0 === null) return [];
+    seen.set(orientationKey(B, lam0), lam0); const stack = [lam0];
+    while (stack.length) {
+        const lam = stack.pop(), pos = new Array(n); lam.forEach((v, i) => { pos[v] = i; });
+        for (const x of lam) {                        // x a source of the orientation: no neighbour before it
+            let src = true;
+            for (let w = 0; w < n; w++) if (B[x][w] !== 0n && !(pos[w] > pos[x])) { src = false; break; }
+            if (!src) continue;
+            const nw = lam.filter(v => v !== x).concat([x]), key = orientationKey(B, nw);
+            if (!seen.has(key)) { seen.set(key, nw); stack.push(nw); }
+        }
+    }
+    return Array.from(seen.values()).sort(tupleCmp);
+}
+
+/** 3-vertex quiver mutation-cyclic? (Beineke-Bruestle-Hille: cyclic, all weights >= 2, Markov constant <= 4) */
+function bbhMutationCyclic(B3) {
+    let x = B3[0][1], y = B3[1][2], z = B3[2][0];
+    if (!((x > 0n && y > 0n && z > 0n) || (x < 0n && y < 0n && z < 0n))) return false;
+    x = babs(x); y = babs(y); z = babs(z);
+    return x >= 2n && y >= 2n && z >= 2n && x * x + y * y + z * z - x * y * z <= 4n;
+}
+
+/** a full subquiver that is not mutation-acyclic (then neither is B, by [BMR]); -> [vertices, how] or null. Size 3
+ *  uses the Beineke-Bruestle-Hille criterion; larger sizes use decide() recursively ('auto', no certificate re-check,
+ *  shared caches). */
+function subquiverFilter(B, sizes) {
+    const n = B.length;
+    for (const k of sizes) {
+        if (k >= n) continue;
+        for (const S of combinations(n, k)) {
+            const Bs = submatrix(B, S);
+            if (k === 3) {
+                if (bbhMutationCyclic(Bs)) return [S, 'Markov triangle (BBH)'];
+            } else if (isConnected(Bs) && !isAcyclic(Bs)) {
+                if (decideBig(Bs, 'auto', false, null).answer === 'NO') return [S, 'decided NO'];
+            }
+        }
+    }
+    return null;
+}
+
+/** the full subquiver on verts is acyclic */
+function acyclicOn(B, verts) {
+    const rem = verts.slice();
+    while (rem.length) {
+        let p = -1;
+        for (let i = 0; i < rem.length && p < 0; i++) {
+            let ok = true;
+            for (const w of rem) if (B[w][rem[i]] > 0n) { ok = false; break; }
+            if (ok) p = i;
+        }
+        if (p < 0) return false;
+        rem.splice(p, 1);
+    }
+    return true;
+}
+
+function insOuts(B, v) {
+    const n = B.length, ins = [], outs = [];
+    for (let a = 0; a < n; a++) { if (B[a][v] > 0n) ins.push(a); if (B[v][a] > 0n) outs.push(a); }
+    return [ins, outs];
+}
+
+/** a vertex v whose in- or out-neighbourhood induces a quiver with an oriented cycle, or null. Such B is not
+ *  mutation-acyclic [Ne, Thm 4.4] (cf. Warkentin's thesis, Rem 2.2). */
+function vortexFilter(B) {
+    for (let v = 0; v < B.length; v++) {
+        const io = insOuts(B, v);
+        if (!acyclicOn(B, io[0]) || !acyclicOn(B, io[1])) return v;
+    }
+    return null;
+}
+
+/** the point of return r if B is a fork in Warkentin's sense (Def 2.1 of his thesis), else null. */
+function forkPoint(B) {
+    const n = B.length;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (i !== j && babs(B[i][j]) < 2n) return null;
+    for (let r = 0; r < n; r++) {
+        const io = insOuts(B, r), ins = io[0], outs = io[1];
+        if (!ins.length || !outs.length) continue;
+        let ok = true;
+        for (const i of ins) { for (const j of outs) if (!(B[j][i] > B[i][r] && B[j][i] > B[r][j])) { ok = false; break; } if (!ok) break; }
+        if (ok && acyclicOn(B, ins) && acyclicOn(B, outs)) return r;
+    }
+    return null;
+}
+
+function matKey(X) { return X.map(r => r.join(',')).join(';'); }
+
+/** YES fast path (docs/moonshots/forks): unfork by mutating at points of return, then a best-first search through
+ *  non-forks with max|b| at most that of the unforked quiver. -> [path, acyclic quiver] or null (inconclusive).
+ *  Any path found is an explicit certificate, so this never affects correctness. */
+function combinatorialYes(B, budget) {
+    if (budget === undefined) budget = 400;
+    const path = []; let X = B; const cap = sumAbs(B) + 10n;
+    while (BigInt(path.length) < cap) {
+        const r = forkPoint(X);
+        if (r === null) break;
+        const X2 = mutate(X, r);
+        if (forkPoint(X2) === r) return null;         // a centre: every quiver in the class is a fork
+        X = X2; path.push(r);
+    }
+    const m = maxAbs(X), n = B.length, seen = new Set([matKey(X)]);
+    const heap = [{ f: sumAbs(X), d: 0, c: 0, Y: X, p: [] }]; let cnt = 0;
+    while (heap.length && cnt < budget) {
+        const e = heapPop(heap); cnt += 1;
+        if (isAcyclic(e.Y)) return [path.concat(e.p), e.Y];
+        for (let k = 0; k < n; k++) {
+            const Z = mutate(e.Y, k), kz = matKey(Z);
+            if (seen.has(kz) || maxAbs(Z) > m || forkPoint(Z) !== null) continue;
+            seen.add(kz); heapPush(heap, { f: sumAbs(Z), d: cnt * n + k + 1, c: 0, Y: Z, p: e.p.concat([k]) });
+        }
+    }
+    return null;
+}
+
+/** determinant of an integer matrix (fraction-free Bareiss elimination, as in the reference). */
+function detInt(A) {
+    A = A.map(r => r.slice()); const n = A.length; let sgn = 1n, prev = 1n;
+    for (let k = 0; k < n - 1; k++) {
+        if (A[k][k] === 0n) {
+            let found = false;
+            for (let i = k + 1; i < n; i++) if (A[i][k] !== 0n) { const t = A[k]; A[k] = A[i]; A[i] = t; sgn = -sgn; found = true; break; }
+            if (!found) return 0n;
+        }
+        for (let i = k + 1; i < n; i++)
+            for (let j = k + 1; j < n; j++) A[i][j] = pyFloorDiv(A[i][j] * A[k][k] - A[i][k] * A[k][j], prev);
+        prev = A[k][k];
+    }
+    return sgn * A[n - 1][n - 1];
+}
+
+/** connected acyclic quivers with Coxeter polynomial f (Lemma candidate), by branch and bound on Neville's formula
+ *  M_Q = n - a_1 = sum_{i<j} b_ij P_ij (P = (I - N)^-1, topological labels). -> list of upper tuples, or null if the
+ *  node budget runs out (then the filter is inconclusive). */
+function coxeterCandidates(f, nodeBudget) {
+    if (nodeBudget === undefined) nodeBudget = 300000;
+    const n = f.length - 1, Mval = BigInt(n) - f[n - 1], pts = [1n, -1n, 2n, -2n, 3n];
+    const vals = pts.map(x => { let s = 0n, xi = 1n; for (const c of f) { s += c * xi; xi *= x; } return s; });
+    const pairs = [];
+    for (let j = 1; j < n; j++) for (let i = j - 1; i >= 0; i--) pairs.push([i, j]);
+    const b = zeros(n), P = identity(n), out = []; let nodes = 0;
+    const OVER = {};
+    const test = () => {
+        const Bq = range(n).map(i => range(n).map(j => i !== j ? (i < j ? b[i][j] : -b[j][i]) : 0n));
+        if (!isConnected(Bq)) return false;
+        const U = companion(Bq, range(n));
+        for (let t = 0; t < pts.length; t++) {
+            const x = pts[t], M = range(n).map(i => range(n).map(j => x * U[i][j] + U[j][i]));
+            if (detInt(M) !== vals[t]) return false;
+        }
+        const g = flAdjugate(coxeter(U))[0];
+        return g.length === f.length && g.every((c, i) => c === f[i]);
+    };
+    const rec = (idx, msum) => {
+        nodes += 1;
+        if (nodes > nodeBudget) throw OVER;
+        if (idx === pairs.length) {
+            if (msum === Mval && test()) { const t = []; for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) t.push(b[i][j]); out.push(t); }
+            return;
+        }
+        const i = pairs[idx][0], j = pairs[idx][1]; let base = 0n;
+        for (let k = i + 1; k < j; k++) base += P[i][k] * b[k][j];
+        let w = 0n;
+        while (msum + w * (w + base) <= Mval) {
+            b[i][j] = w; P[i][j] = w + base; rec(idx + 1, msum + w * (w + base)); w += 1n;
+        }
+        b[i][j] = 0n; P[i][j] = 0n;
+    };
+    try { rec(0, 0n); } catch (e) { if (e === OVER) return null; throw e; }
+    return out;
+}
+
+/** CPython 3.12's list.sort for short lists (count_run, then binary insertion), with the same sequence of comparisons
+ *  lt(x, y) (x < y): the comparisons decide signs in Q(rho), so their order fixes the refinement levels of rho. */
+function pySort(v, lt) {
+    const n = v.length;
+    if (n < 2) return;
+    let r = 2;
+    if (lt(v[1], v[0])) {
+        while (r < n && lt(v[r], v[r - 1])) r++;
+        for (let a = 0, z = r - 1; a < z; a++, z--) { const t = v[a]; v[a] = v[z]; v[z] = t; }
+    } else {
+        while (r < n && !lt(v[r], v[r - 1])) r++;
+    }
+    for (let st = r; st < n; st++) {
+        const pivot = v[st]; let l = 0, rr = st;
+        do {
+            const p = l + ((rr - l) >> 1);
+            if (lt(pivot, v[p])) rr = p; else l = p + 1;
+        } while (l < rr);
+        v.splice(st, 1); v.splice(l, 0, pivot);
+    }
+}
+
+/** G(sigma) != empty set, where G(sigma) = {theta > 0 : eps(theta) has no zero and StOk(U, +-eps(theta))} and
+ *  eps_k(theta) = sgn(theta lam_+(e_k) + lam_-(e_k)). By Theorem W(a) (lem:gset), an order with G(sigma) empty never
+ *  certifies. */
+function gSetNonempty(od) {
+    const R = od.R, n = od.n, U = od.U, lp = od.lp, lm = od.lm;
+    const sp = lp.map(x => R.sign(x)), sm = lm.map(x => R.sign(x));
+    if (sp.includes(0) || sm.includes(0)) return false;
+    const pos = range(n).filter(k => sp[k] !== sm[k]);     // breakpoints theta_k = -lam_-(e_k)/lam_+(e_k) > 0
+    const cmp = (a, b) => R.sign(R.reduce(psub(pmul(lm[b], lp[a]), pmul(lm[a], lp[b])))) * sp[a] * sp[b];   // sign(theta_a - theta_b)
+    pySort(pos, (a, b) => cmp(a, b) < 0);
+    const groups = [];
+    for (const k of pos) {
+        if (groups.length && cmp(groups[groups.length - 1][0], k) === 0) groups[groups.length - 1].push(k);
+        else groups.push([k]);
+    }
+    const inPos = range(n).map(k => pos.includes(k)), below = new Array(n).fill(false);   // breakpoints below theta
+    for (let i = 0; i <= groups.length; i++) {
+        if (i) for (const k of groups[i - 1]) below[k] = true;
+        const eps = range(n).map(k => (!inPos[k] || below[k]) ? sp[k] : -sp[k]);
+        if (stOk(U, eps) || stOk(U, eps.map(e => -e))) return true;
+    }
+    return false;
+}
+
+/** descent at (order, s) in chunks, then the axis walk. Returns ['cert', cert] | ['bad', why] | ['cap', null].
+ *  'bad' outcomes cannot occur at a seed order for generic s, and at most n values of s^2 are non-generic. */
+function* orderTask(od, s, Ncap, Ecap, chunk) {
+    const dg = yield* descentGen(od, s, Ncap, Ecap, chunk), kind = dg[0], G = dg[1];
+    if (kind === 'cap') return ['cap', null];
+    if (kind !== 'obtuse') return ['bad', kind];
+    const cert = walk(od, G, s);
+    return cert ? ['cert', cert] : ['bad', 'walk'];
+}
+
+// =====================================================================================================================
+// polynomial-time selection of the class (SELECT; writeup Section 7; docs/moonshots/select, audit2)
+// =====================================================================================================================
+
+function bfsParents(B) {                              // BFS tree from vertex 0: parent array (-1 = root/unreached), visit order
+    const n = B.length, par = new Array(n).fill(-2), order = [0], q = [0]; par[0] = -1; let h = 0;
+    while (h < q.length) {
+        const x = q[h++];
+        for (let y = 0; y < n; y++) if (B[x][y] !== 0n && par[y] === -2) { par[y] = x; q.push(y); order.push(y); }
+    }
+    return [par, order];
+}
+
+function bitLen(x) { return x === 0n ? 0 : x.toString(2).length; }
+
+/** a basis of the cycle space over GF(2) consisting of chordless cycles (B connected): the fundamental cycles of a BFS
+ *  tree, each repeatedly replaced by a strictly shorter chordless half that keeps the family independent. */
+function chordlessCycleBasis(B) {
+    const n = B.length, po = bfsParents(B), par = po[0], order = po[1], depth = new Array(n).fill(0);
+    for (const v of order.slice(1)) depth[v] = depth[par[v]] + 1;
+    const treePath = (a, b) => {
+        const pa = [a], pb = [b];
+        while (pa[pa.length - 1] !== pb[pb.length - 1]) {
+            if (depth[pa[pa.length - 1]] >= depth[pb[pb.length - 1]]) pa.push(par[pa[pa.length - 1]]);
+            else pb.push(par[pb[pb.length - 1]]);
+        }
+        return pa.concat(pb.slice(0, pb.length - 1).reverse());
+    };
+    const isTree = (a, b) => par[a] === b || par[b] === a;
+    const eidx = new Map(), edges = [];
+    for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) if (B[a][b] !== 0n) { eidx.set(a * n + b, edges.length); edges.push([a, b]); }
+    const vec = cyc => {
+        let v = 0n;
+        for (let i = 0; i < cyc.length; i++) {
+            const x = cyc[i], y = cyc[(i + 1) % cyc.length];
+            v ^= 1n << BigInt(eidx.get(Math.min(x, y) * n + Math.max(x, y)));
+        }
+        return v;
+    };
+    const independent = vs => {
+        const piv = new Map();
+        for (let r of vs) {
+            const keys = Array.from(piv.keys()).sort((x, y) => y - x);
+            for (const p of keys) if ((r >> BigInt(p)) & 1n) r ^= piv.get(p);
+            if (r === 0n) return false;
+            piv.set(bitLen(r) - 1, r);
+        }
+        return true;
+    };
+    const fam = [];
+    for (const e of edges) if (!isTree(e[0], e[1])) fam.push(treePath(e[0], e[1]));
+    let vecs = fam.map(vec);
+    for (let idx = 0; idx < fam.length; idx++) {
+        while (true) {
+            const cyc = fam[idx], k = cyc.length; let chord = null;
+            for (let i = 0; i < k && !chord; i++)
+                for (let j = i + 2; j < k; j++)
+                    if (!(i === 0 && j === k - 1) && B[cyc[i]][cyc[j]] !== 0n) { chord = [i, j]; break; }
+            if (!chord) break;
+            const i = chord[0], j = chord[1], h1 = cyc.slice(i, j + 1), h2 = cyc.slice(j).concat(cyc.slice(0, i + 1));
+            const v1 = vecs.slice(0, idx).concat([vec(h1)], vecs.slice(idx + 1));
+            if (independent(v1)) { fam[idx] = h1; vecs = v1; }
+            else { fam[idx] = h2; vecs[idx] = vec(h2); }
+        }
+    }
+    return fam;
+}
+
+/** a linear order whose closure has winding number 1 on every oriented and 0 on every non-oriented chordless cycle,
+ *  found in polynomial time (audit2 fix 5; the linear program of [FN, Thm 2.16] as difference constraints), B
+ *  connected. -> order, or null, which proves Lambda(B) empty. If Lambda(B) is not empty, the order lies in Lambda(B).
+ *  Solve over Q for an integer cochain k (zero on a BFS tree) with the target windings on a chordless GF(2)-basis
+ *  (a non-integral k means Lambda(B) is empty); then integers Y with 1 <= Y_v - Y_u + N k_e <= N - 1 for every arrow
+ *  e = u->v (N = n + 1) by Bellman-Ford; sort the vertices by Y mod N. */
+function windingOrder(B) {
+    const n = B.length, par = bfsParents(B)[0];
+    const arrows = [];
+    for (let u = 0; u < n; u++) for (let v = 0; v < n; v++) if (B[u][v] > 0n) arrows.push([u, v]);
+    const col = new Map();                            // non-tree arrow u->v (key u*n+v) -> column
+    for (const a of arrows) if (par[a[1]] !== a[0] && par[a[0]] !== a[1]) col.set(a[0] * n + a[1], col.size);
+    const m = col.size, rows = [];
+    for (const cyc of chordlessCycleBasis(B)) {
+        const k = cyc.length, r = new Array(m + 1).fill(Q0); let fwd = true, bwd = true;
+        for (let i = 0; i < k; i++) {
+            const a = cyc[i], b = cyc[(i + 1) % k];
+            if (B[a][b] > 0n && col.has(a * n + b)) { const c = col.get(a * n + b); r[c] = qadd(r[c], Q1); }
+            else if (B[a][b] < 0n && col.has(b * n + a)) { const c = col.get(b * n + a); r[c] = qsub(r[c], Q1); }
+            if (!(B[a][b] > 0n)) fwd = false;
+            if (!(B[a][b] < 0n)) bwd = false;
+        }
+        r[m] = qi(fwd ? 1n : (bwd ? -1n : 0n));
+        rows.push(r);
+    }
+    for (let c = 0; c < m; c++) {                     // Gauss-Jordan over Q (the matrix is invertible)
+        let p = -1;
+        for (let i = c; i < m; i++) if (!qzero(rows[i][c])) { p = i; break; }
+        if (p < 0) throw new Error('winding_order: singular system');
+        const t = rows[c]; rows[c] = rows[p]; rows[p] = t;
+        const piv = rows[c][c]; rows[c] = rows[c].map(x => qdiv(x, piv));
+        for (let i = 0; i < m; i++) {
+            if (i !== c && !qzero(rows[i][c])) { const f = rows[i][c], rc = rows[c]; rows[i] = rows[i].map((x, j) => qsub(x, qmul(f, rc[j]))); }
+        }
+    }
+    const kc = range(m).map(c => rows[c][m]);
+    if (kc.some(x => x.d !== 1n)) return null;
+    const N = BigInt(n + 1), cons = [];               // [u, v, w]: Y_v <= Y_u + w
+    for (const a of arrows) {
+        const u = a[0], v = a[1], ke = col.has(u * n + v) ? kc[col.get(u * n + v)].n : 0n;
+        cons.push([u, v, N * (1n - ke) - 1n]); cons.push([v, u, N * ke - 1n]);
+    }
+    const Y = new Array(n).fill(0n);
+    for (let it = 0; it <= n; it++) {
+        let changed = false;
+        for (const c of cons) if (Y[c[0]] + c[2] < Y[c[1]]) { Y[c[1]] = Y[c[0]] + c[2]; changed = true; }
+        if (!changed) break;
+        if (it === n) return null;                    // a negative cycle: no order has these windings
+    }
+    const md = v => ((Y[v] % N) + N) % N;
+    return range(n).sort((x, y) => { const a = md(x), b = md(y); return a < b ? -1 : (a > b ? 1 : x - y); });
+}
+
+/** the acyclic orientation induced by a linear order, as a boolean matrix O[x][y] (arrow x -> y of the graph). */
+function orientation(B, order) {
+    const n = B.length, pos = new Array(n); order.forEach((v, i) => { pos[v] = i; });
+    return range(n).map(x => range(n).map(y => B[x][y] !== 0n && pos[x] < pos[y]));
+}
+
+/** the lexicographically smallest linear order inducing the acyclic orientation O, or null if O has a cycle. */
+function linearExtension(n, O) {
+    const indeg = new Array(n).fill(0), done = new Array(n).fill(false), res = [];
+    for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) if (O[a][b]) indeg[b]++;
+    while (true) {
+        let v = -1;
+        for (let x = 0; x < n; x++) if (!done[x] && indeg[x] === 0) { v = x; break; }
+        if (v < 0) break;
+        done[v] = true; res.push(v);
+        for (let b = 0; b < n; b++) if (O[v][b]) indeg[b]--;
+    }
+    return res.length === n ? res : null;
+}
+
+/** k with k(x) - k(y) in {0, 1} on the arrows x -> y of O0 and O = O0 with the arrows where it is 1 reversed, i.e. O
+ *  is in the source-to-sink flip class of O0 (B connected); null if there is no such k. */
+function flipPotential(B, O0, O) {
+    const n = B.length, k = new Array(n).fill(null), st = [0]; k[0] = 0; let cnt = 1;
+    while (st.length) {
+        const x = st.pop();
+        for (let y = 0; y < n; y++) {
+            if (B[x][y] === 0n) continue;
+            const ky = O0[x][y] ? k[x] - (O[x][y] ? 0 : 1) : k[x] + (O[y][x] ? 0 : 1);
+            if (k[y] !== null) { if (k[y] !== ky) return null; }
+            else { k[y] = ky; cnt++; st.push(y); }
+        }
+    }
+    return cnt === n ? k : null;
+}
+
+/** exact z^+ and z^- in vertex coordinates (polynomials in rho): z^{+-} = X^{-T} lam_{+-}, where X is the companion of
+ *  the orientation of od in vertex labels; z^{+-} spans ker(X + rho^{+-1} X^T). */
+function perronVectors(od) {
+    const n = od.n, UiT = transpose(invUnitri(od.U));
+    return [od.lp, od.lm].map(lam => {
+        const z = new Array(n);
+        for (let a = 0; a < n; a++) z[od.order[a]] = od.R.reduce(lin(UiT[a], lam));
+        return z;
+    });
+}
+
+/** the lam sign test at od: StOk(U, +-sgn lam(e_k)), sgn lam without zeros. */
+function signTest(od, lam) {
+    const sg = lam.map(p => od.R.sign(p));
+    return !sg.includes(0) && (stOk(od.U, sg) || stOk(od.U, sg.map(x => -x)));
+}
+
+/** certify at od in the obtuse slice chamber G with the least m >= 0 that works (Lemma gset: Certify succeeds at m iff
+ *  theta rho^(2m) lies in G(sigma), whose tail lies in G(sigma) at the selected class). -> [m, C, eps] or null. */
+function certifyTail(od, G, mMax) {
+    if (mMax === undefined) mMax = 400;
+    const Gi = intInverse(G);
+    if (Gi === null) return null;
+    for (let m = 0; m <= mMax; m++) {
+        const C = matMul(transpose(od.power(m)), Gi); let eps = [];
+        for (const r of C) {
+            const any = r.some(x => x !== 0n);
+            if (any && r.every(x => x >= 0n)) eps.push(1);
+            else if (any && r.every(x => x <= 0n)) eps.push(-1);
+            else { eps = null; break; }
+        }
+        if (eps === null) continue;
+        if (stOk(od.U, eps)) return [m, C, eps];
+        const neg = eps.map(x => -x);
+        if (stOk(od.U, neg)) return [m, negMat(C), neg];
+    }
+    return null;
+}
+
+/** the expensive NO filters, run once a decision takes long: mutation-cyclic 4-vertex full subquivers (n >= 5) and
+ *  Coxeter-polynomial candidates (n <= 5). -> reason or null. */
+function lateFilters(B, f) {
+    const n = B.length;
+    if (n >= 5) {
+        const sub = subquiverFilter(B, [4]);
+        if (sub) return 'full subquiver on ' + pyList(sub[0]) + ' is not mutation-acyclic (' + sub[1] + '; [BMR])';
+    }
+    if (n <= 5) {
+        const c = coxeterCandidates(f);
+        if (c !== null && c.length === 0) return 'no connected acyclic quiver has the Coxeter polynomial of Lambda(B) (Lemma candidate)';
+    }
+    return null;
+}
+
+/** SELECT: one order of Lambda(B) in polynomial time, the Perron rule for the classes O^+ and O^- (Theorem 1), then
+ *  descents at O^+ only. -> result, or null if inconclusive (a certificate search that should never fail, or the
+ *  caps); the caller then falls back to the class search. NO answers rest on Corollary cor:Lambda, Theorem 1 (with
+ *  Lemma D), (H5), Corollary R2, and R1' (classes Thm 3(ii); uses Theorem M); YES answers are certified. */
+function select(B, done, stats, Ncap, Ecap, chunk, lateAfter, progress) {
+    const n = B.length, beta = maxAbs(B);
+    const lam0 = windingOrder(B);
+    if (lam0 === null) return done('NO', 'Lambda(B) is empty: no totally proper cyclic ordering (Theorem P, [Ne, FN])');
+    const O0 = orientation(B, lam0);
+    const od0 = new ExactOrder(B, linearExtension(n, O0), false);
+    if (od0.type === 'none') return done('NO', 'the Coxeter matrix of Lambda(B) has no suitable real eigenvalue > 1 (H5)');
+    if (od0.type === 'unit') {
+        if (beta > 2n) return done('NO', 'the Coxeter polynomial of Lambda(B) is cyclotomic but some |b_ij| > 2 (finite mutation type)');
+        const fs = finiteSearch(B);
+        if (fs) return done('YES', 'finite mutation class with an acyclic quiver', { kind: 'mutation-path', path: fs[0], acyclic: fs[1] });
+        return done('NO', 'the Coxeter polynomial of Lambda(B) is cyclotomic and the finite mutation class has no acyclic quiver');
+    }
+    const sel = {};
+    for (const [tag, z, lamsel] of [['+', 0, od => od.lp], ['-', 1, od => od.lm]]) {
+        const s = perronVectors(od0)[z].map(p => od0.R.sign(p));
+        if (s.includes(0)) return done('NO', 'Perron rule ' + tag + ': z has a zero coordinate (Theorem 1)');
+        const O = range(n).map(() => new Array(n).fill(false));
+        for (let x = 0; x < n; x++) for (let y = 0; y < n; y++) if (O0[x][y]) { if (s[x] === s[y]) O[x][y] = true; else O[y][x] = true; }
+        if (flipPotential(B, O0, O) === null) return done('NO', 'Perron rule ' + tag + ': the orientation is not in the flip class (Theorem 1)');
+        const od = new ExactOrder(B, linearExtension(n, O), false);
+        if (od.type !== 'wild') return null;          // impossible (flips keep the Coxeter polynomial); fall back
+        if (!signTest(od, lamsel(od))) return done('NO', 'Perron rule ' + tag + ': the selected class fails its sign test (Theorem 1)');
+        sel[tag] = od;
+    }
+    const od = sel['+'];
+    let tasks = od.grid().map(s => [s, descentGen(od, s, Ncap, Ecap, chunk)]), stuckzero = 0, lateDone = false;
+    const total = tasks.length;
+    while (tasks.length) {
+        const nxt = [];
+        for (const t of tasks) {
+            const s = t[0], r = t[1].next();
+            if (!r.done) { stats.steps += chunk; nxt.push(t); continue; }
+            const kind = r.value[0], G = r.value[1]; stats.tasks += 1;
+            if (kind === 'stuck' || kind === 'zero') {
+                stuckzero += 1;
+                if (stuckzero === n + 1) return done('NO', 'n+1 values of s end stuck or at a zero height at the selected order ' + pyTuple(od.order) + ' (Corollary R2)');
+            } else if (kind === 'obtuse') {
+                const aq = acyclicFromGamma(od.U, G);
+                if (aq === null || !isConnected(aq[0]))
+                    return done('NO', 'an obtuse chamber at the selected order ' + pyTuple(od.order) + " is not a connected slice chamber (R1')");
+                const ce = certifyTail(od, G);
+                if (ce === null) return null;                 // never happens (Lemma certexists); fall back
+                const cert = packageCert(od, G, aq[0], aq[1], ce, s);
+                const mp = mutationPath(B, cert); cert.path = mp[0]; cert.path_end = mp[1];
+                return done('YES', 'certificate at the selected order ' + pyTuple(od.order) + ', s = ' + s.toString() + ', m = ' + ce[0], cert);
+            }
+        }
+        tasks = nxt;
+        if (progress) progress(stats.tasks, total, 'descent task', stats.steps);
+        if (tasks.length && !lateDone && stats.steps >= lateAfter) {
+            lateDone = true; const why = lateFilters(B, od.f);
+            if (why) return done('NO', why);
+        }
+    }
+    return null;                                      // only if every descent hit the caps
+}
+
+// test knobs of the reference test driver (rust/tests/run_py_auto.py): skip early steps (vortex, sub3, comb; also
+// select, to exercise the fallback class search), run the late filters earlier; they apply to the whole top-level decide, including the nested subquiver decides (as monkeypatching does in Python)
+let AUTO_SKIP = new Set(), AUTO_LATE = 4000;
+
+/** filters, the combinatorial YES path, then SELECT (one class, polynomial selection). If SELECT is inconclusive
+ *  (never observed), the Corollary 7.4 class search: one order per class of Lambda(B), interleaved descents, the n+1
+ *  rejection rule, and rigorous NO filters. Always terminates; YES is certified, NO rests on Theorems D and P and, for
+ *  SELECT, Theorem 1. Same reasons, certificates and scheduler stats as the reference's _decide_auto. */
+function decideAuto(B, t0, progress) {
+    const chunk = 32, lateAfter = AUTO_LATE;
+    const n = B.length, beta = maxAbs(B);
+    const stats = { select: 1, tasks: 0, steps: 0 };
+    const done = (ans, why, cert) => makeResult(ans, why, cert || null, Object.assign({}, stats), t0);
+    if (!AUTO_SKIP.has('vortex')) {
+        const v = vortexFilter(B);
+        if (v !== null) return done('NO', 'the in- or out-neighbourhood of vertex ' + v + ' has an oriented cycle ([Ne, Thm 4.4])');
+    }
+    if (!AUTO_SKIP.has('sub3')) {
+        const sub = subquiverFilter(B, [3]);
+        if (sub) return done('NO', 'full subquiver on ' + pyList(sub[0]) + ' is not mutation-acyclic (' + sub[1] + '; [BMR])');
+    }
+    if (!AUTO_SKIP.has('comb')) {
+        const fy = combinatorialYes(B);
+        if (fy) return done('YES', 'mutation sequence to an acyclic quiver (unforking + plateau search)',
+                            { kind: 'mutation-path', path: fy[0], acyclic: fy[1] });
+    }
+    const caps = uniformCaps(n, beta), Ncap = caps[0], Ecap = caps[1];
+    const r = AUTO_SKIP.has('select') ? null : select(B, done, stats, Ncap, Ecap, chunk, lateAfter, progress);
+    if (r !== null) return r;
+    for (const k of Object.keys(stats)) delete stats[k];
+    Object.assign(stats, { select: 0, classes: 0, unit: 0, none: 0, wild: 0, G_empty: 0, tasks: 0, rejected_orders: 0, steps: 0 });
+    const cls = lambdaClasses(B); stats.classes = cls.length;
+    if (!cls.length) return done('NO', 'Lambda(B) is empty: no totally proper cyclic ordering (Theorem P, [Ne])');
+    let unit = false, tasks = [];
+    const bad = new Array(cls.length).fill(0), stuckzero = new Array(cls.length).fill(0);
+    cls.forEach((o, ci) => {
+        const od = new ExactOrder(B, o); stats[od.type] += 1;
+        if (od.type === 'unit') unit = true;
+        if (od.type !== 'wild') return;
+        if (!gSetNonempty(od)) { stats.G_empty += 1; return; }   // never certifies (Theorem W(a))
+        for (const s of od.grid()) { tasks.push([ci, od, s, orderTask(od, s, Ncap, Ecap, chunk)]); stats.tasks += 1; }
+    });
+    const total = tasks.length; let lateDone = false;
+    while (tasks.length) {
+        const nxt = [];
+        for (const t of tasks) {
+            const ci = t[0], od = t[1], s = t[2];
+            if (bad[ci] > n) continue;                // order already rejected (n+1 rule)
+            const r = t[3].next();
+            if (!r.done) { stats.steps += chunk; nxt.push(t); continue; }
+            const res = r.value[0], val = r.value[1];
+            if (res === 'cert') {
+                const mp = mutationPath(B, val); val.path = mp[0]; val.path_end = mp[1];
+                return done('YES', 'certificate at order ' + pyTuple(od.order) + ', s = ' + s.toString(), val);
+            }
+            if (res === 'bad') {
+                bad[ci] += 1;
+                if (bad[ci] === n + 1) stats.rejected_orders += 1;
+                if (val === 'stuck' || val === 'zero') {      // one-class NO rule (writeup Corollary cor:R2)
+                    stuckzero[ci] += 1;
+                    if (stuckzero[ci] === n + 1)
+                        return done('NO', 'n+1 values of s end stuck or at a zero height at order ' + pyTuple(od.order) + ' (Corollary R2)');
+                }
+            }
+        }
+        tasks = nxt.filter(t => bad[t[0]] <= n);
+        if (progress) progress(total - tasks.length, total, 'descent task', stats.steps);
+        if (tasks.length && !lateDone && stats.steps >= lateAfter) {
+            lateDone = true; const why = lateFilters(B, flAdjugate(coxeter(companion(B, cls[0])))[0]);
+            if (why) return done('NO', why);
+        }
+    }
+    if (unit && beta <= 2n) {
+        const fs = finiteSearch(B);
+        if (fs) return done('YES', 'finite mutation class with an acyclic quiver', { kind: 'mutation-path', path: fs[0], acyclic: fs[1] });
+    }
+    return done('NO', 'no class of Lambda(B) gives a certificate (Theorem D, Corollary 7.4)');
+}
+
 function now() { return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(); }
 
 function makeResult(answer, reason, certificate, stats, t0, comps) {
@@ -1226,8 +2041,8 @@ function decideConnected(B, orders, progress) {
     const n = B.length, t0 = now();
     if (isAcyclic(B))
         return makeResult('YES', 'the quiver is acyclic', { kind: 'acyclic-input', acyclic: copyMat(B) }, null, t0);
-    let beta = 0n;
-    for (const r of B) for (const x of r) if (babs(x) > beta) beta = babs(x);
+    if (orders === 'auto') return decideAuto(B, t0, progress);
+    const beta = maxAbs(B);
     const caps = uniformCaps(n, beta), Ncap = caps[0], Ecap = caps[1];
     let ords, total;
     if (orders === 'all') { ords = permutations(range(n)); total = Number(factorial(n)); }
@@ -1239,7 +2054,7 @@ function decideConnected(B, orders, progress) {
     let unit = false;
     for (const o of ords) {
         stats.orders += 1;
-        if (progress) progress(stats.orders, total);
+        if (progress) progress(stats.orders, total, 'linear order');
         const od = new ExactOrder(B, o); stats[od.type] += 1;
         if (od.type === 'unit') { unit = true; continue; }
         if (od.type !== 'wild') continue;
@@ -1250,8 +2065,7 @@ function decideConnected(B, orders, progress) {
             const cert = walk(od, G, s);
             if (cert) {
                 const mp = mutationPath(B, cert); cert.path = mp[0]; cert.path_end = mp[1];
-                return makeResult('YES', 'certificate at order (' + od.order.join(', ') + (n === 1 ? ',' : '') + '), s = ' + s.toString(),
-                                  cert, stats, t0);
+                return makeResult('YES', 'certificate at order ' + pyTuple(od.order) + ', s = ' + s.toString(), cert, stats, t0);
             }
         }
     }
@@ -1264,38 +2078,63 @@ function decideConnected(B, orders, progress) {
     return makeResult('NO', why, null, stats, t0);
 }
 
+let DECIDE_DEPTH = 0;
+
 /** Decide mutation-acyclicity of the quiver B (skew-symmetric integer matrix) exactly; always 'YES' or 'NO'.
- *  opts.orders: 'all' (default, the guaranteed decision) or 'proper' (NO answers rely on Conjecture P).
+ *  opts.orders: 'auto' (default): rigorous NO filters (vortex [Ne]; mutation-cyclic full subquivers [BBH, BMR]), a
+ *    combinatorial YES path, then SELECT: one order of Lambda(B) in polynomial time, the Perron rule for the single
+ *    sign-passing class O^+ (writeup Theorem P, Corollary 7.4, selection theorem), and descents at O^+ only (NO by
+ *    Corollary R2 or R1'); if SELECT were ever inconclusive, one order per class of Lambda(B) with interleaved descents
+ *    and the n+1 rejection rule. 'all': all n! orders (guaranteed, slower). 'proper': a heuristic (NO not proved).
  *  opts.verify (default true): re-check every YES certificate independently.
- *  opts.progress(component, ncomponents, orderIndex, nOrders): optional progress callback. */
+ *  opts.progress(component, ncomponents, done, total, unit, steps): optional progress callback; unit is 'linear order'
+ *    ('all'/'proper': called before each order) or 'descent task' ('auto': after each round of the descent scheduler,
+ *    done = descent tasks finished or dropped, steps = descent steps so far).
+ *  opts.autoSkip (subset of ['vortex', 'sub3', 'comb', 'select']) and opts.lateFiltersAfter (default 4000): test knobs, as
+ *    MA_AUTO_SKIP / MA_AUTO_LATE of the reference test driver. */
 function decide(B, opts) {
     opts = opts || {};
-    const orders = opts.orders || 'all', verify = opts.verify !== false, progress = opts.progress;
-    B = toBigMatrix(B); checkSkew(B); const t0 = now();
-    const comps = components(B);
-    if (comps.length === 1) {
-        const r = decideConnected(B, orders, progress ? (i, t) => progress(0, 1, i, t) : null);
-        if (verify && r.answer === 'YES') {
-            const v = verifyCertificate(B, r.certificate);
-            if (!v[0]) throw new Error('certificate check failed: ' + v[1]);
-            r.verified = v[1];
-        }
-        return r;
+    const orders = opts.orders || 'auto', verify = opts.verify !== false, progress = opts.progress || null;
+    if (DECIDE_DEPTH === 0) {                         // caches are shared within one top-level call only
+        SPEC_CACHE.clear(); GRID_CACHE.clear();
+        const sk = opts.autoSkip || [];
+        AUTO_SKIP = new Set(typeof sk === 'string' ? sk.split(',') : sk);
+        AUTO_LATE = opts.lateFiltersAfter !== undefined ? Number(opts.lateFiltersAfter) : 4000;
     }
-    if (orders !== 'all' && orders !== 'proper') throw new Error('explicit orders are only supported for connected quivers');
-    const results = [];
-    comps.forEach((comp, ci) => {
-        const Bc = comp.map(i => comp.map(j => B[i][j]));
-        const r = decideConnected(Bc, orders, progress ? (i, t) => progress(ci, comps.length, i, t) : null);
-        if (verify && r.answer === 'YES') {
-            const v = verifyCertificate(Bc, r.certificate);
-            if (!v[0]) throw new Error('certificate check failed: ' + v[1]);
-            r.verified = v[1];
+    return decideBig(B, orders, verify, progress);
+}
+
+function decideBig(B, orders, verify, progress) {
+    DECIDE_DEPTH++;
+    try {
+        B = toBigMatrix(B); checkSkew(B); const t0 = now();
+        const comps = components(B);
+        if (comps.length === 1) {
+            const r = decideConnected(B, orders, progress ? (i, t, u, st) => progress(0, 1, i, t, u, st) : null);
+            if (verify && r.answer === 'YES') {
+                const v = verifyCertificate(B, r.certificate);
+                if (!v[0]) throw new Error('certificate check failed: ' + v[1]);
+                r.verified = v[1];
+            }
+            return r;
         }
-        results.push([comp, r]);
-    });
-    const ans = results.some(cr => cr[1].answer === 'NO') ? 'NO' : 'YES';
-    return makeResult(ans, 'disconnected: decided componentwise', null, null, t0, results);
+        if (orders !== 'all' && orders !== 'proper' && orders !== 'auto') throw new Error('explicit orders are only supported for connected quivers');
+        const results = [];
+        comps.forEach((comp, ci) => {
+            const Bc = submatrix(B, comp);
+            const r = decideConnected(Bc, orders, progress ? (i, t, u, st) => progress(ci, comps.length, i, t, u, st) : null);
+            if (verify && r.answer === 'YES') {
+                const v = verifyCertificate(Bc, r.certificate);
+                if (!v[0]) throw new Error('certificate check failed: ' + v[1]);
+                r.verified = v[1];
+            }
+            results.push([comp, r]);
+        });
+        const ans = results.some(cr => cr[1].answer === 'NO') ? 'NO' : 'YES';
+        return makeResult(ans, 'disconnected: decided componentwise', null, null, t0, results);
+    } finally {
+        DECIDE_DEPTH--;
+    }
 }
 
 /** per component: vertices, the mutation path (component-local indices) and the acyclic quiver it reaches. */
@@ -1327,18 +2166,24 @@ return {
     mutate: mutate, isAcyclic: isAcyclic, components: components, isConnected: isConnected,
     canonical: canonical, reflectionClass: reflectionClass, fromUpper: fromUpper, upper: upper,
     toBigMatrix: toBigMatrix, checkSkew: checkSkew, uniformCaps: uniformCaps, finiteSearch: finiteSearch,
-    mutationPath: mutationPath,
+    mutationPath: mutationPath, canonicalForm: canonicalForm,
     // internals, exported for testing
     _internal: { Q: Q, qn: qn, Rho: Rho, ExactOrder: ExactOrder, flAdjugate: flAdjugate, stripCyclotomic: stripCyclotomic,
                  squarefreePart: squarefreePart, largestRootAboveOne: largestRootAboveOne, strictlyDominant: strictlyDominant,
                  descent: descent, walk: walk, certify: certify, intInverse: intInverse, fracDet: fracDet,
-                 irootCeil: irootCeil, isqrt: isqrt, isRealRoot: isRealRoot, stepsAbove: stepsAbove }
+                 irootCeil: irootCeil, isqrt: isqrt, isRealRoot: isRealRoot, stepsAbove: stepsAbove,
+                 vortexFilter: vortexFilter, subquiverFilter: subquiverFilter, combinatorialYes: combinatorialYes,
+                 forkPoint: forkPoint, chordlessCycles: chordlessCycles, lambdaClasses: lambdaClasses,
+                 coxeterCandidates: coxeterCandidates, gSetNonempty: gSetNonempty, chordlessCycleBasis: chordlessCycleBasis,
+                 windingOrder: windingOrder, linearExtension: linearExtension, orientation: orientation,
+                 flipPotential: flipPotential, perronVectors: perronVectors, certifyTail: certifyTail, detInt: detInt,
+                 pySort: pySort, lateFilters: lateFilters, select: select, decideAuto: decideAuto }
 };
 }   // end factory
 
 /* Web Worker entry point. Protocol:
- *   main -> worker  { cmd: 'decide', id, B: [[string]], orders? }
- *   worker -> main  { type: 'progress', id, component, components, order, orders }
+ *   main -> worker  { cmd: 'decide', id, B: [[string]], orders? }        (orders: 'auto' (default), 'all', 'proper')
+ *   worker -> main  { type: 'progress', id, component, components, order, orders, unit, steps }
  *                   { type: 'result', id, result (BigInts as strings), paths }
  *                   { type: 'error', id, message }                                                                  */
 function workerMain() {
@@ -1348,12 +2193,13 @@ function workerMain() {
         if (msg.cmd !== 'decide') return;
         try {
             var res = MutationAcyclic.decide(msg.B, {
-                orders: msg.orders || 'all',
-                progress: function (ci, nc, oi, no) {
+                orders: msg.orders || 'auto',
+                progress: function (ci, nc, oi, no, unit, steps) {
                     var t = Date.now();
                     if (t - lastPost > 150 || oi === no) {
                         lastPost = t;
-                        self.postMessage({ type: 'progress', id: msg.id, component: ci, components: nc, order: oi, orders: no });
+                        self.postMessage({ type: 'progress', id: msg.id, component: ci, components: nc, order: oi, orders: no,
+                                           unit: unit || 'linear order', steps: steps });
                     }
                 }
             });
