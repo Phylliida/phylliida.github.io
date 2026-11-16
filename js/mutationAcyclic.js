@@ -944,13 +944,13 @@ function stOk(U, eps) {
 }
 
 /** exact greedy height descent towards s lam_+ + lam_-/s. -> [kind, Gamma rows], kind in obtuse, stuck, zero, cap. */
-function descent(od, s, Ncap, Ecap) {
-    const g = descentGen(od, s, Ncap, Ecap, 0);
+function descent(od, s, caps) {
+    const g = descentGen(od, s, caps, 0);
     while (true) { const r = g.next(); if (r.done) return r.value; }
 }
 
 /** generator form of descent(): yields after every `chunk` steps (never if chunk is 0) and returns [kind, G]. */
-function* descentGen(od, s, Ncap, Ecap, chunk) {
+function* descentGen(od, s, caps, chunk) {
     const R = od.R, n = od.n, S = sym(od.U), a = s.n, b = s.d;
     const Phi = range(n).map(k => R.reduce(padd(pscale(od.lp[k], a * a), pscale(od.lm[k], b * b))));
     const G = identity(n), Hs = Phi.slice(), sg = new Array(n).fill(1n);
@@ -961,7 +961,7 @@ function* descentGen(od, s, Ncap, Ecap, chunk) {
     }
     const Gs = range(n).map(i => range(n).map(j => sg[i] * sg[j] * S[i][j]));
     let steps = 0;
-    while (steps < Ncap) {
+    while (caps.stepsBelow(steps)) {
         const cands = [];
         for (let i = 0; i < n; i++)
             for (let j = 0; j < n; j++) {
@@ -988,7 +988,7 @@ function* descentGen(od, s, Ncap, Ecap, chunk) {
         steps += 1;
         let mv = 0n;
         for (const x of v) if (babs(x) > mv) mv = babs(x);
-        if (mv > Ecap) return ['cap', G];
+        if (caps.above(mv)) return ['cap', G];
         if (chunk && steps % chunk === 0) yield steps;
     }
     return ['cap', G];
@@ -1320,6 +1320,30 @@ function uniformCaps(n, beta) {
     const invDelta = 2n * (2n * N + 1n) * (Lam + 1n) ** N, H = 2n * Lam * X1;
     const R = H * invDelta * (isqrt(invXi * invNu) + 1n);
     return [N * (1n + R) ** N, factorial(n) * R ** N];
+}
+
+/** the uniform caps (N_*, E_*) of uniformCaps, computed exactly only if a comparison needs them (as in the Rust port).
+ *  For n >= 16 they have more than 2^20 bits, which is more than Firefox allows for a BigInt ("BigInt is too large to
+ *  allocate"), and computing them is slow anyway. The descents compare against them through rigorous lower bounds
+ *  on log2 (the same formulas with bit lengths: lg(x) = bits(x) - 1 <= log2 x, isqrt(x) + 1 >= sqrt(x),
+ *  (x + 1)^k >= x^k), and the exact values are only computed if a step count or an entry gets that large. */
+class Caps {
+    constructor(n, beta) {
+        this.n = n; this.beta = beta; this._exact = null;
+        const lg = x => bitLength(x) - 1, N = n;
+        const la = lg(1n + beta), ln = lg(BigInt(n)), lf1 = lg(factorial(n - 1));
+        const llam = ln + N * la, lx1 = lf1 + (N - 1) * (1 + llam), laq = 1 + Math.floor(llam / 2);
+        const llamq = ln + N * laq, lx2 = lf1 + (N - 1) * (1 + llamq), lx3 = ln + laq + lx2, lx4 = 2 * ln + laq + 2 * lx2;
+        const linvXi = (N - 1) * (2 * ln + (N - 1) * la + 2 * lx1), linvNu = 2 * (N - 1) * lx3 + lx4;
+        const linvDelta = 1 + lg(BigInt(2 * n + 1)) + N * llam, lh = 1 + llam + lx1;
+        const lr = lh + linvDelta + Math.floor((linvXi + linvNu) / 2);
+        this.nLg = ln + N * lr; this.eLg = lg(factorial(n)) + N * lr;          // N_* >= 2^nLg, E_* >= 2^eLg
+    }
+    exact() { if (!this._exact) this._exact = uniformCaps(this.n, this.beta); return this._exact; }
+    /** steps < N_* */
+    stepsBelow(steps) { return Math.floor(Math.log2(steps + 1)) + 1 <= this.nLg || BigInt(steps) < this.exact()[0]; }
+    /** x > E_* (x >= 0) */
+    above(x) { return bitLength(x) > this.eLg && x > this.exact()[1]; }
 }
 
 // =====================================================================================================================
@@ -1668,8 +1692,8 @@ function gSetNonempty(od) {
 
 /** descent at (order, s) in chunks, then the axis walk. Returns ['cert', cert] | ['bad', why] | ['cap', null].
  *  'bad' outcomes cannot occur at a seed order for generic s, and at most n values of s^2 are non-generic. */
-function* orderTask(od, s, Ncap, Ecap, chunk) {
-    const dg = yield* descentGen(od, s, Ncap, Ecap, chunk), kind = dg[0], G = dg[1];
+function* orderTask(od, s, caps, chunk) {
+    const dg = yield* descentGen(od, s, caps, chunk), kind = dg[0], G = dg[1];
     if (kind === 'cap') return ['cap', null];
     if (kind !== 'obtuse') return ['bad', kind];
     const cert = walk(od, G, s);
@@ -1891,7 +1915,7 @@ function lateFilters(B, f) {
  *  descents at O^+ only. -> result, or null if inconclusive (a certificate search that should never fail, or the
  *  caps); the caller then falls back to the class search. NO answers rest on Corollary cor:Lambda, Theorem 1 (with
  *  Lemma D), (H5), Corollary R2, and R1' (classes Thm 3(ii); uses Theorem M); YES answers are certified. */
-function select(B, done, stats, Ncap, Ecap, chunk, lateAfter, progress) {
+function select(B, done, stats, caps, chunk, lateAfter, progress) {
     const n = B.length, beta = maxAbs(B);
     const lam0 = windingOrder(B);
     if (lam0 === null) return done('NO', 'Lambda(B) is empty: no totally proper cyclic ordering (Theorem P, [Ne, FN])');
@@ -1917,7 +1941,7 @@ function select(B, done, stats, Ncap, Ecap, chunk, lateAfter, progress) {
         sel[tag] = od;
     }
     const od = sel['+'];
-    let tasks = od.grid().map(s => [s, descentGen(od, s, Ncap, Ecap, chunk)]), stuckzero = 0, lateDone = false;
+    let tasks = od.grid().map(s => [s, descentGen(od, s, caps, chunk)]), stuckzero = 0, lateDone = false;
     const total = tasks.length;
     while (tasks.length) {
         const nxt = [];
@@ -1975,8 +1999,8 @@ function decideAuto(B, t0, progress) {
         if (fy) return done('YES', 'mutation sequence to an acyclic quiver (unforking + plateau search)',
                             { kind: 'mutation-path', path: fy[0], acyclic: fy[1] });
     }
-    const caps = uniformCaps(n, beta), Ncap = caps[0], Ecap = caps[1];
-    const r = AUTO_SKIP.has('select') ? null : select(B, done, stats, Ncap, Ecap, chunk, lateAfter, progress);
+    const caps = new Caps(n, beta);
+    const r = AUTO_SKIP.has('select') ? null : select(B, done, stats, caps, chunk, lateAfter, progress);
     if (r !== null) return r;
     for (const k of Object.keys(stats)) delete stats[k];
     Object.assign(stats, { select: 0, classes: 0, unit: 0, none: 0, wild: 0, G_empty: 0, tasks: 0, rejected_orders: 0, steps: 0 });
@@ -1989,7 +2013,7 @@ function decideAuto(B, t0, progress) {
         if (od.type === 'unit') unit = true;
         if (od.type !== 'wild') return;
         if (!gSetNonempty(od)) { stats.G_empty += 1; return; }   // never certifies (Theorem W(a))
-        for (const s of od.grid()) { tasks.push([ci, od, s, orderTask(od, s, Ncap, Ecap, chunk)]); stats.tasks += 1; }
+        for (const s of od.grid()) { tasks.push([ci, od, s, orderTask(od, s, caps, chunk)]); stats.tasks += 1; }
     });
     const total = tasks.length; let lateDone = false;
     while (tasks.length) {
@@ -2043,7 +2067,7 @@ function decideConnected(B, orders, progress) {
         return makeResult('YES', 'the quiver is acyclic', { kind: 'acyclic-input', acyclic: copyMat(B) }, null, t0);
     if (orders === 'auto') return decideAuto(B, t0, progress);
     const beta = maxAbs(B);
-    const caps = uniformCaps(n, beta), Ncap = caps[0], Ecap = caps[1];
+    const caps = new Caps(n, beta);
     let ords, total;
     if (orders === 'all') { ords = permutations(range(n)); total = Number(factorial(n)); }
     else if (orders === 'proper') {
@@ -2059,7 +2083,7 @@ function decideConnected(B, orders, progress) {
         if (od.type === 'unit') { unit = true; continue; }
         if (od.type !== 'wild') continue;
         for (const s of od.grid()) {
-            const dg = descent(od, s, Ncap, Ecap), kind = dg[0], G = dg[1];
+            const dg = descent(od, s, caps), kind = dg[0], G = dg[1];
             stats.descents += 1; stats[kind] += 1;
             if (kind !== 'obtuse') continue;
             const cert = walk(od, G, s);
@@ -2165,7 +2189,7 @@ return {
     decide: decide, verifyCertificate: verifyCertificate, pathsOf: pathsOf, toPlain: toPlain,
     mutate: mutate, isAcyclic: isAcyclic, components: components, isConnected: isConnected,
     canonical: canonical, reflectionClass: reflectionClass, fromUpper: fromUpper, upper: upper,
-    toBigMatrix: toBigMatrix, checkSkew: checkSkew, uniformCaps: uniformCaps, finiteSearch: finiteSearch,
+    toBigMatrix: toBigMatrix, checkSkew: checkSkew, uniformCaps: uniformCaps, Caps: Caps, finiteSearch: finiteSearch,
     mutationPath: mutationPath, canonicalForm: canonicalForm,
     // internals, exported for testing
     _internal: { Q: Q, qn: qn, Rho: Rho, ExactOrder: ExactOrder, flAdjugate: flAdjugate, stripCyclotomic: stripCyclotomic,
